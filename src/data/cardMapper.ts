@@ -20,6 +20,8 @@ import type {
   WeaknessResistance,
 } from "../engine/types";
 import { extractEffects } from "./effectPatterns";
+import { detectTrainerEffect } from "../engine/trainerEffects";
+import { annotateAbilities } from "../engine/abilities";
 
 export interface ApiCard {
   id: string;
@@ -136,7 +138,7 @@ export function mapCard(c: ApiCard): Card {
       types: asEnergyTypes(c.types),
       evolvesFrom: c.evolves_from ?? undefined,
       attacks: (c.attacks ?? []).map(mapAttack),
-      abilities: c.abilities?.map(mapAbility),
+      abilities: annotateAbilities(c.abilities?.map(mapAbility)),
       weaknesses: c.weaknesses?.map(mapWR),
       resistances: c.resistances?.map(mapWR),
       retreatCost: asEnergyTypes(c.retreat_cost),
@@ -155,13 +157,19 @@ export function mapCard(c: ApiCard): Card {
     return card;
   }
 
+  const effectId = detectTrainerEffect({
+    name: c.name,
+    supertype: c.supertype,
+    subtypes: c.subtypes,
+    rules: c.rules,
+  });
   const card: TrainerCard = {
     ...base,
     supertype: "Trainer",
     subtypes: c.subtypes ?? [],
     text: (c.rules ?? []).join("\n\n") || "",
     rules: c.rules,
-    effectId: undefined,
+    effectId,
   };
   return card;
 }

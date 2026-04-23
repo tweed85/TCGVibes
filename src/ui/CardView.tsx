@@ -145,6 +145,13 @@ export function PokemonInPlayView({
         </div>
       )}
       <div className="energy">{energyInitials || "—"}</div>
+      {p.tools.length > 0 && (
+        <div className="tools">
+          {p.tools.map((t, i) => (
+            <span key={i} className="tool" title={t.text}>🔧 {t.name}</span>
+          ))}
+        </div>
+      )}
       <AbilitiesBlock card={p.card} />
       <div className="atks">
         {p.card.attacks.map((a, i) => (

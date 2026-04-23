@@ -46,7 +46,16 @@ export interface Ability {
   name: string;
   type: string; // "Ability" | "Poké-Power" | "Poké-Body" | "Ancient Trait"
   text: string;
+  effect?: AbilityEffect; // auto-detected; if present, UI shows an Activate button
 }
+
+// Narrow set of supported activated-ability effects.
+export type AbilityEffect =
+  | { kind: "drawOne"; oncePerTurn: true }
+  | { kind: "drawTwo"; oncePerTurn: true }
+  | { kind: "healSelf"; amount: number; oncePerTurn: true }
+  | { kind: "searchBasicEnergy"; count: number; oncePerTurn: true }
+  | { kind: "attachEnergyFromHand"; energyType: EnergyType; oncePerTurn: true };
 
 export interface WeaknessResistance {
   type: EnergyType;
@@ -102,9 +111,11 @@ export interface PokemonInPlay {
   damage: number;
   attachedEnergy: EnergyCard[];
   evolvedFrom: PokemonCard[]; // stack of pre-evolutions
+  tools: TrainerCard[]; // Pokémon Tool cards attached — max 1 per Pokémon
   playedThisTurn: boolean;
   evolvedThisTurn: boolean;
   statuses: StatusCondition[]; // asleep/paralyzed/confused are mutually exclusive with each other; poisoned/burned can coexist
+  abilityUsedThisTurn: boolean; // tracks "once during your turn" abilities
 }
 
 export type PlayerId = "p1" | "p2";
@@ -116,11 +127,19 @@ export interface PlayerState {
   hand: Card[];
   discard: Card[];
   prizes: Card[];
+  lostZone: Card[]; // for Lost Zone cards (e.g., Comfey mechanic); small but present
   bench: PokemonInPlay[]; // up to 5
   active: PokemonInPlay | null;
   energyAttachedThisTurn: boolean;
   supporterPlayedThisTurn: boolean;
+  retreatedThisTurn: boolean;
+  mulligans: number; // count of mulligans taken at setup
   isAI: boolean;
+}
+
+export interface StadiumInPlay {
+  card: TrainerCard;
+  controller: PlayerId;
 }
 
 export type Phase =
@@ -129,6 +148,7 @@ export type Phase =
   | "main"
   | "attack"
   | "between"
+  | "promoteActive" // waiting for a player to choose a new Active from their Bench
   | "gameOver";
 
 export interface LogEntry {
@@ -151,7 +171,15 @@ export interface GameState {
   phase: Phase;
   winner: PlayerId | null;
   log: LogEntry[];
-  // True on the very first player's first turn — they cannot attack.
+  // True on the very first player's first turn — they cannot attack or play a Supporter.
   firstTurnNoAttack: boolean;
+  // Stadium card currently in play (replaces previous when a new one is played).
+  stadium: StadiumInPlay | null;
+  // If non-null, game is paused waiting for this player to pick a new Active from their Bench.
+  pendingPromote: PlayerId | null;
+  // What to do once the promote resolves.
+  //  - "endTurn": KO happened during attack, run endTurn next
+  //  - "passTurn": KO happened during checkup, skip cleanup and pass to opponent
+  onPromoteResolved: "endTurn" | "passTurn" | null;
   rng: GameRng;
 }

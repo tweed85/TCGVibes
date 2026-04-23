@@ -18,9 +18,12 @@ import {
   hasStatus,
   isBasic,
   isPokemon,
+  knockOut,
   logEvent,
   makePokemonInPlay,
   opponentOf,
+  passTurn,
+  resolveBenchKOs,
 } from "./rules";
 import { resolveAttackEffects } from "./effects";
 
@@ -94,8 +97,22 @@ export function evolve(
   target.card = card;
   // damage persists; all Special Conditions are removed on evolution.
   clearAllStatuses(target);
+  // Tools carry over; abilities reset.
+  target.abilityUsedThisTurn = false;
   target.evolvedThisTurn = true;
   logEvent(state, player, `evolves into ${card.name}.`);
+
+  // Mega Evolution rule: evolving into a Mega Pokémon ends your turn.
+  // Detected via the "Mega Evolution rule" text on the card's rule box.
+  const rules = card.rules ?? [];
+  const isMega =
+    card.subtypes.some((s) => /^Mega/i.test(s)) ||
+    rules.some((r) => /when .* Mega Evolves, your turn ends/i.test(r)) ||
+    rules.some((r) => /Mega Evolution rule/i.test(r));
+  if (isMega) {
+    logEvent(state, "system", `${card.name}'s Mega Evolution ends the turn.`);
+    endTurnRule(state);
+  }
   return ok;
 }
 
@@ -125,6 +142,7 @@ export function playTrainer(
   state: GameState,
   player: PlayerId,
   handIndex: number,
+  target?: TrainerTarget,
 ): ActionResult {
   const g = requireMain(state, player);
   if (!g.ok) return g;
@@ -132,51 +150,64 @@ export function playTrainer(
   const card = pl.hand[handIndex];
   if (!card || card.supertype !== "Trainer") return fail("Not a Trainer card.");
   const t = card as TrainerCard;
-  if (t.subtypes.includes("Supporter") && pl.supporterPlayedThisTurn)
-    return fail("Already played a Supporter this turn.");
+  const isSupporter = t.subtypes.includes("Supporter");
+  const isStadium = t.subtypes.includes("Stadium");
+  const isTool = t.subtypes.includes("Pokémon Tool") || t.subtypes.includes("Tool");
 
+  if (isSupporter) {
+    if (pl.supporterPlayedThisTurn)
+      return fail("Already played a Supporter this turn.");
+    // Current rule: first player cannot play a Supporter on their first turn.
+    if (state.firstTurnNoAttack && state.activePlayer === "p1" && state.turn === 1)
+      return fail("First player can't play a Supporter on the first turn.");
+  }
+
+  // Tool: must be attached to a Pokémon in play with no Tool already.
+  if (isTool) {
+    const targetId = target?.kind === "inPlay" ? target.instanceId : null;
+    if (!targetId) return fail("Pick a Pokémon to attach this Tool to.");
+    const p = findInPlayByInstance(state, player, targetId);
+    if (!p) return fail("Target not in play.");
+    if ((p.tools?.length ?? 0) >= 1)
+      return fail("That Pokémon already has a Tool attached.");
+    pl.hand.splice(handIndex, 1);
+    p.tools.push(t);
+    logEvent(state, player, `attaches ${t.name} to ${p.card.name}.`);
+    return ok;
+  }
+
+  // Stadium: replaces any existing Stadium (discards it, including the
+  // opponent's if they had one). The new Stadium is now controlled by
+  // whoever played it.
+  if (isStadium) {
+    if (state.stadium) {
+      const prev = state.stadium;
+      state.players[prev.controller].discard.push(prev.card);
+      logEvent(state, "system", `${prev.card.name} is replaced and discarded.`);
+    }
+    pl.hand.splice(handIndex, 1);
+    state.stadium = { card: t, controller: player };
+    logEvent(state, player, `plays Stadium ${t.name}.`);
+    return ok;
+  }
+
+  // Item / Supporter: discard after effect applies.
   pl.hand.splice(handIndex, 1);
-  applyTrainerEffect(state, player, t);
-  if (t.subtypes.includes("Supporter")) pl.supporterPlayedThisTurn = true;
+  applyTrainerEffect(state, player, t, target);
+  if (isSupporter) pl.supporterPlayedThisTurn = true;
   pl.discard.push(t);
   logEvent(state, player, `plays ${t.name}.`);
   return ok;
 }
 
-function applyTrainerEffect(state: GameState, player: PlayerId, t: TrainerCard) {
-  const pl = state.players[player];
-  switch (t.effectId) {
-    case "drawTwo": {
-      drawN(pl, 2, state, player);
-      return;
-    }
-    case "drawUntilSix": {
-      const n = Math.max(0, 6 - pl.hand.length);
-      drawN(pl, n, state, player);
-      return;
-    }
-    case "heal30Active": {
-      if (pl.active) pl.active.damage = Math.max(0, pl.active.damage - 30);
-      return;
-    }
-    default:
-      // Unknown effect — no-op, but card is still discarded.
-      return;
-  }
-}
+// Target descriptor for trainer effects that need a target.
+export type TrainerTarget =
+  | { kind: "inPlay"; instanceId: string }
+  | { kind: "oppInPlay"; instanceId: string }
+  | { kind: "handCard"; handIndex: number }
+  | { kind: "discardCard"; discardIndex: number };
 
-import type { PlayerState } from "./types";
-
-function drawN(pl: PlayerState, n: number, state: GameState, player: PlayerId) {
-  let drawn = 0;
-  for (let i = 0; i < n; i++) {
-    const c = pl.deck.shift();
-    if (!c) break;
-    pl.hand.push(c);
-    drawn++;
-  }
-  logEvent(state, player, `draws ${drawn} card(s).`);
-}
+import { applyTrainerEffect } from "./trainerEffects";
 
 export function retreat(
   state: GameState,
@@ -186,6 +217,7 @@ export function retreat(
   const g = requireMain(state, player);
   if (!g.ok) return g;
   const pl = state.players[player];
+  if (pl.retreatedThisTurn) return fail("Already retreated this turn.");
   if (!pl.active) return fail("No Active Pokémon.");
   if (hasStatus(pl.active, "asleep")) return fail("Asleep Pokémon can't retreat.");
   if (hasStatus(pl.active, "paralyzed")) return fail("Paralyzed Pokémon can't retreat.");
@@ -206,7 +238,37 @@ export function retreat(
   clearAllStatuses(oldActive);
   pl.active = newActive;
   pl.bench.push(oldActive);
+  pl.retreatedThisTurn = true;
   logEvent(state, player, `retreats ${oldActive.card.name}; ${newActive.card.name} is now Active.`);
+  return ok;
+}
+
+// User-facing action when the game is paused on pendingPromote. Dispatches
+// to the continuation queued by the code that triggered the promote:
+//   - "endTurn" (default): run end-of-turn cleanup + pass to opponent
+//   - "passTurn": skip cleanup (already happened) and pass
+//   - null: do nothing more (promote happened mid-main-phase, rare)
+export function promoteBenchToActive(
+  state: GameState,
+  player: PlayerId,
+  benchIndex: number,
+): ActionResult {
+  if (state.pendingPromote !== player)
+    return fail("Not waiting for your promote.");
+  const pl = state.players[player];
+  if (benchIndex < 0 || benchIndex >= pl.bench.length)
+    return fail("Invalid bench slot.");
+  const [promoted] = pl.bench.splice(benchIndex, 1);
+  promoted.playedThisTurn = false;
+  pl.active = promoted;
+  state.pendingPromote = null;
+  state.phase = "main";
+  logEvent(state, player, `promotes ${promoted.card.name} to Active.`);
+
+  const cont = state.onPromoteResolved;
+  state.onPromoteResolved = null;
+  if (cont === "endTurn") endTurnRule(state);
+  else if (cont === "passTurn") passTurn(state);
   return ok;
 }
 
@@ -232,13 +294,14 @@ export function attack(
 
   // Confusion: flip on attack; on tails, attack fails and 30 damage to self.
   if (hasStatus(atk, "confused")) {
-    const ok2 = flipCoin(state, `${atk.card.name} confusion flip`);
-    if (!ok2) {
+    const heads = flipCoin(state, `${atk.card.name} confusion flip`);
+    if (!heads) {
       atk.damage += 30;
       logEvent(state, "system", `${atk.card.name} hurts itself in confusion (30 damage).`);
-      if (atk.damage >= atk.card.hp) {
-        // KO self; handled by applyDamage-style KO logic.
-        applyDamage(state, player, 0); // no-op, triggers KO check? applyDamage checks active.
+      if (atk.damage >= atk.card.hp) knockOut(state, player);
+      if (state.pendingPromote) {
+        state.onPromoteResolved = "endTurn";
+        return ok;
       }
       const phase2: string = state.phase;
       if (phase2 !== "gameOver") endTurnRule(state);
@@ -276,12 +339,26 @@ export function attack(
 
   logEvent(state, player, `attacks with ${move.name} for ${damage}.`);
   if (damage > 0) applyDamage(state, defOwner, damage);
-  // Post-damage effects (self-damage, status applications) happen after the
-  // main hit so e.g. KOs land before side effects apply.
+  // Post-damage effects (self-damage, status applications, bench snipe) run
+  // after the main hit so e.g. KOs land before side effects apply.
   if ((state.phase as string) !== "gameOver") {
     result.postDamage?.();
   }
-  // applyDamage may set phase to gameOver (KO + win). Only end turn if game still live.
+  // Bench snipes / recoil / confusion damage can KO benched Pokémon — resolve
+  // those now so opponents get prizes for them before the turn ends.
+  if ((state.phase as string) !== "gameOver") {
+    resolveBenchKOs(state);
+  }
+  // Self-KO from recoil / confusion — trigger the KO flow explicitly.
+  if ((state.phase as string) !== "gameOver" && pl.active && pl.active.damage >= pl.active.card.hp) {
+    knockOut(state, player);
+  }
+  // If an active was KO'd, we're now paused on pendingPromote — queue
+  // end-of-turn to run once the promote resolves.
+  if (state.pendingPromote) {
+    state.onPromoteResolved = "endTurn";
+    return ok;
+  }
   const phaseAfter: string = state.phase;
   if (phaseAfter !== "gameOver") endTurnRule(state);
   return ok;

@@ -7,14 +7,38 @@ import {
   endTurn,
   evolve,
   playBasicToBench,
+  playTrainer,
+  promoteBenchToActive,
 } from "./actions";
 import { canPayCost, energyProvidedBy, isBasic, isPokemon } from "./rules";
 import type { GameState, PlayerId } from "./types";
 
+// Called any time the AI might need to act — both for its own turn and for
+// resolving promotes during the human player's turn.
+export function resolveAiPendingPromote(state: GameState, player: PlayerId): boolean {
+  if (state.pendingPromote !== player) return false;
+  const pl = state.players[player];
+  // Pick the highest-HP benched Pokémon (a reasonable heuristic).
+  if (pl.bench.length === 0) return false;
+  let best = 0;
+  for (let i = 1; i < pl.bench.length; i++) {
+    if (pl.bench[i].card.hp > pl.bench[best].card.hp) best = i;
+  }
+  promoteBenchToActive(state, player, best);
+  return true;
+}
+
 export function takeAiTurn(state: GameState, player: PlayerId): void {
-  let safety = 30;
+  // Resolve any pending promote the AI owes before taking normal actions.
+  if (state.pendingPromote === player) resolveAiPendingPromote(state, player);
+
+  let safety = 40;
   while (safety-- > 0) {
     if (state.phase === "gameOver" || state.activePlayer !== player) return;
+    if (state.pendingPromote === player) {
+      resolveAiPendingPromote(state, player);
+      continue;
+    }
     const pl = state.players[player];
 
     // 1. Play basics to bench (fill slots).
@@ -23,6 +47,22 @@ export function takeAiTurn(state: GameState, player: PlayerId): void {
     );
     if (basicIdx >= 0 && pl.bench.length < 5) {
       if (playBasicToBench(state, player, basicIdx).ok) continue;
+    }
+
+    // 2a. Play a Supporter if we have one and haven't yet this turn
+    // (skips first-player-first-turn ban via the action's own guard).
+    if (!pl.supporterPlayedThisTurn) {
+      const supIdx = pl.hand.findIndex(
+        (c) => c.supertype === "Trainer" && c.subtypes.includes("Supporter"),
+      );
+      if (supIdx >= 0 && playTrainer(state, player, supIdx).ok) continue;
+    }
+    // 2b. Play any Item card (always safe).
+    {
+      const itemIdx = pl.hand.findIndex(
+        (c) => c.supertype === "Trainer" && c.subtypes.includes("Item"),
+      );
+      if (itemIdx >= 0 && playTrainer(state, player, itemIdx).ok) continue;
     }
 
     // 2. Evolve anything possible.

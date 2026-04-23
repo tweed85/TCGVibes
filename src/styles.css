@@ -162,6 +162,24 @@ body {
 .status-confused { background: #d97706; }
 .status-paralyzed { background: #ca8a04; }
 .status-poisoned { background: #7c3aed; }
+.card .tools { display: flex; gap: 2px; flex-wrap: wrap; }
+.card .tool {
+  font-size: 9px;
+  background: #059669;
+  color: white;
+  padding: 0 3px;
+  border-radius: 2px;
+  cursor: help;
+}
+
+.stadium-banner {
+  background: #1e293b;
+  border: 1px solid #7c3aed;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.stadium-banner b { color: #a78bfa; }
 
 .controls {
   display: flex;

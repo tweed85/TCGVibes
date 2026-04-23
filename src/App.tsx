@@ -6,9 +6,12 @@ import {
   evolve,
   playBasicToBench,
   playTrainer,
+  promoteBenchToActive,
   retreat,
 } from "./engine/actions";
-import { takeAiTurn } from "./engine/ai";
+import type { TrainerTarget } from "./engine/actions";
+import { activateAbility } from "./engine/abilities";
+import { resolveAiPendingPromote, takeAiTurn } from "./engine/ai";
 import { makeRng } from "./engine/rng";
 import { canPayCost, energyProvidedBy, isBasic, isPokemon, setupGame } from "./engine/rules";
 import type { ActionResult } from "./engine/actions";
@@ -56,9 +59,19 @@ export default function App() {
   const opp = state.players.p2;
   const myTurn = state.activePlayer === "p1" && state.phase === "main";
 
-  // Let the AI take its turn automatically.
+  // Let the AI take its turn automatically; also resolve its pending promote
+  // if it was KO'd on the human's turn.
   useEffect(() => {
-    if (state.phase === "main" && state.activePlayer === "p2" && state.winner === null) {
+    if (state.winner !== null) return;
+    // AI needs to promote?
+    if (state.pendingPromote === "p2") {
+      const t = setTimeout(() => {
+        resolveAiPendingPromote(state, "p2");
+        rerender();
+      }, 400);
+      return () => clearTimeout(t);
+    }
+    if (state.phase === "main" && state.activePlayer === "p2") {
       const t = setTimeout(() => {
         takeAiTurn(state, "p2");
         rerender();
@@ -74,7 +87,13 @@ export default function App() {
     rerender();
   };
 
+  const promoteOpen = state.pendingPromote === "p1";
+
   const onHandClick = (i: number) => {
+    if (promoteOpen) {
+      setStatusMsg("Pick a Benched Pokémon to promote to Active.");
+      return;
+    }
     if (!myTurn) return;
     const card = me.hand[i];
     if (!card) return;
@@ -91,6 +110,20 @@ export default function App() {
       return;
     }
     if (card.supertype === "Trainer") {
+      const isTool =
+        card.subtypes.includes("Pokémon Tool") || card.subtypes.includes("Tool");
+      const needsTarget =
+        isTool ||
+        card.effectId === "gustOppBenched";
+      if (needsTarget) {
+        setSelected({ kind: "hand", index: i });
+        setStatusMsg(
+          isTool
+            ? "Select one of your Pokémon to attach the Tool."
+            : `Select target for ${card.name}.`,
+        );
+        return;
+      }
       handle(playTrainer(state, "p1", i), `Played ${card.name}.`);
       return;
     }
@@ -104,6 +137,17 @@ export default function App() {
   };
 
   const onInPlayClick = (p: PokemonInPlay, side: "me" | "opp") => {
+    // Promote on KO — clicking a benched own Pokémon promotes it.
+    if (promoteOpen && side === "me") {
+      const benchIdx = me.bench.findIndex((b) => b.instanceId === p.instanceId);
+      if (benchIdx >= 0) {
+        handle(
+          promoteBenchToActive(state, "p1", benchIdx),
+          `Promoted ${p.card.name}.`,
+        );
+      }
+      return;
+    }
     if (!myTurn) return;
     if (selected?.kind === "hand") {
       const card = me.hand[selected.index];
@@ -116,8 +160,37 @@ export default function App() {
         handle(evolve(state, "p1", selected.index, p.instanceId), `Evolved into ${card.name}.`);
         return;
       }
+      if (card.supertype === "Trainer") {
+        const isTool =
+          card.subtypes.includes("Pokémon Tool") || card.subtypes.includes("Tool");
+        if (isTool && side === "me") {
+          const target: TrainerTarget = { kind: "inPlay", instanceId: p.instanceId };
+          handle(
+            playTrainer(state, "p1", selected.index, target),
+            `Attached ${card.name} to ${p.card.name}.`,
+          );
+          return;
+        }
+        if (card.effectId === "gustOppBenched" && side === "opp") {
+          const target: TrainerTarget = { kind: "oppInPlay", instanceId: p.instanceId };
+          handle(
+            playTrainer(state, "p1", selected.index, target),
+            `Played ${card.name}.`,
+          );
+          return;
+        }
+      }
     }
     setSelected({ kind: "inPlay", instanceId: p.instanceId });
+  };
+
+  const onActivateAbility = (p: PokemonInPlay, abilityIndex: number) => {
+    if (!myTurn) return;
+    const r = activateAbility(state, "p1", p.instanceId, abilityIndex);
+    handle(
+      r.ok ? { ok: true } : { ok: false, reason: r.reason ?? "Cannot activate." },
+      r.ok ? `Activated ${p.card.abilities![abilityIndex].name}.` : undefined,
+    );
   };
 
   const onAttack = (atkIndex: number) => {
@@ -216,11 +289,20 @@ export default function App() {
           onAttack={onAttack}
           onRetreat={onRetreat}
           onEndTurn={onEndTurn}
+          onActivateAbility={onActivateAbility}
           myTurn={myTurn}
+          promoteOpen={promoteOpen}
           attacks={myActiveAttacks}
           statusMsg={statusMsg}
         />
       </div>
+
+      {state.stadium && (
+        <div className="stadium-banner">
+          Stadium: <b>{state.stadium.card.name}</b> (controller: {state.players[state.stadium.controller].name})
+          <div style={{ fontSize: 11, color: "#94a3b8" }}>{state.stadium.card.text}</div>
+        </div>
+      )}
 
       <div className="log">
         {state.log.slice(-30).map((e, i) => (
@@ -255,7 +337,9 @@ interface SideProps {
   onAttack?: (i: number) => void;
   onRetreat?: (benchIdx: number) => void;
   onEndTurn?: () => void;
+  onActivateAbility?: (p: PokemonInPlay, abilityIndex: number) => void;
   myTurn?: boolean;
+  promoteOpen?: boolean;
   attacks?: { index: number; name: string; damage: number; cost: string[]; payable: boolean }[];
   statusMsg?: string;
 }
@@ -270,10 +354,22 @@ function PlayerSide({
   onAttack,
   onRetreat,
   onEndTurn,
+  onActivateAbility,
   myTurn,
+  promoteOpen,
   attacks,
   statusMsg,
 }: SideProps) {
+  // Abilities available on any in-play Pokémon the player controls.
+  const activatableAbilities = isMe
+    ? [player.active, ...player.bench]
+        .filter((p): p is PokemonInPlay => !!p)
+        .flatMap((p) =>
+          (p.card.abilities ?? [])
+            .map((a, i) => ({ p, a, i }))
+            .filter(({ a, p }) => a.effect && !p.abilityUsedThisTurn),
+        )
+    : [];
   return (
     <div className={`side ${isMe ? "me" : "opponent"}`}>
       <div className="zone">
@@ -338,6 +434,11 @@ function PlayerSide({
         {isMe ? (
           <>
             <h3>Controls</h3>
+            {promoteOpen && (
+              <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 700 }}>
+                Your Active was Knocked Out — click a Benched Pokémon to promote.
+              </div>
+            )}
             {statusMsg && <div style={{ fontSize: 11, color: "#fbbf24" }}>{statusMsg}</div>}
             <div className="stat">
               Energy attached: <span>{player.energyAttachedThisTurn ? "Yes" : "No"}</span>
@@ -345,6 +446,31 @@ function PlayerSide({
             <div className="stat">
               Supporter: <span>{player.supporterPlayedThisTurn ? "Yes" : "No"}</span>
             </div>
+            <div className="stat">
+              Retreated: <span>{player.retreatedThisTurn ? "Yes" : "No"}</span>
+            </div>
+            {player.mulligans > 0 && (
+              <div className="stat">Mulligans: <span>{player.mulligans}</span></div>
+            )}
+
+            {activatableAbilities.length > 0 && (
+              <>
+                <div style={{ marginTop: 8, fontSize: 11, color: "#9333ea" }}>Abilities:</div>
+                <div className="controls">
+                  {activatableAbilities.map(({ p, a, i }) => (
+                    <button
+                      key={`${p.instanceId}-${i}`}
+                      disabled={!myTurn || promoteOpen}
+                      onClick={() => onActivateAbility?.(p, i)}
+                      title={a.text}
+                      style={{ borderColor: "#9333ea" }}
+                    >
+                      {a.name} ({p.card.name})
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
 
             <div style={{ marginTop: 8, fontSize: 11, color: "#94a3b8" }}>Attacks:</div>
             <div className="controls">
@@ -352,7 +478,7 @@ function PlayerSide({
               {attacks?.map((a) => (
                 <button
                   key={a.index}
-                  disabled={!myTurn || !a.payable}
+                  disabled={!myTurn || !a.payable || promoteOpen}
                   onClick={() => onAttack?.(a.index)}
                   title={a.cost.join(", ")}
                 >
@@ -365,14 +491,18 @@ function PlayerSide({
             <div className="controls">
               {player.bench.length === 0 && <span style={{ fontSize: 11 }}>—</span>}
               {player.bench.map((p, i) => (
-                <button key={p.instanceId} disabled={!myTurn} onClick={() => onRetreat?.(i)}>
+                <button
+                  key={p.instanceId}
+                  disabled={!myTurn || promoteOpen || player.retreatedThisTurn}
+                  onClick={() => onRetreat?.(i)}
+                >
                   {p.card.name}
                 </button>
               ))}
             </div>
 
             <div style={{ marginTop: "auto" }}>
-              <button className="primary" disabled={!myTurn} onClick={onEndTurn}>
+              <button className="primary" disabled={!myTurn || promoteOpen} onClick={onEndTurn}>
                 End Turn
               </button>
             </div>

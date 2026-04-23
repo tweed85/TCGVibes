@@ -26,9 +26,11 @@ export function makePokemonInPlay(card: PokemonCard): PokemonInPlay {
     damage: 0,
     attachedEnergy: [],
     evolvedFrom: [],
+    tools: [],
     playedThisTurn: true,
     evolvedThisTurn: false,
     statuses: [],
+    abilityUsedThisTurn: false,
   };
 }
 
@@ -68,10 +70,13 @@ export function createPlayer(
     hand: [],
     discard: [],
     prizes: [],
+    lostZone: [],
     bench: [],
     active: null,
     energyAttachedThisTurn: false,
     supporterPlayedThisTurn: false,
+    retreatedThisTurn: false,
+    mulligans: 0,
     isAI,
   };
 }
@@ -105,16 +110,27 @@ export function setupGame(
   );
 
   for (const pl of [p1, p2]) {
-    // Mulligan until opening hand has at least one Basic.
+    // Mulligan until opening hand has at least one Basic. Count mulligans so
+    // the opponent can draw that many extra cards (per Play! Pokémon rules).
     let safety = 20;
     while (safety-- > 0) {
       pl.hand = [];
       pl.deck = rng.shuffle([...pl.deck, ...pl.hand]);
       drawCards(pl, 7);
       if (pl.hand.some(isBasic)) break;
+      pl.mulligans++;
     }
     // Prizes: top 6.
     pl.prizes = pl.deck.splice(0, 6);
+  }
+
+  // Mulligan penalty: each opponent draws N extra cards, where N is the
+  // mulligan count of the other player.
+  if (p1.mulligans > 0) {
+    drawCards(p2, p1.mulligans);
+  }
+  if (p2.mulligans > 0) {
+    drawCards(p1, p2.mulligans);
   }
 
   // Auto-place each player's first Basic as active (MVP — skip choose-starter UI).
@@ -135,9 +151,18 @@ export function setupGame(
     winner: null,
     log: [],
     firstTurnNoAttack: true,
+    stadium: null,
+    pendingPromote: null,
+    onPromoteResolved: null,
     rng,
   };
   logEvent(state, "system", "Game start. P1 goes first.");
+  if (p1.mulligans > 0) {
+    logEvent(state, "system", `${p1.name} mulliganed ${p1.mulligans}×; ${p2.name} drew ${p1.mulligans} extra card(s).`);
+  }
+  if (p2.mulligans > 0) {
+    logEvent(state, "system", `${p2.name} mulliganed ${p2.mulligans}×; ${p1.name} drew ${p2.mulligans} extra card(s).`);
+  }
   // P1 draws for turn 1.
   drawCards(p1, 1);
   state.phase = "main";
@@ -278,24 +303,61 @@ export function applyDamage(
   if (target.damage >= target.card.hp) knockOut(state, defenderOwner);
 }
 
+// Prize-card value when KO'd. ex/V/Radiant give 2, VMAX/VSTAR give 3, others 1.
+export function prizeValue(card: PokemonCard): number {
+  const subs = card.subtypes ?? [];
+  if (subs.includes("VMAX")) return 3;
+  if (subs.includes("VSTAR")) return 2;
+  if (subs.includes("V")) return 2;
+  if (subs.includes("V-UNION")) return 3;
+  if (subs.includes("ex") || subs.includes("EX") || subs.includes("GX")) return 2;
+  // Radiant Pokémon give 1 prize (not 2) but carry restrictions; treat as 1.
+  return 1;
+}
+
+function takePrizes(state: GameState, taker: PlayerId, count: number): void {
+  const opp = state.players[taker];
+  let taken = 0;
+  for (let i = 0; i < count; i++) {
+    const prize = opp.prizes.shift();
+    if (!prize) break;
+    opp.hand.push(prize);
+    taken++;
+    logEvent(state, opp.id, `takes a Prize (${prize.name}).`);
+  }
+  if (taken < count) {
+    logEvent(
+      state,
+      "system",
+      `Only ${taken} Prize(s) remaining of ${count} owed.`,
+    );
+  }
+}
+
+// Knock out the Active Pokémon of `ownerId` and resolve prize/win logic.
 export function knockOut(state: GameState, ownerId: PlayerId): void {
   const owner = state.players[ownerId];
   if (!owner.active) return;
   const ko = owner.active;
-  logEvent(state, "system", `${ko.card.name} is Knocked Out!`);
-  // Move active + evolution stack + attached energy to discard.
-  owner.discard.push(ko.card, ...ko.evolvedFrom, ...ko.attachedEnergy);
+  const prizes = prizeValue(ko.card);
+  logEvent(
+    state,
+    "system",
+    `${ko.card.name} is Knocked Out! (${prizes} Prize${prizes > 1 ? "s" : ""})`,
+  );
+  // Move active + evolution stack + attached energy + tools to discard.
+  owner.discard.push(
+    ko.card,
+    ...ko.evolvedFrom,
+    ...ko.attachedEnergy,
+    ...(ko.tools ?? []),
+  );
   owner.active = null;
 
-  // Opponent takes a prize.
-  const opp = state.players[opponentOf(ownerId)];
-  const prize = opp.prizes.shift();
-  if (prize) {
-    opp.hand.push(prize);
-    logEvent(state, opp.id, `takes a Prize (${prize.name}).`);
-  }
+  takePrizes(state, opponentOf(ownerId), prizes);
 
   // Win by prizes.
+  const opp = state.players[opponentOf(ownerId)];
   if (opp.prizes.length === 0) {
     state.winner = opp.id;
     state.phase = "gameOver";
@@ -307,13 +369,57 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
   if (owner.bench.length === 0) {
     state.winner = opp.id;
     state.phase = "gameOver";
-    logEvent(state, "system", `${owner.name} has no Pokémon left. ${opp.name} wins.`);
+    logEvent(
+      state,
+      "system",
+      `${owner.name} has no Pokémon left. ${opp.name} wins.`,
+    );
     return;
   }
-  // Auto-promote first benched (MVP; UI can add a chooser later).
-  owner.active = owner.bench.shift()!;
-  owner.active.playedThisTurn = false;
-  logEvent(state, owner.id, `promotes ${owner.active.card.name} to Active.`);
+  // Pause the game for the owner to pick a new active (UI / AI resolves it
+  // via promoteBenchToActive). The activePlayer is unchanged.
+  state.pendingPromote = ownerId;
+  state.phase = "promoteActive";
+}
+
+// Knock out benched Pokémon whose damage >= HP (e.g., bench snipe damage).
+// Returns true if any bench KOs were resolved.
+export function resolveBenchKOs(state: GameState): boolean {
+  let any = false;
+  for (const pid of ["p1", "p2"] as PlayerId[]) {
+    const pl = state.players[pid];
+    const survivors: typeof pl.bench = [];
+    for (const p of pl.bench) {
+      if (p.damage >= p.card.hp) {
+        const prizes = prizeValue(p.card);
+        logEvent(
+          state,
+          "system",
+          `${p.card.name} is Knocked Out on the Bench! (${prizes} Prize${prizes > 1 ? "s" : ""})`,
+        );
+        pl.discard.push(
+          p.card,
+          ...p.evolvedFrom,
+          ...p.attachedEnergy,
+          ...(p.tools ?? []),
+        );
+        takePrizes(state, opponentOf(pid), prizes);
+        any = true;
+        // Check prize-out win mid-loop.
+        const opp = state.players[opponentOf(pid)];
+        if (opp.prizes.length === 0 && state.phase !== "gameOver") {
+          state.winner = opp.id;
+          state.phase = "gameOver";
+          logEvent(state, "system", `${opp.name} wins by taking all Prizes.`);
+          return true;
+        }
+      } else {
+        survivors.push(p);
+      }
+    }
+    pl.bench = survivors;
+  }
+  return any;
 }
 
 // Win-by-deckout: if active player can't draw at start of turn, they lose.
@@ -330,19 +436,34 @@ export function startTurnDraw(state: GameState): void {
 
 export function endTurn(state: GameState): void {
   if (state.phase === "gameOver") return;
+  if (state.pendingPromote) return;
+
   const prev = state.players[state.activePlayer];
   prev.energyAttachedThisTurn = false;
   prev.supporterPlayedThisTurn = false;
+  prev.retreatedThisTurn = false;
   for (const p of [prev.active, ...prev.bench]) {
     if (p) {
       p.playedThisTurn = false;
       p.evolvedThisTurn = false;
+      p.abilityUsedThisTurn = false;
     }
   }
-  // Pokémon Checkup: process status effects on both actives.
+  // Pokémon Checkup: process status effects on both actives. A status KO here
+  // pauses on pendingPromote; once resolved, `passTurn` continues the flow.
   pokemonCheckup(state);
   if ((state.phase as string) === "gameOver") return;
+  if (state.pendingPromote) {
+    state.onPromoteResolved = "passTurn";
+    return;
+  }
+  passTurn(state);
+}
 
+// Advance to the next player's turn. Extracted so promoteBenchToActive can
+// resume the flow after a status-KO during Pokémon Checkup.
+export function passTurn(state: GameState): void {
+  if (state.phase === "gameOver") return;
   state.firstTurnNoAttack = false;
   state.activePlayer = opponentOf(state.activePlayer);
   state.turn += 1;
