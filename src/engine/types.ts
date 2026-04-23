@@ -19,8 +19,15 @@ export type Supertype = "Pokémon" | "Trainer" | "Energy";
 export interface Attack {
   name: string;
   cost: EnergyType[];
-  damage: number;
+  damage: number; // parsed base damage; modifiers (+, ×, -) live in text
+  damageText?: string; // original API string, e.g. "30+", "20×"
   text?: string;
+}
+
+export interface Ability {
+  name: string;
+  type: string; // "Ability" | "Poké-Power" | "Poké-Body" | "Ancient Trait"
+  text: string;
 }
 
 export interface WeaknessResistance {
@@ -46,9 +53,11 @@ export interface PokemonCard extends CardBase {
   types: EnergyType[];
   evolvesFrom?: string;
   attacks: Attack[];
+  abilities?: Ability[];
   weaknesses?: WeaknessResistance[];
   resistances?: WeaknessResistance[];
   retreatCost: EnergyType[]; // Colorless placeholders
+  rules?: string[]; // ex/VSTAR/rule-box text
 }
 
 export interface EnergyCard extends CardBase {
@@ -59,8 +68,9 @@ export interface EnergyCard extends CardBase {
 
 export interface TrainerCard extends CardBase {
   supertype: "Trainer";
-  subtypes: string[]; // "Item" | "Supporter" | "Stadium" | "Tool"
+  subtypes: string[]; // "Item" | "Supporter" | "Stadium" | "Pokémon Tool"
   text: string;
+  rules?: string[];
   // Effects are kept data-driven via an effect id the engine interprets.
   effectId?: string;
 }

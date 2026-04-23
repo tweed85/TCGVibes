@@ -13,7 +13,8 @@ import { makeRng } from "./engine/rng";
 import { canPayCost, energyProvidedBy, isBasic, isPokemon, setupGame } from "./engine/rules";
 import type { ActionResult } from "./engine/actions";
 import type { Card, GameState, PokemonInPlay } from "./engine/types";
-import { fireDeck, waterDeck } from "./data/sampleDecks";
+import { buildDeck, validatedDeckSpecs } from "./data/decks";
+import { datasetAsOf, datasetFormat } from "./data/cards";
 import { CardView, FaceDownCard, PokemonInPlayView } from "./ui/CardView";
 
 type Selection =
@@ -27,13 +28,25 @@ function useForceRerender() {
 }
 
 export default function App() {
+  const deckSpecs = useMemo(() => validatedDeckSpecs(), []);
+  const [myDeckId, setMyDeckId] = useState(deckSpecs[0]?.id ?? "");
+  const [oppDeckId, setOppDeckId] = useState(deckSpecs[1]?.id ?? deckSpecs[0]?.id ?? "");
   const rngRef = useRef(makeRng(42));
-  const stateRef = useRef<GameState>(
-    setupGame(fireDeck(), waterDeck(), rngRef.current, {
+
+  const buildInitial = (): GameState => {
+    const myDeck = buildDeck(
+      deckSpecs.find((d) => d.id === myDeckId) ?? deckSpecs[0],
+    );
+    const oppDeck = buildDeck(
+      deckSpecs.find((d) => d.id === oppDeckId) ?? deckSpecs[0],
+    );
+    return setupGame(myDeck, oppDeck, rngRef.current, {
       p1Name: "You",
       p2Name: "CPU",
-    }),
-  );
+    });
+  };
+
+  const stateRef = useRef<GameState>(buildInitial());
   const rerender = useForceRerender();
   const [selected, setSelected] = useState<Selection>(null);
   const [statusMsg, setStatusMsg] = useState<string>("");
@@ -124,7 +137,13 @@ export default function App() {
 
   const onReset = () => {
     rngRef.current = makeRng(Date.now());
-    stateRef.current = setupGame(fireDeck(), waterDeck(), rngRef.current, {
+    const myDeck = buildDeck(
+      deckSpecs.find((d) => d.id === myDeckId) ?? deckSpecs[0],
+    );
+    const oppDeck = buildDeck(
+      deckSpecs.find((d) => d.id === oppDeckId) ?? deckSpecs[0],
+    );
+    stateRef.current = setupGame(myDeck, oppDeck, rngRef.current, {
       p1Name: "You",
       p2Name: "CPU",
     });
@@ -148,12 +167,31 @@ export default function App() {
   return (
     <div className="app">
       <div className="header">
-        <h1>TCGVibes — Pokémon TCG Clone (MVP)</h1>
+        <h1>TCGVibes — Pokémon TCG Clone</h1>
         <div className="meta">
           Turn {state.turn} · {state.players[state.activePlayer].name}'s turn · Phase: {state.phase}
+          <div style={{ fontSize: 10, opacity: 0.7 }}>
+            {datasetFormat} · as of {datasetAsOf}
+          </div>
         </div>
         <div className="controls">
-          <button onClick={onReset}>New Game</button>
+          <label style={{ fontSize: 11, display: "flex", flexDirection: "column" }}>
+            You
+            <select value={myDeckId} onChange={(e) => setMyDeckId(e.target.value)}>
+              {deckSpecs.map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+          </label>
+          <label style={{ fontSize: 11, display: "flex", flexDirection: "column" }}>
+            CPU
+            <select value={oppDeckId} onChange={(e) => setOppDeckId(e.target.value)}>
+              {deckSpecs.map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+          </label>
+          <button className="primary" onClick={onReset}>New Game</button>
         </div>
       </div>
 

@@ -45,37 +45,35 @@ Note: card legality in Standard is determined by the **regulation mark** printed
 
 ## Dataset coverage and caveats
 
-**What is included:** every card the agent could retrieve from the official `pokemon-tcg-data` repository whose `regulationMark` is H, I, or J. As written, that is 1,078 cards across 14 sets.
+**What is included:** every card from the `pokemon-tcg-data` GitHub mirror whose `regulationMark` is H, I, or J, plus all basic energies from the SVE subset (basic energies are always Standard-legal regardless of regulation mark).
+
+The dataset was re-pulled directly from the upstream repo after the subagent run, which gives us full detail (attacks, abilities, retreat cost, weaknesses, resistances, rules text) on every card — the agent's original output was truncated by its `WebFetch` tool and was missing these fields.
 
 **Known gaps:**
-- The `WebFetch` tool used during collection truncates input responses at roughly 70-90 cards per set file. The JSON source files for each set contain every card (including Illustration Rares, Ultra Rares, Hyper Rares, and Special Illustration Rares numbered above ~80), but only the first 70-90 could be pulled in a single request. Higher-numbered cards are almost always alternate-art reprints of cards already captured in the base numbering and remain Standard-legal when they carry an H/I/J mark.
-- **Paldean Fates (sv4pt5)** is listed as a legal set but contributes 0 cards to the dataset: the 72 cards we could retrieve from its source file all carry the now-rotated G regulation mark, so they were correctly filtered out. Any H/I/J-marked reprints in the rest of that set would live above card #72 and were not retrievable within the input-token limit.
-- **Black Star Promos (svp)** similarly contributed 0 cards; the first 72 retrievable entries were all G-marked. H/I/J-marked promos exist at higher card numbers and were not retrievable via WebFetch.
-- For each non-promo set, no individual cards with a G regulation mark that we did retrieve are included in the output; they were filtered out.
-
-For a complete, unabridged dataset, re-run the refresh procedure below against the Pokemon TCG API (`https://api.pokemontcg.io/v2`) with an environment that can paginate freely (e.g. `curl` with an API key via `X-Api-Key`).
+- Paldean Fates (sv4pt5) and early Black Star Promos (svp) are listed as legal sets but contribute only H/I/J-marked reprints; G-marked cards from those sets are correctly filtered out.
 
 ## Counts per set (cards written to outputs)
 
 | Set | Cards written |
 | --- | --- |
 | sv4pt5 | 0 |
-| sv5 | 73 |
-| sv6 | 72 |
-| sv6pt5 | 64 |
-| sv7 | 82 |
-| sv8 | 84 |
-| sv8pt5 | 67 |
-| sv9 | 85 |
-| sv10 | 82 |
-| zsv10pt5 | 72 |
-| rsv10pt5 | 73 |
-| me1 | 84 |
-| me2 | 75 |
-| me2pt5 | 75 |
-| me3 | 90 |
-| svp | 0 |
-| **Total** | **1,078** |
+| sv5 | 218 |
+| sv6 | 226 |
+| sv6pt5 | 96 |
+| sv7 | 167 |
+| sv8 | 252 |
+| sv8pt5 | 151 |
+| sv9 | 189 |
+| sv10 | 242 |
+| zsv10pt5 | 171 |
+| rsv10pt5 | 173 |
+| me1 | 188 |
+| me2 | 130 |
+| me2pt5 | 295 |
+| me3 | 124 |
+| svp | 53 |
+| sve (basic energies) | 18 |
+| **Total** | **2,693** |
 
 ## Sources
 

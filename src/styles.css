@@ -124,8 +124,27 @@ body {
 .card .hp { color: #dc2626; font-weight: 600; }
 .card .dmg { color: var(--danger); font-weight: 700; }
 .card .atks { margin-top: auto; display: flex; flex-direction: column; gap: 2px; }
-.card .atk { font-size: 10px; display: flex; justify-content: space-between; gap: 4px; }
+.card .atk { font-size: 10px; display: flex; justify-content: space-between; gap: 4px; cursor: help; }
 .card .energy { font-size: 10px; color: #2563eb; }
+.card .abilities { display: flex; flex-direction: column; gap: 2px; }
+.card .ability { font-size: 10px; color: #9333ea; cursor: help; }
+.card .ability-tag {
+  background: #9333ea;
+  color: white;
+  padding: 0 3px;
+  border-radius: 2px;
+  font-size: 9px;
+  font-weight: 700;
+}
+.card .trainer-text {
+  font-size: 9px;
+  margin-top: auto;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  color: #475569;
+}
 
 .controls {
   display: flex;
