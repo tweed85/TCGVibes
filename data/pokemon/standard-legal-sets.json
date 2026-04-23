@@ -1,0 +1,170 @@
+{
+  "as_of_date": "2026-04-23",
+  "region": "North America",
+  "format": "Standard",
+  "governing_body": "Play! Pokemon (The Pokemon Company International)",
+  "rotation_effective_date_in_person": "2026-04-10",
+  "rotation_effective_date_tcg_live": "2026-03-26",
+  "legal_regulation_marks": ["H", "I", "J"],
+  "rotated_out_regulation_marks": ["F", "G"],
+  "legal_sets": [
+    {
+      "code": "sv4pt5",
+      "name": "Paldean Fates",
+      "series": "Scarlet & Violet",
+      "release_date": "2024-01-26",
+      "printed_total": 91,
+      "total": 245,
+      "notes": "Partial legality. Reprinted G-mark cards in this set rotate out on 2026-04-10; only cards with an H, I, or J regulation mark remain legal. Filter individual cards by regulation_mark."
+    },
+    {
+      "code": "sv5",
+      "name": "Temporal Forces",
+      "series": "Scarlet & Violet",
+      "release_date": "2024-03-22",
+      "printed_total": 162,
+      "total": 218,
+      "regulation_mark": "H"
+    },
+    {
+      "code": "sv6",
+      "name": "Twilight Masquerade",
+      "series": "Scarlet & Violet",
+      "release_date": "2024-05-24",
+      "printed_total": 167,
+      "total": 226,
+      "regulation_mark": "H"
+    },
+    {
+      "code": "sv6pt5",
+      "name": "Shrouded Fable",
+      "series": "Scarlet & Violet",
+      "release_date": "2024-08-02",
+      "printed_total": 64,
+      "total": 99,
+      "regulation_mark": "H"
+    },
+    {
+      "code": "sv7",
+      "name": "Stellar Crown",
+      "series": "Scarlet & Violet",
+      "release_date": "2024-09-13",
+      "printed_total": 142,
+      "total": 175,
+      "regulation_mark": "H"
+    },
+    {
+      "code": "sv8",
+      "name": "Surging Sparks",
+      "series": "Scarlet & Violet",
+      "release_date": "2024-11-08",
+      "printed_total": 191,
+      "total": 252,
+      "regulation_mark": "H"
+    },
+    {
+      "code": "sv8pt5",
+      "name": "Prismatic Evolutions",
+      "series": "Scarlet & Violet",
+      "release_date": "2025-01-17",
+      "printed_total": 131,
+      "total": 180,
+      "regulation_mark": "H"
+    },
+    {
+      "code": "sv9",
+      "name": "Journey Together",
+      "series": "Scarlet & Violet",
+      "release_date": "2025-03-28",
+      "printed_total": 159,
+      "total": 190,
+      "regulation_mark": "I"
+    },
+    {
+      "code": "sv10",
+      "name": "Destined Rivals",
+      "series": "Scarlet & Violet",
+      "release_date": "2025-05-30",
+      "printed_total": 182,
+      "total": 244,
+      "regulation_mark": "I"
+    },
+    {
+      "code": "zsv10pt5",
+      "name": "Black Bolt",
+      "series": "Scarlet & Violet",
+      "release_date": "2025-07-18",
+      "printed_total": 86,
+      "total": 172,
+      "regulation_mark": "I"
+    },
+    {
+      "code": "rsv10pt5",
+      "name": "White Flare",
+      "series": "Scarlet & Violet",
+      "release_date": "2025-07-18",
+      "printed_total": 86,
+      "total": 173,
+      "regulation_mark": "I"
+    },
+    {
+      "code": "me1",
+      "name": "Mega Evolution",
+      "series": "Mega Evolution",
+      "release_date": "2025-09-26",
+      "printed_total": 132,
+      "total": 188,
+      "regulation_mark": "I"
+    },
+    {
+      "code": "me2",
+      "name": "Phantasmal Flames",
+      "series": "Mega Evolution",
+      "release_date": "2025-11-14",
+      "printed_total": 94,
+      "total": 130,
+      "regulation_mark": "I"
+    },
+    {
+      "code": "me2pt5",
+      "name": "Ascended Heroes",
+      "series": "Mega Evolution",
+      "release_date": "2026-01-30",
+      "printed_total": 217,
+      "total": 295,
+      "regulation_mark": "I"
+    },
+    {
+      "code": "me3",
+      "name": "Perfect Order",
+      "series": "Mega Evolution",
+      "release_date": "2026-03-27",
+      "printed_total": 88,
+      "total": 124,
+      "regulation_mark": "J",
+      "notes": "First set to contain J-mark cards. Became Standard legal on 2026-04-10."
+    },
+    {
+      "code": "svp",
+      "name": "Scarlet & Violet Black Star Promos",
+      "series": "Scarlet & Violet",
+      "release_date": "2023-01-01",
+      "printed_total": 102,
+      "total": 75,
+      "notes": "Partial legality. Promos with an H, I, or J regulation mark remain legal; earlier G-mark promos rotate out. Filter individual cards by regulation_mark."
+    }
+  ],
+  "banned_cards": [],
+  "banned_cards_note": "As of 2026-04-10, there are no banned cards in the Standard format per the Play! Pokemon Perfect Order banned list announcement.",
+  "sources": [
+    "https://www.pokemon.com/us/pokemon-news/2026-pokemon-tcg-standard-format-rotation-announcement",
+    "https://www.pokemon.com/us/play-pokemon/about/pokemon-tcg-banned-card-list",
+    "https://www.pokemon.com/us/play-pokemon/about/mega-evolution/mega-evolution-perfect-order-banned-list-and-rule-changes-announcement",
+    "https://www.pokemon.com/static-assets/content-assets/cms2/pdf/play-pokemon/rules/play-pokemon-tcg-tournament-handbook-en.pdf",
+    "https://bulbapedia.bulbagarden.net/wiki/2026-27_Standard_format_(TCG)",
+    "https://bulbapedia.bulbagarden.net/wiki/2025-26_Standard_format_(TCG)",
+    "https://limitlesstcg.com/cards?q=reg%3Ah%2Ci%2Cj",
+    "https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/sets/en.json",
+    "https://api.pokemontcg.io/v2/sets"
+  ]
+}

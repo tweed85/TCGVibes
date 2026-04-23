@@ -1,0 +1,1079 @@
+name,set_code,set_name,number,rarity,regulation_mark,supertype,subtypes,hp,types
+Bulbasaur,me1,Mega Evolution,1,Common,I,Pokémon,Basic,80,Grass
+Ivysaur,me1,Mega Evolution,2,Common,I,Pokémon,Stage 1,110,Grass
+Mega Venusaur ex,me1,Mega Evolution,3,Double Rare,I,Pokémon,Stage 2;MEGA;ex,380,Grass
+Exeggcute,me1,Mega Evolution,4,Common,I,Pokémon,Basic,60,Grass
+Exeggutor,me1,Mega Evolution,5,Uncommon,I,Pokémon,Stage 1,140,Grass
+Tangela,me1,Mega Evolution,6,Common,I,Pokémon,Basic,80,Grass
+Tangrowth,me1,Mega Evolution,7,Uncommon,I,Pokémon,Stage 1,150,Grass
+Chikorita,me1,Mega Evolution,8,Common,I,Pokémon,Basic,70,Grass
+Bayleef,me1,Mega Evolution,9,Common,I,Pokémon,Stage 1,110,Grass
+Meganium,me1,Mega Evolution,10,Rare,I,Pokémon,Stage 2,160,Grass
+Shuckle,me1,Mega Evolution,11,Uncommon,I,Pokémon,Basic,80,Grass
+Celebi,me1,Mega Evolution,12,Uncommon,I,Pokémon,Basic,80,Grass
+Seedot,me1,Mega Evolution,13,Common,I,Pokémon,Basic,60,Grass
+Nuzleaf,me1,Mega Evolution,14,Common,I,Pokémon,Stage 1,100,Grass
+Shiftry,me1,Mega Evolution,15,Uncommon,I,Pokémon,Stage 2,160,Grass
+Nincada,me1,Mega Evolution,16,Common,I,Pokémon,Basic,50,Grass
+Ninjask,me1,Mega Evolution,17,Uncommon,I,Pokémon,Stage 1,80,Grass
+Dhelmise,me1,Mega Evolution,18,Common,I,Pokémon,Basic,120,Grass
+Vulpix,me1,Mega Evolution,19,Common,I,Pokémon,Basic,70,Fire
+Ninetales,me1,Mega Evolution,20,Uncommon,I,Pokémon,Stage 1,120,Fire
+Numel,me1,Mega Evolution,21,Common,I,Pokémon,Basic,80,Fire
+Mega Camerupt ex,me1,Mega Evolution,22,Double Rare,I,Pokémon,Stage 1;MEGA;ex,340,Fire
+Litleo,me1,Mega Evolution,23,Common,I,Pokémon,Basic,70,Fire
+Pyroar,me1,Mega Evolution,24,Uncommon,I,Pokémon,Stage 1,130,Fire
+Volcanion,me1,Mega Evolution,25,Uncommon,I,Pokémon,Basic,130,Fire
+Scorbunny,me1,Mega Evolution,26,Common,I,Pokémon,Basic,70,Fire
+Raboot,me1,Mega Evolution,27,Common,I,Pokémon,Stage 1,100,Fire
+Cinderace,me1,Mega Evolution,28,Rare,I,Pokémon,Stage 2,160,Fire
+Sizzlipede,me1,Mega Evolution,29,Common,I,Pokémon,Basic,80,Fire
+Centiskorch,me1,Mega Evolution,30,Uncommon,I,Pokémon,Stage 1,140,Fire
+Chi-Yu,me1,Mega Evolution,31,Uncommon,I,Pokémon,Basic,110,Fire
+Mantine,me1,Mega Evolution,32,Common,I,Pokémon,Basic,110,Water
+Corphish,me1,Mega Evolution,33,Common,I,Pokémon,Basic,80,Water
+Kyogre,me1,Mega Evolution,34,Rare,I,Pokémon,Basic,150,Water
+Snover,me1,Mega Evolution,35,Common,I,Pokémon,Basic,90,Water
+Mega Abomasnow ex,me1,Mega Evolution,36,Double Rare,I,Pokémon,Stage 1;MEGA;ex,350,Water
+Clauncher,me1,Mega Evolution,37,Common,I,Pokémon,Basic,80,Water
+Clawitzer,me1,Mega Evolution,38,Rare,I,Pokémon,Stage 1,130,Water
+Sobble,me1,Mega Evolution,39,Common,I,Pokémon,Basic,70,Water
+Drizzile,me1,Mega Evolution,40,Common,I,Pokémon,Stage 1,100,Water
+Inteleon,me1,Mega Evolution,41,Uncommon,I,Pokémon,Stage 2,150,Water
+Snom,me1,Mega Evolution,42,Common,I,Pokémon,Basic,50,Water
+Frosmoth,me1,Mega Evolution,43,Uncommon,I,Pokémon,Stage 1,110,Water
+Eiscue,me1,Mega Evolution,44,Common,I,Pokémon,Basic,110,Water
+Magnemite,me1,Mega Evolution,45,Common,I,Pokémon,Basic,70,Lightning
+Magneton,me1,Mega Evolution,46,Common,I,Pokémon,Stage 1,90,Lightning
+Magnezone,me1,Mega Evolution,47,Uncommon,I,Pokémon,Stage 2,160,Lightning
+Raikou,me1,Mega Evolution,48,Rare,I,Pokémon,Basic,120,Lightning
+Electrike,me1,Mega Evolution,49,Common,I,Pokémon,Basic,70,Lightning
+Mega Manectric ex,me1,Mega Evolution,50,Double Rare,I,Pokémon,Stage 1;MEGA;ex,330,Lightning
+Pachirisu,me1,Mega Evolution,51,Common,I,Pokémon,Basic,70,Lightning
+Helioptile,me1,Mega Evolution,52,Common,I,Pokémon,Basic,70,Lightning
+Heliolisk,me1,Mega Evolution,53,Common,I,Pokémon,Stage 1,120,Lightning
+Abra,me1,Mega Evolution,54,Common,I,Pokémon,Basic,50,Psychic
+Kadabra,me1,Mega Evolution,55,Uncommon,I,Pokémon,Stage 1,80,Psychic
+Alakazam,me1,Mega Evolution,56,Rare,I,Pokémon,Stage 2,140,Psychic
+Jynx,me1,Mega Evolution,57,Common,I,Pokémon,Basic,110,Psychic
+Ralts,me1,Mega Evolution,58,Common,I,Pokémon,Basic,70,Psychic
+Kirlia,me1,Mega Evolution,59,Common,I,Pokémon,Stage 1,100,Psychic
+Mega Gardevoir ex,me1,Mega Evolution,60,Double Rare,I,Pokémon,Stage 2;MEGA;ex,360,Psychic
+Shedinja,me1,Mega Evolution,61,Uncommon,I,Pokémon,Stage 1,60,Psychic
+Spoink,me1,Mega Evolution,62,Common,I,Pokémon,Basic,70,Psychic
+Grumpig,me1,Mega Evolution,63,Uncommon,I,Pokémon,Stage 1,120,Psychic
+Xerneas,me1,Mega Evolution,64,Rare,I,Pokémon,Basic,120,Psychic
+Greavard,me1,Mega Evolution,65,Common,I,Pokémon,Basic,80,Psychic
+Houndstone,me1,Mega Evolution,66,Uncommon,I,Pokémon,Stage 1,140,Psychic
+Gimmighoul,me1,Mega Evolution,67,Common,I,Pokémon,Basic,70,Psychic
+Sandshrew,me1,Mega Evolution,68,Common,I,Pokémon,Basic,70,Fighting
+Sandslash,me1,Mega Evolution,69,Common,I,Pokémon,Stage 1,120,Fighting
+Onix,me1,Mega Evolution,70,Common,I,Pokémon,Basic,120,Fighting
+Tyrogue,me1,Mega Evolution,71,Common,I,Pokémon,Basic,30,Fighting
+Makuhita,me1,Mega Evolution,72,Common,I,Pokémon,Basic,80,Fighting
+Hariyama,me1,Mega Evolution,73,Rare,I,Pokémon,Stage 1,150,Fighting
+Lunatone,me1,Mega Evolution,74,Rare,I,Pokémon,Basic,110,Fighting
+Solrock,me1,Mega Evolution,75,Uncommon,I,Pokémon,Basic,110,Fighting
+Riolu,me1,Mega Evolution,76,Common,I,Pokémon,Basic,80,Fighting
+Mega Lucario ex,me1,Mega Evolution,77,Double Rare,I,Pokémon,Stage 1;MEGA;ex,340,Fighting
+Croagunk,me1,Mega Evolution,78,Common,I,Pokémon,Basic,70,Fighting
+Toxicroak,me1,Mega Evolution,79,Common,I,Pokémon,Stage 1,130,Fighting
+Marshadow,me1,Mega Evolution,80,Uncommon,I,Pokémon,Basic,90,Fighting
+Stonjourner,me1,Mega Evolution,81,Uncommon,I,Pokémon,Basic,130,Fighting
+Nacli,me1,Mega Evolution,82,Common,I,Pokémon,Basic,70,Fighting
+Naclstack,me1,Mega Evolution,83,Common,I,Pokémon,Stage 1,110,Fighting
+Garganacl,me1,Mega Evolution,84,Rare,I,Pokémon,Stage 2,180,Fighting
+Oddish,me2,Phantasmal Flames,1,Common,I,Pokémon,Basic,50,Grass
+Gloom,me2,Phantasmal Flames,2,Common,I,Pokémon,Stage 1,70,Grass
+Vileplume,me2,Phantasmal Flames,3,Rare,I,Pokémon,Stage 2,150,Grass
+Mega Heracross ex,me2,Phantasmal Flames,4,Double Rare,I,Pokémon,Basic;MEGA;ex,280,Grass
+Lotad,me2,Phantasmal Flames,5,Common,I,Pokémon,Basic,70,Grass
+Lombre,me2,Phantasmal Flames,6,Common,I,Pokémon,Stage 1,90,Grass
+Ludicolo,me2,Phantasmal Flames,7,Uncommon,I,Pokémon,Stage 2,160,Grass
+Genesect,me2,Phantasmal Flames,8,Rare,I,Pokémon,Basic,120,Grass
+Nymble,me2,Phantasmal Flames,9,Common,I,Pokémon,Basic,50,Grass
+Lokix,me2,Phantasmal Flames,10,Uncommon,I,Pokémon,Stage 1,120,Grass
+Charmander,me2,Phantasmal Flames,11,Common,I,Pokémon,Basic,80,Fire
+Charmeleon,me2,Phantasmal Flames,12,Common,I,Pokémon,Stage 1,110,Fire
+Mega Charizard X ex,me2,Phantasmal Flames,13,Double Rare,I,Pokémon,Stage 2;MEGA;ex,360,Fire
+Moltres,me2,Phantasmal Flames,14,Rare,I,Pokémon,Basic,120,Fire
+Darumaka,me2,Phantasmal Flames,15,Common,I,Pokémon,Basic,80,Fire
+Darmanitan,me2,Phantasmal Flames,16,Uncommon,I,Pokémon,Stage 1,150,Fire
+Reshiram,me2,Phantasmal Flames,17,Rare,I,Pokémon,Basic,130,Fire
+Oricorio ex,me2,Phantasmal Flames,18,Double Rare,I,Pokémon,Basic;ex,190,Fire
+Charcadet,me2,Phantasmal Flames,19,Common,I,Pokémon,Basic,70,Fire
+Ceruledge,me2,Phantasmal Flames,20,Uncommon,I,Pokémon,Stage 1,140,Fire
+Seel,me2,Phantasmal Flames,21,Common,I,Pokémon,Basic,80,Water
+Dewgong,me2,Phantasmal Flames,22,Common,I,Pokémon,Stage 1,130,Water
+Swinub,me2,Phantasmal Flames,23,Common,I,Pokémon,Basic,70,Water
+Piloswine,me2,Phantasmal Flames,24,Common,I,Pokémon,Stage 1,100,Water
+Mamoswine,me2,Phantasmal Flames,25,Uncommon,I,Pokémon,Stage 2,180,Water
+Suicune,me2,Phantasmal Flames,26,Rare,I,Pokémon,Basic,130,Water
+Piplup,me2,Phantasmal Flames,27,Common,I,Pokémon,Basic,70,Water
+Prinplup,me2,Phantasmal Flames,28,Common,I,Pokémon,Stage 1,100,Water
+Rotom ex,me2,Phantasmal Flames,29,Double Rare,I,Pokémon,Basic;ex,190,Lightning
+Yamper,me2,Phantasmal Flames,30,Common,I,Pokémon,Basic,70,Lightning
+Boltund,me2,Phantasmal Flames,31,Common,I,Pokémon,Stage 1,130,Lightning
+Pawmi,me2,Phantasmal Flames,32,Common,I,Pokémon,Basic,60,Lightning
+Pawmo,me2,Phantasmal Flames,33,Common,I,Pokémon,Stage 1,90,Lightning
+Pawmot,me2,Phantasmal Flames,34,Rare,I,Pokémon,Stage 2,140,Lightning
+Misdreavus,me2,Phantasmal Flames,35,Common,I,Pokémon,Basic,70,Psychic
+Mismagius ex,me2,Phantasmal Flames,36,Double Rare,I,Pokémon,Stage 1;ex,260,Psychic
+Snubbull,me2,Phantasmal Flames,37,Common,I,Pokémon,Basic,70,Psychic
+Granbull,me2,Phantasmal Flames,38,Uncommon,I,Pokémon,Stage 1,130,Psychic
+Cresselia,me2,Phantasmal Flames,39,Uncommon,I,Pokémon,Basic,120,Psychic
+Meloetta,me2,Phantasmal Flames,40,Uncommon,I,Pokémon,Basic,90,Psychic
+Mega Diancie ex,me2,Phantasmal Flames,41,Double Rare,I,Pokémon,Basic;MEGA;ex,270,Psychic
+Mimikyu,me2,Phantasmal Flames,42,Common,I,Pokémon,Basic,70,Psychic
+Milcery,me2,Phantasmal Flames,43,Common,I,Pokémon,Basic,50,Psychic
+Alcremie,me2,Phantasmal Flames,44,Uncommon,I,Pokémon,Stage 1,90,Psychic
+Zacian,me2,Phantasmal Flames,45,Rare,I,Pokémon,Basic,130,Psychic
+Bramblin,me2,Phantasmal Flames,46,Common,I,Pokémon,Basic,50,Psychic
+Brambleghast,me2,Phantasmal Flames,47,Uncommon,I,Pokémon,Stage 1,100,Psychic
+Paldean Tauros,me2,Phantasmal Flames,48,Uncommon,I,Pokémon,Basic,130,Fighting
+Gligar,me2,Phantasmal Flames,49,Common,I,Pokémon,Basic,70,Fighting
+Gliscor,me2,Phantasmal Flames,50,Uncommon,I,Pokémon,Stage 1,120,Fighting
+Trapinch,me2,Phantasmal Flames,51,Common,I,Pokémon,Basic,70,Fighting
+Vibrava,me2,Phantasmal Flames,52,Common,I,Pokémon,Stage 1,90,Fighting
+Flygon,me2,Phantasmal Flames,53,Rare,I,Pokémon,Stage 2,150,Fighting
+Gastly,me2,Phantasmal Flames,54,Common,I,Pokémon,Basic,70,Darkness
+Haunter,me2,Phantasmal Flames,55,Uncommon,I,Pokémon,Stage 1,100,Darkness
+Mega Gengar ex,me2,Phantasmal Flames,56,Double Rare,I,Pokémon,Stage 2;MEGA;ex,350,Darkness
+Murkrow,me2,Phantasmal Flames,57,Common,I,Pokémon,Basic,60,Darkness
+Honchkrow,me2,Phantasmal Flames,58,Uncommon,I,Pokémon,Stage 1,130,Darkness
+Sableye,me2,Phantasmal Flames,59,Common,I,Pokémon,Basic,80,Darkness
+Carvanha,me2,Phantasmal Flames,60,Common,I,Pokémon,Basic,70,Darkness
+Mega Sharpedo ex,me2,Phantasmal Flames,61,Double Rare,I,Pokémon,Stage 1;MEGA;ex,330,Darkness
+Seviper,me2,Phantasmal Flames,62,Uncommon,I,Pokémon,Basic,120,Darkness
+Absol,me2,Phantasmal Flames,63,Common,I,Pokémon,Basic,110,Darkness
+Sandile,me2,Phantasmal Flames,64,Common,I,Pokémon,Basic,70,Darkness
+Krokorok,me2,Phantasmal Flames,65,Common,I,Pokémon,Stage 1,100,Darkness
+Krookodile,me2,Phantasmal Flames,66,Uncommon,I,Pokémon,Stage 2,170,Darkness
+Toxel,me2,Phantasmal Flames,67,Common,I,Pokémon,Basic,70,Darkness
+Toxtricity,me2,Phantasmal Flames,68,Rare,I,Pokémon,Stage 1,140,Darkness
+Eternatus,me2,Phantasmal Flames,69,Uncommon,I,Pokémon,Basic,150,Darkness
+Empoleon ex,me2,Phantasmal Flames,70,Double Rare,I,Pokémon,Stage 2;ex,320,Metal
+Bronzor,me2,Phantasmal Flames,71,Common,I,Pokémon,Basic,80,Metal
+Bronzong,me2,Phantasmal Flames,72,Uncommon,I,Pokémon,Stage 1,140,Metal
+Togedemaru,me2,Phantasmal Flames,73,Common,I,Pokémon,Basic,80,Metal
+Duraludon,me2,Phantasmal Flames,74,Common,I,Pokémon,Basic,130,Metal
+Archaludon,me2,Phantasmal Flames,75,Uncommon,I,Pokémon,Stage 1,180,Metal
+Erika's Oddish,me2pt5,Ascended Heroes,1,Common,J,Pokémon,Basic,60,Grass
+Erika's Gloom,me2pt5,Ascended Heroes,2,Uncommon,J,Pokémon,Stage 1,90,Grass
+Erika's Vileplume ex,me2pt5,Ascended Heroes,3,Double Rare,J,Pokémon,Stage 2;ex,310,Grass
+Erika's Bellsprout,me2pt5,Ascended Heroes,4,Common,J,Pokémon,Basic,60,Grass
+Erika's Weepinbell,me2pt5,Ascended Heroes,5,Uncommon,J,Pokémon,Stage 1,90,Grass
+Erika's Victreebel,me2pt5,Ascended Heroes,6,Rare,J,Pokémon,Stage 2,150,Grass
+Erika's Tangela,me2pt5,Ascended Heroes,7,Common,J,Pokémon,Basic,80,Grass
+Chikorita,me2pt5,Ascended Heroes,8,Common,J,Pokémon,Basic,70,Grass
+Bayleef,me2pt5,Ascended Heroes,9,Uncommon,J,Pokémon,Stage 1,100,Grass
+Mega Meganium ex,me2pt5,Ascended Heroes,10,Double Rare,J,Pokémon,Stage 2;MEGA;ex,360,Grass
+Wurmple,me2pt5,Ascended Heroes,11,Common,I,Pokémon,Basic,60,Grass
+Silcoon,me2pt5,Ascended Heroes,12,Common,I,Pokémon,Stage 1,90,Grass
+Beautifly,me2pt5,Ascended Heroes,13,Uncommon,I,Pokémon,Stage 2,130,Grass
+Cascoon,me2pt5,Ascended Heroes,14,Common,I,Pokémon,Stage 1,90,Grass
+Dustox,me2pt5,Ascended Heroes,15,Uncommon,I,Pokémon,Stage 2,140,Grass
+Budew,me2pt5,Ascended Heroes,16,Common,H,Pokémon,Basic,30,Grass
+Grubbin,me2pt5,Ascended Heroes,17,Common,H,Pokémon,Basic,70,Grass
+Team Rocket's Tarountula,me2pt5,Ascended Heroes,18,Common,I,Pokémon,Basic,50,Grass
+Team Rocket's Spidops,me2pt5,Ascended Heroes,19,Rare,I,Pokémon,Stage 1,130,Grass
+Charmander,me2pt5,Ascended Heroes,20,Common,J,Pokémon,Basic,80,Fire
+Charmeleon,me2pt5,Ascended Heroes,21,Uncommon,J,Pokémon,Stage 1,100,Fire
+Mega Charizard Y ex,me2pt5,Ascended Heroes,22,Double Rare,J,Pokémon,Stage 2;MEGA;ex,360,Fire
+Ethan's Slugma,me2pt5,Ascended Heroes,23,Common,I,Pokémon,Basic,80,Fire
+Ethan's Magcargo,me2pt5,Ascended Heroes,24,Rare,I,Pokémon,Stage 1,130,Fire
+Entei,me2pt5,Ascended Heroes,25,Rare,I,Pokémon,Basic,140,Fire
+Ethan's Ho-Oh ex,me2pt5,Ascended Heroes,26,Double Rare,I,Pokémon,Basic;ex,230,Fire
+Numel,me2pt5,Ascended Heroes,27,Common,I,Pokémon,Basic,80,Fire
+Camerupt,me2pt5,Ascended Heroes,28,Uncommon,I,Pokémon,Stage 1,140,Fire
+Tepig,me2pt5,Ascended Heroes,29,Common,J,Pokémon,Basic,80,Fire
+Pignite,me2pt5,Ascended Heroes,30,Uncommon,J,Pokémon,Stage 1,110,Fire
+Mega Emboar ex,me2pt5,Ascended Heroes,31,Double Rare,J,Pokémon,Stage 2;MEGA;ex,380,Fire
+N's Darumaka,me2pt5,Ascended Heroes,32,Common,I,Pokémon,Basic,80,Fire
+N's Darmanitan,me2pt5,Ascended Heroes,33,Uncommon,I,Pokémon,Stage 1,140,Fire
+Salandit,me2pt5,Ascended Heroes,34,Common,H,Pokémon,Basic,70,Fire
+Salazzle,me2pt5,Ascended Heroes,35,Uncommon,H,Pokémon,Stage 1,120,Fire
+Scorbunny,me2pt5,Ascended Heroes,36,Common,H,Pokémon,Basic,70,Fire
+Raboot,me2pt5,Ascended Heroes,37,Common,H,Pokémon,Stage 1,90,Fire
+Cinderace ex,me2pt5,Ascended Heroes,38,Double Rare,H,Pokémon,Stage 2;Tera;ex,320,Fire
+Psyduck,me2pt5,Ascended Heroes,39,Common,I,Pokémon,Basic,70,Water
+Golduck,me2pt5,Ascended Heroes,40,Uncommon,I,Pokémon,Stage 1,120,Water
+Totodile,me2pt5,Ascended Heroes,41,Common,J,Pokémon,Basic,80,Water
+Croconaw,me2pt5,Ascended Heroes,42,Uncommon,J,Pokémon,Stage 1,100,Water
+Mega Feraligatr ex,me2pt5,Ascended Heroes,43,Double Rare,J,Pokémon,Stage 2;MEGA;ex,370,Water
+Sneasel,me2pt5,Ascended Heroes,44,Common,H,Pokémon,Basic,70,Water
+Weavile,me2pt5,Ascended Heroes,45,Uncommon,H,Pokémon,Stage 1,100,Water
+Snorunt,me2pt5,Ascended Heroes,46,Common,I,Pokémon,Basic,70,Water
+Mega Froslass ex,me2pt5,Ascended Heroes,47,Double Rare,I,Pokémon,Stage 1;MEGA;ex,310,Water
+Regice ex,me2pt5,Ascended Heroes,48,Double Rare,J,Pokémon,Basic;ex,230,Water
+N's Vanillite,me2pt5,Ascended Heroes,49,Common,I,Pokémon,Basic,60,Water
+N's Vanillish,me2pt5,Ascended Heroes,50,Common,I,Pokémon,Stage 1,100,Water
+N's Vanilluxe,me2pt5,Ascended Heroes,51,Uncommon,I,Pokémon,Stage 2,150,Water
+Snom,me2pt5,Ascended Heroes,52,Common,I,Pokémon,Basic,50,Water
+Frosmoth,me2pt5,Ascended Heroes,53,Uncommon,I,Pokémon,Stage 1,110,Water
+Glastrier,me2pt5,Ascended Heroes,54,Uncommon,I,Pokémon,Basic,130,Water
+Pikachu,me2pt5,Ascended Heroes,55,Common,J,Pokémon,Basic,70,Lightning
+Raichu,me2pt5,Ascended Heroes,56,Uncommon,J,Pokémon,Stage 1,130,Lightning
+Pikachu ex,me2pt5,Ascended Heroes,57,Double Rare,H,Pokémon,Basic;Tera;ex,200,Lightning
+Voltorb ex,me2pt5,Ascended Heroes,58,Double Rare,J,Pokémon,Basic;ex,170,Lightning
+Tynamo,me2pt5,Ascended Heroes,59,Common,I,Pokémon,Basic,40,Lightning
+Eelektrik,me2pt5,Ascended Heroes,60,Uncommon,I,Pokémon,Stage 1,90,Lightning
+Mega Eelektross ex,me2pt5,Ascended Heroes,61,Double Rare,I,Pokémon,Stage 2;MEGA;ex,350,Lightning
+Stunfisk,me2pt5,Ascended Heroes,62,Common,I,Pokémon,Basic,110,Lightning
+Helioptile,me2pt5,Ascended Heroes,63,Common,I,Pokémon,Basic,70,Lightning
+Heliolisk,me2pt5,Ascended Heroes,64,Uncommon,I,Pokémon,Stage 1,120,Lightning
+Charjabug,me2pt5,Ascended Heroes,65,Common,H,Pokémon,Stage 1,100,Lightning
+Vikavolt,me2pt5,Ascended Heroes,66,Uncommon,H,Pokémon,Stage 2,160,Lightning
+Tapu Koko,me2pt5,Ascended Heroes,67,Rare,I,Pokémon,Basic,120,Lightning
+Hop's Pincurchin ex,me2pt5,Ascended Heroes,68,Double Rare,I,Pokémon,Basic;ex,200,Lightning
+Iono's Tadbulb,me2pt5,Ascended Heroes,69,Common,I,Pokémon,Basic,60,Lightning
+Iono's Bellibolt ex,me2pt5,Ascended Heroes,70,Double Rare,I,Pokémon,Stage 1;ex,280,Lightning
+Iono's Wattrel,me2pt5,Ascended Heroes,71,Common,I,Pokémon,Basic,60,Lightning
+Iono's Kilowattrel,me2pt5,Ascended Heroes,72,Rare,I,Pokémon,Stage 1,120,Lightning
+Miraidon ex,me2pt5,Ascended Heroes,73,Double Rare,J,Pokémon,Basic;Tera;ex,220,Lightning
+Clefairy,me2pt5,Ascended Heroes,74,Common,H,Pokémon,Basic,60,Psychic
+Clefable,me2pt5,Ascended Heroes,75,Uncommon,H,Pokémon,Stage 1,120,Psychic
+Spinarak,me3,Perfect Order,1,Common,J,Pokémon,Basic,60,Grass
+Ariados,me3,Perfect Order,2,Common,J,Pokémon,Stage 1,110,Grass
+Shaymin,me3,Perfect Order,3,Uncommon,J,Pokémon,Basic,70,Grass
+Snivy,me3,Perfect Order,4,Common,J,Pokémon,Basic,70,Grass
+Servine,me3,Perfect Order,5,Common,J,Pokémon,Stage 1,100,Grass
+Serperior,me3,Perfect Order,6,Rare,J,Pokémon,Stage 2,160,Grass
+Scatterbug,me3,Perfect Order,7,Common,J,Pokémon,Basic,40,Grass
+Spewpa,me3,Perfect Order,8,Common,J,Pokémon,Stage 1,80,Grass
+Vivillon,me3,Perfect Order,9,Uncommon,J,Pokémon,Stage 2,120,Grass
+Rowlet,me3,Perfect Order,10,Common,J,Pokémon,Basic,80,Grass
+Dartrix,me3,Perfect Order,11,Common,J,Pokémon,Stage 1,100,Grass
+Decidueye ex,me3,Perfect Order,12,Double Rare,J,Pokémon,Stage 2;ex,320,Grass
+Fletchinder,me3,Perfect Order,13,Common,J,Pokémon,Stage 1,90,Fire
+Talonflame,me3,Perfect Order,14,Uncommon,J,Pokémon,Stage 2,150,Fire
+Salandit,me3,Perfect Order,15,Common,J,Pokémon,Basic,70,Fire
+Salazzle ex,me3,Perfect Order,16,Double Rare,J,Pokémon,Stage 1;ex,260,Fire
+Turtonator,me3,Perfect Order,17,Uncommon,J,Pokémon,Basic,120,Fire
+Seel,me3,Perfect Order,18,Common,J,Pokémon,Basic,80,Water
+Dewgong,me3,Perfect Order,19,Rare,J,Pokémon,Stage 1,130,Water
+Staryu,me3,Perfect Order,20,Common,J,Pokémon,Basic,70,Water
+Mega Starmie ex,me3,Perfect Order,21,Double Rare,J,Pokémon,Stage 1;MEGA;ex,330,Water
+Lapras ex,me3,Perfect Order,22,Double Rare,I,Pokémon,Basic;ex,210,Water
+Amaura,me3,Perfect Order,23,Common,J,Pokémon,Stage 1,100,Water
+Aurorus,me3,Perfect Order,24,Rare,J,Pokémon,Stage 2,170,Water
+Volcanion,me3,Perfect Order,25,Uncommon,J,Pokémon,Basic,130,Water
+Shinx,me3,Perfect Order,26,Common,J,Pokémon,Basic,70,Lightning
+Luxio,me3,Perfect Order,27,Uncommon,J,Pokémon,Stage 1,90,Lightning
+Luxray,me3,Perfect Order,28,Rare,J,Pokémon,Stage 2,150,Lightning
+Dedenne,me3,Perfect Order,29,Common,J,Pokémon,Basic,70,Lightning
+Clefairy,me3,Perfect Order,30,Common,J,Pokémon,Basic,70,Psychic
+Mega Clefable ex,me3,Perfect Order,31,Double Rare,J,Pokémon,Stage 1;MEGA;ex,320,Psychic
+Mawile,me3,Perfect Order,32,Common,J,Pokémon,Basic,110,Psychic
+Espurr,me3,Perfect Order,33,Common,J,Pokémon,Basic,60,Psychic
+Meowstic,me3,Perfect Order,34,Uncommon,J,Pokémon,Stage 1,100,Psychic
+Spritzee,me3,Perfect Order,35,Common,J,Pokémon,Basic,70,Psychic
+Aromatisse,me3,Perfect Order,36,Uncommon,J,Pokémon,Stage 1,120,Psychic
+Nosepass,me3,Perfect Order,37,Common,J,Pokémon,Basic,90,Fighting
+Probopass,me3,Perfect Order,38,Common,J,Pokémon,Stage 1,140,Fighting
+Hippopotas,me3,Perfect Order,39,Common,J,Pokémon,Basic,100,Fighting
+Hippowdon,me3,Perfect Order,40,Uncommon,J,Pokémon,Stage 1,150,Fighting
+Landorus,me3,Perfect Order,41,Rare,J,Pokémon,Basic,120,Fighting
+Binacle,me3,Perfect Order,42,Common,J,Pokémon,Basic,80,Fighting
+Barbaracle,me3,Perfect Order,43,Uncommon,J,Pokémon,Stage 1,130,Fighting
+Tyrunt,me3,Perfect Order,44,Common,J,Pokémon,Stage 1,100,Fighting
+Tyrantrum,me3,Perfect Order,45,Rare,J,Pokémon,Stage 2,180,Fighting
+Hawlucha,me3,Perfect Order,46,Common,J,Pokémon,Basic,70,Fighting
+Mega Zygarde ex,me3,Perfect Order,47,Double Rare,J,Pokémon,Basic;MEGA;ex,310,Fighting
+Gastly,me3,Perfect Order,48,Common,J,Pokémon,Basic,70,Darkness
+Haunter,me3,Perfect Order,49,Common,J,Pokémon,Stage 1,100,Darkness
+Gengar,me3,Perfect Order,50,Rare,J,Pokémon,Stage 2,130,Darkness
+Skorupi,me3,Perfect Order,51,Common,J,Pokémon,Basic,80,Darkness
+Drapion,me3,Perfect Order,52,Uncommon,J,Pokémon,Stage 1,140,Darkness
+Yveltal ex,me3,Perfect Order,53,Double Rare,J,Pokémon,Basic;ex,210,Darkness
+Chien-Pao,me3,Perfect Order,54,Rare,J,Pokémon,Basic,120,Darkness
+Mega Skarmory ex,me3,Perfect Order,55,Double Rare,J,Pokémon,Basic;MEGA;ex,260,Metal
+Honedge,me3,Perfect Order,56,Common,J,Pokémon,Basic,70,Metal
+Doublade,me3,Perfect Order,57,Common,J,Pokémon,Stage 1,100,Metal
+Aegislash,me3,Perfect Order,58,Uncommon,J,Pokémon,Stage 2,150,Metal
+Klefki,me3,Perfect Order,59,Common,J,Pokémon,Basic,70,Metal
+Rattata,me3,Perfect Order,60,Common,J,Pokémon,Basic,40,Colorless
+Raticate,me3,Perfect Order,61,Uncommon,J,Pokémon,Stage 1,90,Colorless
+Meowth ex,me3,Perfect Order,62,Double Rare,J,Pokémon,Basic;ex,170,Colorless
+Snorlax,me3,Perfect Order,63,Common,J,Pokémon,Basic,160,Colorless
+Bunnelby,me3,Perfect Order,64,Common,J,Pokémon,Basic,70,Colorless
+Diggersby,me3,Perfect Order,65,Uncommon,J,Pokémon,Stage 1,150,Colorless
+Fletchling,me3,Perfect Order,66,Common,J,Pokémon,Basic,60,Colorless
+Furfrou,me3,Perfect Order,67,Common,J,Pokémon,Basic,90,Colorless
+Antique Jaw Fossil,me3,Perfect Order,68,Common,J,Trainer,Item,60,
+Antique Sail Fossil,me3,Perfect Order,69,Common,J,Trainer,Item,60,
+Core Memory,me3,Perfect Order,70,Uncommon,J,Trainer,Pokémon Tool,,
+Crushing Hammer,me3,Perfect Order,71,Common,J,Trainer,Item,,
+Energy Search,me3,Perfect Order,72,Common,J,Trainer,Item,,
+Energy Swatter,me3,Perfect Order,73,Uncommon,J,Trainer,Item,,
+Hole-Digging Shovel,me3,Perfect Order,74,Common,I,Trainer,Item,,
+Jacinthe,me3,Perfect Order,75,Uncommon,J,Trainer,Supporter,,
+Judge,me3,Perfect Order,76,Uncommon,J,Trainer,Supporter,,
+Lumiose City,me3,Perfect Order,77,Uncommon,J,Trainer,Stadium,,
+Lumiose Galette,me3,Perfect Order,78,Uncommon,J,Trainer,Item,,
+Naveen,me3,Perfect Order,79,Uncommon,J,Trainer,Supporter,,
+Poké Ball,me3,Perfect Order,80,Common,J,Trainer,Item,,
+Poké Pad,me3,Perfect Order,81,Uncommon,J,Trainer,Item,,
+Pokémon Catcher,me3,Perfect Order,82,Common,J,Trainer,Item,,
+Potion,me3,Perfect Order,83,Common,J,Trainer,Item,,
+Rosa's Encouragement,me3,Perfect Order,84,Uncommon,J,Trainer,Supporter,,
+Tarragon,me3,Perfect Order,85,Uncommon,J,Trainer,Supporter,,
+Growing Grass Energy,me3,Perfect Order,86,Rare,J,Energy,Special,,
+Rocky Fighting Energy,me3,Perfect Order,87,Rare,J,Energy,Special,,
+Telepathic Psychic Energy,me3,Perfect Order,88,Rare,J,Energy,Special,,
+Spewpa,me3,Perfect Order,89,Illustration Rare,J,Pokémon,Stage 1,80,Grass
+Rowlet,me3,Perfect Order,90,Illustration Rare,J,Pokémon,Basic,80,Grass
+Sewaddle,rsv10pt5,White Flare,1,Common,I,Pokémon,Basic,50,Grass
+Swadloon,rsv10pt5,White Flare,2,Common,I,Pokémon,Stage 1,80,Grass
+Leavanny,rsv10pt5,White Flare,3,Uncommon,I,Pokémon,Stage 2,130,Grass
+Cottonee,rsv10pt5,White Flare,4,Common,I,Pokémon,Basic,60,Grass
+Whimsicott ex,rsv10pt5,White Flare,5,Double Rare,I,Pokémon,Stage 1;ex,230,Grass
+Deerling,rsv10pt5,White Flare,6,Common,I,Pokémon,Basic,70,Grass
+Sawsbuck,rsv10pt5,White Flare,7,Uncommon,I,Pokémon,Stage 1,130,Grass
+Shelmet,rsv10pt5,White Flare,8,Common,I,Pokémon,Basic,60,Grass
+Accelgor,rsv10pt5,White Flare,9,Uncommon,I,Pokémon,Stage 1,100,Grass
+Virizion,rsv10pt5,White Flare,10,Rare,I,Pokémon,Basic,120,Grass
+Tepig,rsv10pt5,White Flare,11,Common,I,Pokémon,Basic,70,Fire
+Pignite,rsv10pt5,White Flare,12,Common,I,Pokémon,Stage 1,110,Fire
+Emboar,rsv10pt5,White Flare,13,Rare,I,Pokémon,Stage 2,180,Fire
+Pansear,rsv10pt5,White Flare,14,Common,I,Pokémon,Basic,70,Fire
+Simisear,rsv10pt5,White Flare,15,Uncommon,I,Pokémon,Stage 1,100,Fire
+Litwick,rsv10pt5,White Flare,16,Common,I,Pokémon,Basic,60,Fire
+Lampent,rsv10pt5,White Flare,17,Common,I,Pokémon,Stage 1,80,Fire
+Chandelure,rsv10pt5,White Flare,18,Rare,I,Pokémon,Stage 2,150,Fire
+Heatmor,rsv10pt5,White Flare,19,Uncommon,I,Pokémon,Basic,120,Fire
+Reshiram ex,rsv10pt5,White Flare,20,Double Rare,I,Pokémon,Basic;ex,230,Fire
+Oshawott,rsv10pt5,White Flare,21,Common,I,Pokémon,Basic,70,Water
+Dewott,rsv10pt5,White Flare,22,Common,I,Pokémon,Stage 1,100,Water
+Samurott,rsv10pt5,White Flare,23,Rare,I,Pokémon,Stage 2,160,Water
+Basculin,rsv10pt5,White Flare,24,Common,I,Pokémon,Basic,90,Water
+Ducklett,rsv10pt5,White Flare,25,Common,I,Pokémon,Basic,70,Water
+Swanna,rsv10pt5,White Flare,26,Uncommon,I,Pokémon,Stage 1,120,Water
+Vanillite,rsv10pt5,White Flare,27,Common,I,Pokémon,Basic,60,Water
+Vanillish,rsv10pt5,White Flare,28,Common,I,Pokémon,Stage 1,90,Water
+Vanilluxe,rsv10pt5,White Flare,29,Uncommon,I,Pokémon,Stage 2,150,Water
+Keldeo ex,rsv10pt5,White Flare,30,Double Rare,I,Pokémon,Basic;ex,210,Water
+Blitzle,rsv10pt5,White Flare,31,Common,I,Pokémon,Basic,60,Lightning
+Zebstrika,rsv10pt5,White Flare,32,Uncommon,I,Pokémon,Stage 1,120,Lightning
+Joltik,rsv10pt5,White Flare,33,Common,I,Pokémon,Basic,40,Lightning
+Galvantula,rsv10pt5,White Flare,34,Uncommon,I,Pokémon,Stage 1,90,Lightning
+Stunfisk,rsv10pt5,White Flare,35,Uncommon,I,Pokémon,Basic,110,Lightning
+Woobat,rsv10pt5,White Flare,36,Common,I,Pokémon,Basic,60,Psychic
+Swoobat,rsv10pt5,White Flare,37,Uncommon,I,Pokémon,Stage 1,90,Psychic
+Sigilyph,rsv10pt5,White Flare,38,Uncommon,I,Pokémon,Basic,120,Psychic
+Yamask,rsv10pt5,White Flare,39,Common,I,Pokémon,Basic,70,Psychic
+Cofagrigus,rsv10pt5,White Flare,40,Rare,I,Pokémon,Stage 1,120,Psychic
+Gothita,rsv10pt5,White Flare,41,Common,I,Pokémon,Basic,70,Psychic
+Gothorita,rsv10pt5,White Flare,42,Common,I,Pokémon,Stage 1,90,Psychic
+Gothitelle,rsv10pt5,White Flare,43,Rare,I,Pokémon,Stage 2,150,Psychic
+Frillish,rsv10pt5,White Flare,44,Common,I,Pokémon,Basic,80,Psychic
+Jellicent ex,rsv10pt5,White Flare,45,Double Rare,I,Pokémon,Stage 1;ex,270,Psychic
+Roggenrola,rsv10pt5,White Flare,46,Common,I,Pokémon,Basic,80,Fighting
+Boldore,rsv10pt5,White Flare,47,Common,I,Pokémon,Stage 1,110,Fighting
+Gigalith,rsv10pt5,White Flare,48,Uncommon,I,Pokémon,Stage 2,170,Fighting
+Sawk,rsv10pt5,White Flare,49,Uncommon,I,Pokémon,Basic,110,Fighting
+Archen,rsv10pt5,White Flare,50,Uncommon,I,Pokémon,Stage 1,80,Fighting
+Archeops,rsv10pt5,White Flare,51,Rare,I,Pokémon,Stage 2,140,Fighting
+Mienfoo,rsv10pt5,White Flare,52,Common,I,Pokémon,Basic,60,Fighting
+Mienshao,rsv10pt5,White Flare,53,Uncommon,I,Pokémon,Stage 1,100,Fighting
+Terrakion,rsv10pt5,White Flare,54,Rare,I,Pokémon,Basic,140,Fighting
+Purrloin,rsv10pt5,White Flare,55,Common,I,Pokémon,Basic,60,Darkness
+Liepard,rsv10pt5,White Flare,56,Uncommon,I,Pokémon,Stage 1,110,Darkness
+Scraggy,rsv10pt5,White Flare,57,Common,I,Pokémon,Basic,70,Darkness
+Scrafty,rsv10pt5,White Flare,58,Uncommon,I,Pokémon,Stage 1,120,Darkness
+Trubbish,rsv10pt5,White Flare,59,Common,I,Pokémon,Basic,70,Darkness
+Garbodor,rsv10pt5,White Flare,60,Uncommon,I,Pokémon,Stage 1,140,Darkness
+Zorua,rsv10pt5,White Flare,61,Common,I,Pokémon,Basic,70,Darkness
+Zoroark,rsv10pt5,White Flare,62,Rare,I,Pokémon,Stage 1,120,Darkness
+Vullaby,rsv10pt5,White Flare,63,Common,I,Pokémon,Basic,70,Darkness
+Mandibuzz,rsv10pt5,White Flare,64,Uncommon,I,Pokémon,Stage 1,110,Darkness
+Deino,rsv10pt5,White Flare,65,Common,I,Pokémon,Basic,80,Darkness
+Zweilous,rsv10pt5,White Flare,66,Common,I,Pokémon,Stage 1,110,Darkness
+Hydreigon ex,rsv10pt5,White Flare,67,Double Rare,I,Pokémon,Stage 2;ex,330,Darkness
+Ferroseed,rsv10pt5,White Flare,68,Common,I,Pokémon,Basic,70,Metal
+Ferrothorn,rsv10pt5,White Flare,69,Uncommon,I,Pokémon,Stage 1,140,Metal
+Durant,rsv10pt5,White Flare,70,Uncommon,I,Pokémon,Basic,110,Metal
+Druddigon,rsv10pt5,White Flare,71,Uncommon,I,Pokémon,Basic,120,Dragon
+Patrat,rsv10pt5,White Flare,72,Common,I,Pokémon,Basic,60,Colorless
+Watchog,rsv10pt5,White Flare,73,Uncommon,I,Pokémon,Stage 1,90,Colorless
+Ethan's Pinsir,sv10,Destined Rivals,1,Uncommon,I,Pokémon,Basic,120,Grass
+Yanma,sv10,Destined Rivals,2,Common,I,Pokémon,Basic,70,Grass
+Yanmega ex,sv10,Destined Rivals,3,Double Rare,I,Pokémon,Stage 1;ex,280,Grass
+Pineco,sv10,Destined Rivals,4,Common,I,Pokémon,Basic,70,Grass
+Shroomish,sv10,Destined Rivals,5,Common,I,Pokémon,Basic,60,Grass
+Breloom,sv10,Destined Rivals,6,Common,I,Pokémon,Stage 1,120,Grass
+Cynthia's Roselia,sv10,Destined Rivals,7,Common,I,Pokémon,Basic,70,Grass
+Cynthia's Roserade,sv10,Destined Rivals,8,Rare,I,Pokémon,Stage 1,130,Grass
+Mow Rotom,sv10,Destined Rivals,9,Common,I,Pokémon,Basic,70,Grass
+Shaymin,sv10,Destined Rivals,10,Uncommon,I,Pokémon,Basic,80,Grass
+Dwebble,sv10,Destined Rivals,11,Common,I,Pokémon,Basic,70,Grass
+Crustle,sv10,Destined Rivals,12,Rare,I,Pokémon,Stage 1,150,Grass
+Fomantis,sv10,Destined Rivals,13,Common,I,Pokémon,Basic,60,Grass
+Lurantis,sv10,Destined Rivals,14,Uncommon,I,Pokémon,Stage 1,120,Grass
+Team Rocket's Blipbug,sv10,Destined Rivals,15,Common,I,Pokémon,Basic,60,Grass
+Applin,sv10,Destined Rivals,16,Common,I,Pokémon,Basic,40,Grass
+Dipplin,sv10,Destined Rivals,17,Common,I,Pokémon,Stage 1,90,Grass
+Hydrapple,sv10,Destined Rivals,18,Rare,I,Pokémon,Stage 2,170,Grass
+Team Rocket's Tarountula,sv10,Destined Rivals,19,Common,I,Pokémon,Basic,50,Grass
+Team Rocket's Spidops,sv10,Destined Rivals,20,Rare,I,Pokémon,Stage 1,130,Grass
+Smoliv,sv10,Destined Rivals,21,Common,I,Pokémon,Basic,60,Grass
+Dolliv,sv10,Destined Rivals,22,Common,I,Pokémon,Stage 1,90,Grass
+Arboliva ex,sv10,Destined Rivals,23,Double Rare,I,Pokémon,Stage 2;ex,310,Grass
+Rellor,sv10,Destined Rivals,24,Common,H,Pokémon,Basic,40,Grass
+Rabsca ex,sv10,Destined Rivals,25,Double Rare,H,Pokémon,Stage 1;ex,250,Grass
+Teal Mask Ogerpon,sv10,Destined Rivals,26,Uncommon,I,Pokémon,Basic,110,Grass
+Growlithe,sv10,Destined Rivals,27,Common,I,Pokémon,Basic,80,Fire
+Arcanine,sv10,Destined Rivals,28,Uncommon,I,Pokémon,Stage 1,140,Fire
+Ponyta,sv10,Destined Rivals,29,Common,I,Pokémon,Basic,70,Fire
+Rapidash,sv10,Destined Rivals,30,Uncommon,I,Pokémon,Stage 1,110,Fire
+Team Rocket's Moltres ex,sv10,Destined Rivals,31,Double Rare,I,Pokémon,Basic;ex,220,Fire
+Ethan's Cyndaquil,sv10,Destined Rivals,32,Common,I,Pokémon,Basic,70,Fire
+Ethan's Quilava,sv10,Destined Rivals,33,Common,I,Pokémon,Stage 1,100,Fire
+Ethan's Typhlosion,sv10,Destined Rivals,34,Rare,I,Pokémon,Stage 2,170,Fire
+Ethan's Slugma,sv10,Destined Rivals,35,Common,I,Pokémon,Basic,80,Fire
+Ethan's Magcargo,sv10,Destined Rivals,36,Rare,I,Pokémon,Stage 1,130,Fire
+Team Rocket's Houndour,sv10,Destined Rivals,37,Common,I,Pokémon,Basic,70,Fire
+Team Rocket's Houndoom,sv10,Destined Rivals,38,Uncommon,I,Pokémon,Stage 1,130,Fire
+Ethan's Ho-Oh ex,sv10,Destined Rivals,39,Double Rare,I,Pokémon,Basic;ex,230,Fire
+Torchic,sv10,Destined Rivals,40,Common,I,Pokémon,Basic,70,Fire
+Combusken,sv10,Destined Rivals,41,Common,I,Pokémon,Stage 1,100,Fire
+Blaziken,sv10,Destined Rivals,42,Rare,I,Pokémon,Stage 2,170,Fire
+Heat Rotom,sv10,Destined Rivals,43,Common,I,Pokémon,Basic,80,Fire
+Hearthflame Mask Ogerpon,sv10,Destined Rivals,44,Uncommon,I,Pokémon,Basic,110,Fire
+Misty's Psyduck,sv10,Destined Rivals,45,Uncommon,I,Pokémon,Basic,70,Water
+Misty's Staryu,sv10,Destined Rivals,46,Common,I,Pokémon,Basic,70,Water
+Misty's Starmie,sv10,Destined Rivals,47,Uncommon,I,Pokémon,Stage 1,100,Water
+Misty's Magikarp,sv10,Destined Rivals,48,Common,I,Pokémon,Basic,30,Water
+Misty's Gyarados,sv10,Destined Rivals,49,Rare,I,Pokémon,Stage 1,180,Water
+Misty's Lapras,sv10,Destined Rivals,50,Common,I,Pokémon,Basic,110,Water
+Team Rocket's Articuno,sv10,Destined Rivals,51,Rare,I,Pokémon,Basic,120,Water
+Cynthia's Feebas,sv10,Destined Rivals,52,Common,I,Pokémon,Basic,30,Water
+Cynthia's Milotic,sv10,Destined Rivals,53,Uncommon,I,Pokémon,Stage 1,130,Water
+Clamperl,sv10,Destined Rivals,54,Common,I,Pokémon,Basic,60,Water
+Huntail,sv10,Destined Rivals,55,Uncommon,I,Pokémon,Stage 1,110,Water
+Gorebyss,sv10,Destined Rivals,56,Rare,I,Pokémon,Stage 1,90,Water
+Buizel,sv10,Destined Rivals,57,Common,I,Pokémon,Basic,70,Water
+Floatzel,sv10,Destined Rivals,58,Uncommon,I,Pokémon,Stage 1,120,Water
+Snover,sv10,Destined Rivals,59,Common,I,Pokémon,Basic,90,Water
+Abomasnow,sv10,Destined Rivals,60,Uncommon,I,Pokémon,Stage 1,150,Water
+Wash Rotom,sv10,Destined Rivals,61,Common,I,Pokémon,Basic,80,Water
+Arrokuda,sv10,Destined Rivals,62,Common,I,Pokémon,Basic,70,Water
+Barraskewda,sv10,Destined Rivals,63,Uncommon,I,Pokémon,Stage 1,130,Water
+Cetoddle,sv10,Destined Rivals,64,Common,I,Pokémon,Basic,100,Water
+Cetitan ex,sv10,Destined Rivals,65,Double Rare,I,Pokémon,Stage 1;ex,300,Water
+Dondozo ex,sv10,Destined Rivals,66,Double Rare,I,Pokémon,Basic;ex,260,Water
+Wellspring Mask Ogerpon,sv10,Destined Rivals,67,Uncommon,I,Pokémon,Basic,110,Water
+Electabuzz,sv10,Destined Rivals,68,Common,I,Pokémon,Basic,90,Lightning
+Electivire ex,sv10,Destined Rivals,69,Double Rare,I,Pokémon,Stage 1;ex,280,Lightning
+Team Rocket's Zapdos,sv10,Destined Rivals,70,Rare,I,Pokémon,Basic,120,Lightning
+Ethan's Pichu,sv10,Destined Rivals,71,Common,I,Pokémon,Basic,30,Lightning
+Team Rocket's Mareep,sv10,Destined Rivals,72,Common,I,Pokémon,Basic,60,Lightning
+Team Rocket's Flaaffy,sv10,Destined Rivals,73,Common,I,Pokémon,Stage 1,90,Lightning
+Team Rocket's Ampharos,sv10,Destined Rivals,74,Uncommon,I,Pokémon,Stage 2,140,Lightning
+Electrike,sv10,Destined Rivals,75,Common,I,Pokémon,Basic,60,Lightning
+Manectric,sv10,Destined Rivals,76,Uncommon,I,Pokémon,Stage 1,120,Lightning
+Rotom,sv10,Destined Rivals,77,Common,I,Pokémon,Basic,60,Lightning
+Zeraora,sv10,Destined Rivals,78,Rare,I,Pokémon,Basic,100,Lightning
+Team Rocket's Drowzee,sv10,Destined Rivals,79,Common,I,Pokémon,Basic,80,Psychic
+Team Rocket's Hypno,sv10,Destined Rivals,80,Uncommon,I,Pokémon,Stage 1,130,Psychic
+Team Rocket's Mewtwo ex,sv10,Destined Rivals,81,Double Rare,I,Pokémon,Basic;ex,280,Psychic
+Team Rocket's Wobbuffet,sv10,Destined Rivals,82,Uncommon,I,Pokémon,Basic,110,Psychic
+Scyther,sv5,Temporal Forces,1,Common,H,Pokémon,Basic,90,Grass
+Pineco,sv5,Temporal Forces,2,Common,H,Pokémon,Basic,70,Grass
+Seedot,sv5,Temporal Forces,3,Common,H,Pokémon,Basic,60,Grass
+Nuzleaf,sv5,Temporal Forces,4,Common,H,Pokémon,Stage 1,90,Grass
+Shiftry,sv5,Temporal Forces,5,Uncommon,H,Pokémon,Stage 2,150,Grass
+Shroomish,sv5,Temporal Forces,6,Common,H,Pokémon,Basic,60,Grass
+Breloom,sv5,Temporal Forces,7,Common,H,Pokémon,Stage 1,120,Grass
+Roselia,sv5,Temporal Forces,8,Common,H,Pokémon,Basic,60,Grass
+Roserade,sv5,Temporal Forces,9,Uncommon,H,Pokémon,Stage 1,130,Grass
+Turtwig,sv5,Temporal Forces,10,Common,H,Pokémon,Basic,80,Grass
+Grotle,sv5,Temporal Forces,11,Common,H,Pokémon,Stage 1,120,Grass
+Torterra ex,sv5,Temporal Forces,12,Double Rare,H,Pokémon,Stage 2;ex,340,Grass
+Shaymin,sv5,Temporal Forces,13,Uncommon,H,Pokémon,Basic,70,Grass
+Cottonee,sv5,Temporal Forces,14,Common,H,Pokémon,Basic,60,Grass
+Whimsicott,sv5,Temporal Forces,15,Rare,H,Pokémon,Stage 1,100,Grass
+Deerling,sv5,Temporal Forces,16,Common,H,Pokémon,Basic,70,Grass
+Sawsbuck,sv5,Temporal Forces,17,Uncommon,H,Pokémon,Stage 1,130,Grass
+Grubbin,sv5,Temporal Forces,18,Common,H,Pokémon,Basic,70,Grass
+Dhelmise,sv5,Temporal Forces,19,Uncommon,H,Pokémon,Basic,130,Grass
+Bramblin,sv5,Temporal Forces,20,Common,H,Pokémon,Basic,50,Grass
+Brambleghast,sv5,Temporal Forces,21,Rare,H,Pokémon,Stage 1,100,Grass
+Scovillain ex,sv5,Temporal Forces,22,Double Rare,H,Pokémon,Stage 1;ex,260,Grass
+Rellor,sv5,Temporal Forces,23,Common,H,Pokémon,Basic,50,Grass
+Rabsca,sv5,Temporal Forces,24,Uncommon,H,Pokémon,Stage 1,70,Grass
+Iron Leaves ex,sv5,Temporal Forces,25,Double Rare,H,Pokémon,Basic;ex;Future,220,Grass
+Ponyta,sv5,Temporal Forces,26,Common,H,Pokémon,Basic,70,Fire
+Rapidash,sv5,Temporal Forces,27,Uncommon,H,Pokémon,Stage 1,110,Fire
+Slugma,sv5,Temporal Forces,28,Common,H,Pokémon,Basic,80,Fire
+Magcargo,sv5,Temporal Forces,29,Rare,H,Pokémon,Stage 1,120,Fire
+Victini,sv5,Temporal Forces,30,Common,H,Pokémon,Basic,80,Fire
+Heatmor,sv5,Temporal Forces,31,Common,H,Pokémon,Basic,110,Fire
+Litten,sv5,Temporal Forces,32,Common,H,Pokémon,Basic,70,Fire
+Torracat,sv5,Temporal Forces,33,Common,H,Pokémon,Stage 1,100,Fire
+Incineroar ex,sv5,Temporal Forces,34,Double Rare,H,Pokémon,Stage 2;ex,320,Fire
+Turtonator,sv5,Temporal Forces,35,Common,H,Pokémon,Basic,120,Fire
+Sizzlipede,sv5,Temporal Forces,36,Common,H,Pokémon,Basic,80,Fire
+Centiskorch,sv5,Temporal Forces,37,Uncommon,H,Pokémon,Stage 1,140,Fire
+Gouging Fire ex,sv5,Temporal Forces,38,Double Rare,H,Pokémon,Basic;ex;Ancient,230,Fire
+Totodile,sv5,Temporal Forces,39,Common,H,Pokémon,Basic,70,Water
+Croconaw,sv5,Temporal Forces,40,Common,H,Pokémon,Stage 1,90,Water
+Feraligatr,sv5,Temporal Forces,41,Rare,H,Pokémon,Stage 2,180,Water
+Carvanha,sv5,Temporal Forces,42,Common,H,Pokémon,Basic,50,Water
+Sharpedo,sv5,Temporal Forces,43,Uncommon,H,Pokémon,Stage 1,120,Water
+Keldeo,sv5,Temporal Forces,44,Uncommon,H,Pokémon,Basic,110,Water
+Snom,sv5,Temporal Forces,45,Common,H,Pokémon,Basic,50,Water
+Frosmoth,sv5,Temporal Forces,46,Common,H,Pokémon,Stage 1,110,Water
+Wiglett,sv5,Temporal Forces,47,Common,H,Pokémon,Basic,60,Water
+Finizen,sv5,Temporal Forces,48,Common,H,Pokémon,Basic,80,Water
+Palafin,sv5,Temporal Forces,49,Uncommon,H,Pokémon,Stage 1,150,Water
+Walking Wake ex,sv5,Temporal Forces,50,Double Rare,H,Pokémon,Basic;ex;Ancient,220,Water
+Pikachu,sv5,Temporal Forces,51,Common,H,Pokémon,Basic,70,Lightning
+Raichu,sv5,Temporal Forces,52,Common,H,Pokémon,Stage 1,130,Lightning
+Electabuzz,sv5,Temporal Forces,53,Common,H,Pokémon,Basic,90,Lightning
+Electivire,sv5,Temporal Forces,54,Uncommon,H,Pokémon,Stage 1,140,Lightning
+Charjabug,sv5,Temporal Forces,55,Common,H,Pokémon,Stage 1,100,Lightning
+Vikavolt,sv5,Temporal Forces,56,Uncommon,H,Pokémon,Stage 2,160,Lightning
+Zeraora,sv5,Temporal Forces,57,Uncommon,H,Pokémon,Basic,120,Lightning
+Yamper,sv5,Temporal Forces,58,Common,H,Pokémon,Basic,70,Lightning
+Boltund,sv5,Temporal Forces,59,Uncommon,H,Pokémon,Stage 1,120,Lightning
+Wugtrio ex,sv5,Temporal Forces,60,Double Rare,H,Pokémon,Stage 1;Tera;ex,250,Lightning
+Iron Hands,sv5,Temporal Forces,61,Uncommon,H,Pokémon,Basic;Future,140,Lightning
+Iron Thorns,sv5,Temporal Forces,62,Rare,H,Pokémon,Basic;Future,140,Lightning
+Mr. Mime,sv5,Temporal Forces,63,Common,H,Pokémon,Basic,90,Psychic
+Marill,sv5,Temporal Forces,64,Common,H,Pokémon,Basic,70,Psychic
+Azumarill,sv5,Temporal Forces,65,Common,H,Pokémon,Stage 1,130,Psychic
+Girafarig,sv5,Temporal Forces,66,Common,H,Pokémon,Basic,90,Psychic
+Latias,sv5,Temporal Forces,67,Uncommon,H,Pokémon,Basic,110,Psychic
+Bronzor,sv5,Temporal Forces,68,Common,H,Pokémon,Basic,80,Psychic
+Bronzong,sv5,Temporal Forces,69,Uncommon,H,Pokémon,Stage 1,110,Psychic
+Solosis,sv5,Temporal Forces,70,Common,H,Pokémon,Basic,40,Psychic
+Duosion,sv5,Temporal Forces,71,Common,H,Pokémon,Stage 1,80,Psychic
+Reuniclus,sv5,Temporal Forces,72,Uncommon,H,Pokémon,Stage 2,120,Psychic
+Elgyem,sv5,Temporal Forces,73,Common,H,Pokémon,Basic,60,Psychic
+Tangela,sv6,Twilight Masquerade,1,Common,H,Pokémon,Basic,80,Grass
+Tangrowth,sv6,Twilight Masquerade,2,Common,H,Pokémon,Stage 1,150,Grass
+Pinsir,sv6,Twilight Masquerade,3,Common,H,Pokémon,Basic,110,Grass
+Spinarak,sv6,Twilight Masquerade,4,Common,H,Pokémon,Basic,60,Grass
+Ariados,sv6,Twilight Masquerade,5,Uncommon,H,Pokémon,Stage 1,90,Grass
+Sunkern,sv6,Twilight Masquerade,6,Common,H,Pokémon,Basic,40,Grass
+Sunflora,sv6,Twilight Masquerade,7,Uncommon,H,Pokémon,Stage 1,100,Grass
+Heracross,sv6,Twilight Masquerade,8,Uncommon,H,Pokémon,Basic,120,Grass
+Volbeat,sv6,Twilight Masquerade,9,Common,H,Pokémon,Basic,70,Grass
+Illumise,sv6,Twilight Masquerade,10,Common,H,Pokémon,Basic,70,Grass
+Leafeon,sv6,Twilight Masquerade,11,Uncommon,H,Pokémon,Stage 1,120,Grass
+Phantump,sv6,Twilight Masquerade,12,Common,H,Pokémon,Basic,70,Grass
+Trevenant,sv6,Twilight Masquerade,13,Common,H,Pokémon,Stage 1,120,Grass
+Grookey,sv6,Twilight Masquerade,14,Common,H,Pokémon,Basic,70,Grass
+Thwackey,sv6,Twilight Masquerade,15,Common,H,Pokémon,Stage 1,100,Grass
+Rillaboom,sv6,Twilight Masquerade,16,Uncommon,H,Pokémon,Stage 2,180,Grass
+Applin,sv6,Twilight Masquerade,17,Common,H,Pokémon,Basic,40,Grass
+Dipplin,sv6,Twilight Masquerade,18,Uncommon,H,Pokémon,Stage 1,80,Grass
+Iron Leaves,sv6,Twilight Masquerade,19,Rare,H,Pokémon,Basic;Future,120,Grass
+Poltchageist,sv6,Twilight Masquerade,20,Common,H,Pokémon,Basic,30,Grass
+Poltchageist,sv6,Twilight Masquerade,21,Common,H,Pokémon,Basic,40,Grass
+Sinistcha,sv6,Twilight Masquerade,22,Rare,H,Pokémon,Stage 1,70,Grass
+Sinistcha ex,sv6,Twilight Masquerade,23,Double Rare,H,Pokémon,Stage 1;ex,240,Grass
+Teal Mask Ogerpon,sv6,Twilight Masquerade,24,Rare,H,Pokémon,Basic,110,Grass
+Teal Mask Ogerpon ex,sv6,Twilight Masquerade,25,Double Rare,H,Pokémon,Basic;Tera;ex,210,Grass
+Vulpix,sv6,Twilight Masquerade,26,Common,H,Pokémon,Basic,70,Fire
+Ninetales,sv6,Twilight Masquerade,27,Common,H,Pokémon,Stage 1,120,Fire
+Slugma,sv6,Twilight Masquerade,28,Common,H,Pokémon,Basic,80,Fire
+Magcargo ex,sv6,Twilight Masquerade,29,Double Rare,H,Pokémon,Stage 1;Tera;ex,270,Fire
+Torkoal,sv6,Twilight Masquerade,30,Common,H,Pokémon,Basic,130,Fire
+Chimchar,sv6,Twilight Masquerade,31,Common,H,Pokémon,Basic,60,Fire
+Monferno,sv6,Twilight Masquerade,32,Common,H,Pokémon,Stage 1,90,Fire
+Infernape,sv6,Twilight Masquerade,33,Rare,H,Pokémon,Stage 2,140,Fire
+Darumaka,sv6,Twilight Masquerade,34,Common,H,Pokémon,Basic,80,Fire
+Darmanitan,sv6,Twilight Masquerade,35,Uncommon,H,Pokémon,Stage 1,140,Fire
+Litwick,sv6,Twilight Masquerade,36,Common,H,Pokémon,Basic,60,Fire
+Lampent,sv6,Twilight Masquerade,37,Common,H,Pokémon,Stage 1,80,Fire
+Chandelure,sv6,Twilight Masquerade,38,Rare,H,Pokémon,Stage 2,130,Fire
+Chi-Yu,sv6,Twilight Masquerade,39,Uncommon,H,Pokémon,Basic,110,Fire
+Hearthflame Mask Ogerpon ex,sv6,Twilight Masquerade,40,Double Rare,H,Pokémon,Basic;Tera;ex,210,Fire
+Poliwag,sv6,Twilight Masquerade,41,Common,H,Pokémon,Basic,60,Water
+Poliwhirl,sv6,Twilight Masquerade,42,Common,H,Pokémon,Stage 1,100,Water
+Poliwrath,sv6,Twilight Masquerade,43,Uncommon,H,Pokémon,Stage 2,170,Water
+Goldeen,sv6,Twilight Masquerade,44,Common,H,Pokémon,Basic,50,Water
+Seaking,sv6,Twilight Masquerade,45,Common,H,Pokémon,Stage 1,90,Water
+Jynx,sv6,Twilight Masquerade,46,Common,H,Pokémon,Basic,90,Water
+Corphish,sv6,Twilight Masquerade,47,Common,H,Pokémon,Basic,80,Water
+Crawdaunt,sv6,Twilight Masquerade,48,Common,H,Pokémon,Stage 1,130,Water
+Feebas,sv6,Twilight Masquerade,49,Common,H,Pokémon,Basic,30,Water
+Milotic,sv6,Twilight Masquerade,50,Uncommon,H,Pokémon,Stage 1,120,Water
+Snorunt,sv6,Twilight Masquerade,51,Common,H,Pokémon,Basic,60,Water
+Glalie,sv6,Twilight Masquerade,52,Uncommon,H,Pokémon,Stage 1,120,Water
+Froslass,sv6,Twilight Masquerade,53,Rare,H,Pokémon,Stage 1,90,Water
+Glaceon,sv6,Twilight Masquerade,54,Uncommon,H,Pokémon,Stage 1,120,Water
+Phione,sv6,Twilight Masquerade,55,Common,H,Pokémon,Basic,70,Water
+Froakie,sv6,Twilight Masquerade,56,Common,H,Pokémon,Basic,60,Water
+Frogadier,sv6,Twilight Masquerade,57,Common,H,Pokémon,Stage 1,90,Water
+Cramorant,sv6,Twilight Masquerade,58,Uncommon,H,Pokémon,Basic,110,Water
+Finizen,sv6,Twilight Masquerade,59,Common,H,Pokémon,Basic,70,Water
+Palafin,sv6,Twilight Masquerade,60,Uncommon,H,Pokémon,Stage 1,100,Water
+Palafin ex,sv6,Twilight Masquerade,61,Double Rare,H,Pokémon,Stage 1;ex,340,Water
+Iron Bundle,sv6,Twilight Masquerade,62,Uncommon,H,Pokémon,Basic;Future,90,Water
+Walking Wake,sv6,Twilight Masquerade,63,Rare,H,Pokémon,Basic;Ancient,130,Water
+Wellspring Mask Ogerpon ex,sv6,Twilight Masquerade,64,Double Rare,H,Pokémon,Basic;Tera;ex,210,Water
+Zapdos,sv6,Twilight Masquerade,65,Rare,H,Pokémon,Basic,120,Lightning
+Shinx,sv6,Twilight Masquerade,66,Common,H,Pokémon,Basic,60,Lightning
+Luxio,sv6,Twilight Masquerade,67,Common,H,Pokémon,Stage 1,90,Lightning
+Luxray ex,sv6,Twilight Masquerade,68,Double Rare,H,Pokémon,Stage 2;ex,310,Lightning
+Emolga,sv6,Twilight Masquerade,69,Common,H,Pokémon,Basic,60,Lightning
+Helioptile,sv6,Twilight Masquerade,70,Common,H,Pokémon,Basic,60,Lightning
+Heliolisk,sv6,Twilight Masquerade,71,Common,H,Pokémon,Stage 1,100,Lightning
+Morpeko,sv6,Twilight Masquerade,72,Uncommon,H,Pokémon,Basic,70,Lightning
+Joltik,sv6pt5,Shrouded Fable,1,Common,H,Pokémon,Basic,40,Grass
+Galvantula,sv6pt5,Shrouded Fable,2,Uncommon,H,Pokémon,Stage 1,100,Grass
+Rowlet,sv6pt5,Shrouded Fable,3,Common,H,Pokémon,Basic,70,Grass
+Dartrix,sv6pt5,Shrouded Fable,4,Common,H,Pokémon,Stage 1,90,Grass
+Decidueye,sv6pt5,Shrouded Fable,5,Uncommon,H,Pokémon,Stage 2,150,Grass
+Tapu Bulu,sv6pt5,Shrouded Fable,6,Rare,H,Pokémon,Basic,140,Grass
+Houndour,sv6pt5,Shrouded Fable,7,Common,H,Pokémon,Basic,70,Fire
+Houndoom,sv6pt5,Shrouded Fable,8,Common,H,Pokémon,Stage 1,120,Fire
+Iron Moth,sv6pt5,Shrouded Fable,9,Uncommon,H,Pokémon,Basic;Future,120,Fire
+Horsea,sv6pt5,Shrouded Fable,10,Common,H,Pokémon,Basic,60,Water
+Seadra,sv6pt5,Shrouded Fable,11,Common,H,Pokémon,Stage 1,90,Water
+Kingdra ex,sv6pt5,Shrouded Fable,12,Double Rare,H,Pokémon,Stage 2;ex,310,Water
+Sneasel,sv6pt5,Shrouded Fable,13,Common,H,Pokémon,Basic,70,Water
+Weavile,sv6pt5,Shrouded Fable,14,Uncommon,H,Pokémon,Stage 1,100,Water
+Revavroom ex,sv6pt5,Shrouded Fable,15,Double Rare,H,Pokémon,Stage 1;Tera;ex,280,Lightning
+Drowzee,sv6pt5,Shrouded Fable,16,Common,H,Pokémon,Basic,70,Psychic
+Hypno,sv6pt5,Shrouded Fable,17,Uncommon,H,Pokémon,Stage 1,110,Psychic
+Duskull,sv6pt5,Shrouded Fable,18,Common,H,Pokémon,Basic,60,Psychic
+Dusclops,sv6pt5,Shrouded Fable,19,Common,H,Pokémon,Stage 1,90,Psychic
+Dusknoir,sv6pt5,Shrouded Fable,20,Rare,H,Pokémon,Stage 2,160,Psychic
+Cresselia,sv6pt5,Shrouded Fable,21,Rare,H,Pokémon,Basic,120,Psychic
+Sylveon,sv6pt5,Shrouded Fable,22,Uncommon,H,Pokémon,Stage 1,120,Psychic
+Croagunk,sv6pt5,Shrouded Fable,23,Common,H,Pokémon,Basic,70,Fighting
+Toxicroak,sv6pt5,Shrouded Fable,24,Common,H,Pokémon,Stage 1,130,Fighting
+Bloodmoon Ursaluna,sv6pt5,Shrouded Fable,25,Rare,H,Pokémon,Basic,150,Fighting
+Slither Wing,sv6pt5,Shrouded Fable,26,Uncommon,H,Pokémon,Basic;Ancient,140,Fighting
+Zubat,sv6pt5,Shrouded Fable,27,Common,H,Pokémon,Basic,50,Darkness
+Golbat,sv6pt5,Shrouded Fable,28,Common,H,Pokémon,Stage 1,80,Darkness
+Crobat,sv6pt5,Shrouded Fable,29,Uncommon,H,Pokémon,Stage 2,130,Darkness
+Absol,sv6pt5,Shrouded Fable,30,Common,H,Pokémon,Basic,110,Darkness
+Zorua,sv6pt5,Shrouded Fable,31,Common,H,Pokémon,Basic,70,Darkness
+Zoroark,sv6pt5,Shrouded Fable,32,Rare,H,Pokémon,Stage 1,120,Darkness
+Inkay,sv6pt5,Shrouded Fable,33,Common,H,Pokémon,Basic,60,Darkness
+Malamar,sv6pt5,Shrouded Fable,34,Uncommon,H,Pokémon,Stage 1,120,Darkness
+Yveltal,sv6pt5,Shrouded Fable,35,Uncommon,H,Pokémon,Basic,120,Darkness
+Okidogi ex,sv6pt5,Shrouded Fable,36,Double Rare,H,Pokémon,Basic;ex,250,Darkness
+Munkidori ex,sv6pt5,Shrouded Fable,37,Double Rare,H,Pokémon,Basic;ex,210,Darkness
+Fezandipiti ex,sv6pt5,Shrouded Fable,38,Double Rare,H,Pokémon,Basic;ex,210,Darkness
+Pecharunt ex,sv6pt5,Shrouded Fable,39,Double Rare,H,Pokémon,Basic;ex,190,Darkness
+Genesect,sv6pt5,Shrouded Fable,40,Uncommon,H,Pokémon,Basic,110,Metal
+Cufant,sv6pt5,Shrouded Fable,41,Common,H,Pokémon,Basic,100,Metal
+Copperajah,sv6pt5,Shrouded Fable,42,Rare,H,Pokémon,Stage 1,200,Metal
+Varoom,sv6pt5,Shrouded Fable,43,Common,H,Pokémon,Basic,70,Metal
+Axew,sv6pt5,Shrouded Fable,44,Common,H,Pokémon,Basic,70,Dragon
+Fraxure,sv6pt5,Shrouded Fable,45,Common,H,Pokémon,Stage 1,100,Dragon
+Haxorus,sv6pt5,Shrouded Fable,46,Rare,H,Pokémon,Stage 2,170,Dragon
+Kyurem,sv6pt5,Shrouded Fable,47,Uncommon,H,Pokémon,Basic,130,Dragon
+Meowth,sv6pt5,Shrouded Fable,48,Common,H,Pokémon,Basic,70,Colorless
+Persian,sv6pt5,Shrouded Fable,49,Common,H,Pokémon,Stage 1,110,Colorless
+Eevee,sv6pt5,Shrouded Fable,50,Common,H,Pokémon,Basic,70,Colorless
+Furfrou,sv6pt5,Shrouded Fable,51,Common,H,Pokémon,Basic,100,Colorless
+Stufful,sv6pt5,Shrouded Fable,52,Common,H,Pokémon,Basic,80,Colorless
+Bewear,sv6pt5,Shrouded Fable,53,Common,H,Pokémon,Stage 1,130,Colorless
+Academy at Night,sv6pt5,Shrouded Fable,54,Uncommon,H,Trainer,Stadium,,
+Binding Mochi,sv6pt5,Shrouded Fable,55,Uncommon,H,Trainer,Pokémon Tool,,
+Cassiopeia,sv6pt5,Shrouded Fable,56,Uncommon,H,Trainer,Supporter,,
+Colress's Tenacity,sv6pt5,Shrouded Fable,57,Uncommon,H,Trainer,Supporter,,
+Dangerous Laser,sv6pt5,Shrouded Fable,58,ACE SPEC Rare,H,Trainer,Item;ACE SPEC,,
+Janine's Secret Art,sv6pt5,Shrouded Fable,59,Uncommon,H,Trainer,Supporter,,
+Neutralization Zone,sv6pt5,Shrouded Fable,60,ACE SPEC Rare,H,Trainer,Stadium;ACE SPEC,,
+Night Stretcher,sv6pt5,Shrouded Fable,61,Uncommon,H,Trainer,Item,,
+Poké Vital A,sv6pt5,Shrouded Fable,62,ACE SPEC Rare,H,Trainer,Item;ACE SPEC,,
+Powerglass,sv6pt5,Shrouded Fable,63,Uncommon,H,Trainer,Pokémon Tool,,
+Xerosic's Machinations,sv6pt5,Shrouded Fable,64,Uncommon,H,Trainer,Supporter,,
+Ledyba,sv7,Stellar Crown,2,Common,H,Pokémon,Basic,60,Grass
+Ledian,sv7,Stellar Crown,3,Rare,H,Pokémon,Stage 1,90,Grass
+Celebi,sv7,Stellar Crown,4,Uncommon,H,Pokémon,Basic,80,Grass
+Lileep,sv7,Stellar Crown,5,Common,H,Pokémon,Stage 1,100,Grass
+Cradily,sv7,Stellar Crown,6,Rare,H,Pokémon,Stage 2,150,Grass
+Carnivine,sv7,Stellar Crown,7,Common,H,Pokémon,Basic,110,Grass
+Mow Rotom,sv7,Stellar Crown,8,Common,H,Pokémon,Basic,90,Grass
+Grubbin,sv7,Stellar Crown,9,Common,H,Pokémon,Basic,70,Grass
+Gossifleur,sv7,Stellar Crown,10,Common,H,Pokémon,Basic,60,Grass
+Eldegoss,sv7,Stellar Crown,11,Uncommon,H,Pokémon,Stage 1,90,Grass
+Applin,sv7,Stellar Crown,12,Common,H,Pokémon,Basic,40,Grass
+Dipplin,sv7,Stellar Crown,13,Common,H,Pokémon,Stage 1,90,Grass
+Hydrapple ex,sv7,Stellar Crown,14,Double Rare,H,Pokémon,Stage 2;ex,330,Grass
+Nymble,sv7,Stellar Crown,15,Common,H,Pokémon,Basic,50,Grass
+Lokix,sv7,Stellar Crown,16,Common,H,Pokémon,Stage 1,110,Grass
+Toedscool,sv7,Stellar Crown,17,Common,H,Pokémon,Basic,60,Grass
+Toedscruel,sv7,Stellar Crown,18,Uncommon,H,Pokémon,Stage 1,140,Grass
+Ponyta,sv7,Stellar Crown,19,Common,H,Pokémon,Basic,70,Fire
+Rapidash,sv7,Stellar Crown,20,Uncommon,H,Pokémon,Stage 1,120,Fire
+Reshiram,sv7,Stellar Crown,22,Uncommon,H,Pokémon,Basic,130,Fire
+Salandit,sv7,Stellar Crown,23,Common,H,Pokémon,Basic,70,Fire
+Salazzle,sv7,Stellar Crown,24,Uncommon,H,Pokémon,Stage 1,120,Fire
+Turtonator,sv7,Stellar Crown,25,Common,H,Pokémon,Basic,130,Fire
+Scorbunny,sv7,Stellar Crown,26,Common,H,Pokémon,Basic,70,Fire
+Raboot,sv7,Stellar Crown,27,Common,H,Pokémon,Stage 1,90,Fire
+Cinderace ex,sv7,Stellar Crown,28,Double Rare,H,Pokémon,Stage 2;Tera;ex,320,Fire
+Charcadet,sv7,Stellar Crown,29,Common,H,Pokémon,Basic,70,Fire
+Lapras,sv7,Stellar Crown,31,Uncommon,H,Pokémon,Basic,130,Water
+Lapras ex,sv7,Stellar Crown,32,Double Rare,H,Pokémon,Basic;Tera;ex,220,Water
+Marill,sv7,Stellar Crown,33,Common,H,Pokémon,Basic,70,Water
+Azumarill,sv7,Stellar Crown,34,Uncommon,H,Pokémon,Stage 1,120,Water
+Finneon,sv7,Stellar Crown,35,Common,H,Pokémon,Basic,50,Water
+Lumineon,sv7,Stellar Crown,36,Uncommon,H,Pokémon,Stage 1,110,Water
+Tirtouga,sv7,Stellar Crown,37,Common,H,Pokémon,Stage 1,100,Water
+Carracosta,sv7,Stellar Crown,38,Rare,H,Pokémon,Stage 2,160,Water
+Froakie,sv7,Stellar Crown,39,Common,H,Pokémon,Basic,60,Water
+Frogadier,sv7,Stellar Crown,40,Uncommon,H,Pokémon,Stage 1,90,Water
+Greninja ex,sv7,Stellar Crown,41,Double Rare,H,Pokémon,Stage 2;ex,300,Water
+Crabominable,sv7,Stellar Crown,42,Uncommon,H,Pokémon,Stage 1,160,Water
+Chewtle,sv7,Stellar Crown,43,Common,H,Pokémon,Basic,80,Water
+Drednaw,sv7,Stellar Crown,44,Rare,H,Pokémon,Stage 1,140,Water
+Veluza,sv7,Stellar Crown,45,Uncommon,H,Pokémon,Basic,130,Water
+Electabuzz,sv7,Stellar Crown,46,Common,H,Pokémon,Basic,90,Lightning
+Electivire,sv7,Stellar Crown,47,Uncommon,H,Pokémon,Stage 1,150,Lightning
+Chinchou,sv7,Stellar Crown,48,Common,H,Pokémon,Basic,70,Lightning
+Lanturn,sv7,Stellar Crown,49,Uncommon,H,Pokémon,Stage 1,120,Lightning
+Joltik,sv7,Stellar Crown,50,Common,H,Pokémon,Basic,30,Lightning
+Galvantula ex,sv7,Stellar Crown,51,Double Rare,H,Pokémon,Stage 1;Tera;ex,260,Lightning
+Charjabug,sv7,Stellar Crown,52,Common,H,Pokémon,Stage 1,80,Lightning
+Vikavolt,sv7,Stellar Crown,53,Uncommon,H,Pokémon,Stage 2,160,Lightning
+Togedemaru,sv7,Stellar Crown,54,Uncommon,H,Pokémon,Basic,80,Lightning
+Zeraora,sv7,Stellar Crown,55,Rare,H,Pokémon,Basic,120,Lightning
+Pawmi,sv7,Stellar Crown,56,Common,H,Pokémon,Basic,40,Lightning
+Slowpoke,sv7,Stellar Crown,57,Common,H,Pokémon,Basic,80,Psychic
+Slowking,sv7,Stellar Crown,58,Uncommon,H,Pokémon,Stage 1,120,Psychic
+Mewtwo,sv7,Stellar Crown,59,Uncommon,H,Pokémon,Basic,130,Psychic
+Drifloon,sv7,Stellar Crown,60,Common,H,Pokémon,Basic,70,Psychic
+Drifblim,sv7,Stellar Crown,61,Uncommon,H,Pokémon,Stage 1,130,Psychic
+Comfey,sv7,Stellar Crown,63,Common,H,Pokémon,Basic,70,Psychic
+Milcery,sv7,Stellar Crown,64,Common,H,Pokémon,Basic,60,Psychic
+Alcremie,sv7,Stellar Crown,65,Rare,H,Pokémon,Stage 1,110,Psychic
+Fidough,sv7,Stellar Crown,66,Common,H,Pokémon,Basic,60,Psychic
+Dachsbun ex,sv7,Stellar Crown,67,Double Rare,H,Pokémon,Stage 1;ex,250,Psychic
+Flittle,sv7,Stellar Crown,68,Common,H,Pokémon,Basic,50,Psychic
+Espathra,sv7,Stellar Crown,69,Common,H,Pokémon,Stage 1,130,Psychic
+Greavard,sv7,Stellar Crown,70,Common,H,Pokémon,Basic,80,Psychic
+Iron Boulder,sv7,Stellar Crown,71,Rare,H,Pokémon,Basic;Future,140,Psychic
+Cubone,sv7,Stellar Crown,72,Common,H,Pokémon,Basic,70,Fighting
+Marowak,sv7,Stellar Crown,73,Uncommon,H,Pokémon,Stage 1,120,Fighting
+Rhyhorn,sv7,Stellar Crown,74,Common,H,Pokémon,Basic,100,Fighting
+Rhydon,sv7,Stellar Crown,75,Common,H,Pokémon,Stage 1,140,Fighting
+Rhyperior,sv7,Stellar Crown,76,Rare,H,Pokémon,Stage 2,200,Fighting
+Meditite,sv7,Stellar Crown,77,Common,H,Pokémon,Basic,70,Fighting
+Meditite,sv7,Stellar Crown,78,Common,H,Pokémon,Basic,70,Fighting
+Medicham,sv7,Stellar Crown,79,Common,H,Pokémon,Stage 1,110,Fighting
+Medicham ex,sv7,Stellar Crown,80,Double Rare,H,Pokémon,Stage 1;ex,260,Fighting
+Riolu,sv7,Stellar Crown,81,Common,H,Pokémon,Basic,70,Fighting
+Lucario ex,sv7,Stellar Crown,82,Double Rare,H,Pokémon,Stage 1;ex,250,Fighting
+Mienfoo,sv7,Stellar Crown,83,Common,H,Pokémon,Basic,60,Fighting
+Mienshao,sv7,Stellar Crown,84,Uncommon,H,Pokémon,Stage 1,90,Fighting
+Pancham,sv7,Stellar Crown,85,Common,H,Pokémon,Basic,70,Fighting
+Diancie,sv7,Stellar Crown,86,Common,H,Pokémon,Basic,110,Fighting
+Exeggcute,sv8,Surging Sparks,1,Common,H,Pokémon,Basic,30,Grass
+Exeggcute,sv8,Surging Sparks,2,Common,H,Pokémon,Basic,50,Grass
+Exeggutor,sv8,Surging Sparks,3,Uncommon,H,Pokémon,Stage 1,130,Grass
+Durant ex,sv8,Surging Sparks,4,Double Rare,H,Pokémon,Basic;ex,190,Grass
+Scatterbug,sv8,Surging Sparks,5,Common,H,Pokémon,Basic,40,Grass
+Spewpa,sv8,Surging Sparks,6,Common,H,Pokémon,Stage 1,80,Grass
+Vivillon,sv8,Surging Sparks,7,Uncommon,H,Pokémon,Stage 2,120,Grass
+Morelull,sv8,Surging Sparks,8,Common,H,Pokémon,Basic,60,Grass
+Shiinotic,sv8,Surging Sparks,9,Uncommon,H,Pokémon,Stage 1,110,Grass
+Dhelmise,sv8,Surging Sparks,10,Common,H,Pokémon,Basic,130,Grass
+Zarude,sv8,Surging Sparks,11,Rare,H,Pokémon,Basic,120,Grass
+Capsakid,sv8,Surging Sparks,12,Common,H,Pokémon,Basic,70,Grass
+Rellor,sv8,Surging Sparks,13,Common,H,Pokémon,Basic,40,Grass
+Rabsca,sv8,Surging Sparks,14,Rare,H,Pokémon,Stage 1,70,Grass
+Wo-Chien,sv8,Surging Sparks,15,Uncommon,H,Pokémon,Basic,130,Grass
+Vulpix,sv8,Surging Sparks,16,Common,H,Pokémon,Basic,70,Fire
+Ninetales,sv8,Surging Sparks,17,Uncommon,H,Pokémon,Stage 1,120,Fire
+Paldean Tauros,sv8,Surging Sparks,18,Uncommon,H,Pokémon,Basic,130,Fire
+Ho-Oh,sv8,Surging Sparks,19,Uncommon,H,Pokémon,Basic,130,Fire
+Castform Sunny Form,sv8,Surging Sparks,20,Common,H,Pokémon,Basic,70,Fire
+Victini,sv8,Surging Sparks,21,Uncommon,H,Pokémon,Basic,70,Fire
+Pansear,sv8,Surging Sparks,22,Common,H,Pokémon,Basic,60,Fire
+Simisear,sv8,Surging Sparks,23,Common,H,Pokémon,Stage 1,90,Fire
+Larvesta,sv8,Surging Sparks,24,Common,H,Pokémon,Basic,70,Fire
+Volcarona,sv8,Surging Sparks,25,Common,H,Pokémon,Stage 1,140,Fire
+Oricorio,sv8,Surging Sparks,26,Common,H,Pokémon,Basic,90,Fire
+Sizzlipede,sv8,Surging Sparks,27,Common,H,Pokémon,Basic,80,Fire
+Centiskorch,sv8,Surging Sparks,28,Common,H,Pokémon,Stage 1,130,Fire
+Fuecoco,sv8,Surging Sparks,29,Common,H,Pokémon,Basic,80,Fire
+Crocalor,sv8,Surging Sparks,30,Common,H,Pokémon,Stage 1,110,Fire
+Skeledirge,sv8,Surging Sparks,31,Rare,H,Pokémon,Stage 2,180,Fire
+Charcadet,sv8,Surging Sparks,32,Common,H,Pokémon,Basic,70,Fire
+Charcadet,sv8,Surging Sparks,33,Common,H,Pokémon,Basic,80,Fire
+Armarouge,sv8,Surging Sparks,34,Uncommon,H,Pokémon,Stage 1,140,Fire
+Ceruledge,sv8,Surging Sparks,35,Uncommon,H,Pokémon,Stage 1,140,Fire
+Ceruledge ex,sv8,Surging Sparks,36,Double Rare,H,Pokémon,Stage 1;Tera;ex,270,Fire
+Scovillain ex,sv8,Surging Sparks,37,Double Rare,H,Pokémon,Stage 1;ex,260,Fire
+Gouging Fire,sv8,Surging Sparks,38,Rare,H,Pokémon,Basic;Ancient,130,Fire
+Paldean Tauros,sv8,Surging Sparks,39,Uncommon,H,Pokémon,Basic,130,Water
+Mantine,sv8,Surging Sparks,40,Common,H,Pokémon,Basic,110,Water
+Feebas,sv8,Surging Sparks,41,Common,H,Pokémon,Basic,30,Water
+Milotic ex,sv8,Surging Sparks,42,Double Rare,H,Pokémon,Stage 1;ex,270,Water
+Spheal,sv8,Surging Sparks,43,Common,H,Pokémon,Basic,70,Water
+Sealeo,sv8,Surging Sparks,44,Common,H,Pokémon,Stage 1,100,Water
+Walrein,sv8,Surging Sparks,45,Uncommon,H,Pokémon,Stage 2,170,Water
+Shellos,sv8,Surging Sparks,46,Common,H,Pokémon,Basic,70,Water
+Cryogonal,sv8,Surging Sparks,47,Common,H,Pokémon,Basic,90,Water
+Black Kyurem ex,sv8,Surging Sparks,48,Double Rare,H,Pokémon,Basic;ex,230,Water
+Bruxish,sv8,Surging Sparks,49,Uncommon,H,Pokémon,Basic,110,Water
+Quaxly,sv8,Surging Sparks,50,Common,H,Pokémon,Basic,60,Water
+Quaxwell,sv8,Surging Sparks,51,Common,H,Pokémon,Stage 1,100,Water
+Quaquaval,sv8,Surging Sparks,52,Uncommon,H,Pokémon,Stage 2,170,Water
+Cetoddle,sv8,Surging Sparks,53,Common,H,Pokémon,Basic,100,Water
+Cetitan,sv8,Surging Sparks,54,Common,H,Pokémon,Stage 1,180,Water
+Iron Bundle,sv8,Surging Sparks,55,Uncommon,H,Pokémon,Basic;Future,100,Water
+Chien-Pao,sv8,Surging Sparks,56,Rare,H,Pokémon,Basic,120,Water
+Pikachu ex,sv8,Surging Sparks,57,Double Rare,H,Pokémon,Basic;Tera;ex,200,Lightning
+Magnemite,sv8,Surging Sparks,58,Common,H,Pokémon,Basic,60,Lightning
+Magneton,sv8,Surging Sparks,59,Uncommon,H,Pokémon,Stage 1,100,Lightning
+Magnezone,sv8,Surging Sparks,60,Uncommon,H,Pokémon,Stage 2,170,Lightning
+Rotom,sv8,Surging Sparks,61,Common,H,Pokémon,Basic,80,Lightning
+Blitzle,sv8,Surging Sparks,62,Common,H,Pokémon,Basic,70,Lightning
+Zebstrika,sv8,Surging Sparks,63,Common,H,Pokémon,Stage 1,130,Lightning
+Stunfisk,sv8,Surging Sparks,64,Common,H,Pokémon,Basic,110,Lightning
+Tapu Koko,sv8,Surging Sparks,65,Rare,H,Pokémon,Basic,120,Lightning
+Wattrel,sv8,Surging Sparks,66,Common,H,Pokémon,Basic,60,Lightning
+Kilowattrel,sv8,Surging Sparks,67,Uncommon,H,Pokémon,Stage 1,120,Lightning
+Kilowattrel ex,sv8,Surging Sparks,68,Double Rare,H,Pokémon,Stage 1;ex,260,Lightning
+Miraidon,sv8,Surging Sparks,69,Uncommon,H,Pokémon,Basic;Future,120,Lightning
+Togepi,sv8,Surging Sparks,70,Common,H,Pokémon,Basic,50,Psychic
+Togetic,sv8,Surging Sparks,71,Common,H,Pokémon,Stage 1,90,Psychic
+Togekiss,sv8,Surging Sparks,72,Rare,H,Pokémon,Stage 2,140,Psychic
+Marill,sv8,Surging Sparks,73,Common,H,Pokémon,Basic,60,Psychic
+Azumarill,sv8,Surging Sparks,74,Uncommon,H,Pokémon,Stage 1,120,Psychic
+Smoochum,sv8,Surging Sparks,75,Common,H,Pokémon,Basic,30,Psychic
+Latias ex,sv8,Surging Sparks,76,Double Rare,H,Pokémon,Basic;ex,210,Psychic
+Latios,sv8,Surging Sparks,77,Uncommon,H,Pokémon,Basic,120,Psychic
+Uxie,sv8,Surging Sparks,78,Common,H,Pokémon,Basic,70,Psychic
+Mesprit,sv8,Surging Sparks,79,Common,H,Pokémon,Basic,70,Psychic
+Azelf,sv8,Surging Sparks,80,Common,H,Pokémon,Basic,70,Psychic
+Sigilyph,sv8,Surging Sparks,81,Common,H,Pokémon,Basic,110,Psychic
+Yamask,sv8,Surging Sparks,82,Common,H,Pokémon,Basic,70,Psychic
+Cofagrigus,sv8,Surging Sparks,83,Rare,H,Pokémon,Stage 1,120,Psychic
+Espurr,sv8,Surging Sparks,84,Common,H,Pokémon,Basic,60,Psychic
+Exeggcute,sv8pt5,Prismatic Evolutions,1,Common,H,Pokémon,Basic,60,Grass
+Exeggutor,sv8pt5,Prismatic Evolutions,2,Uncommon,H,Pokémon,Stage 1,140,Grass
+Pinsir,sv8pt5,Prismatic Evolutions,3,Common,H,Pokémon,Basic,120,Grass
+Budew,sv8pt5,Prismatic Evolutions,4,Common,H,Pokémon,Basic,30,Grass
+Leafeon,sv8pt5,Prismatic Evolutions,5,Rare,H,Pokémon,Stage 1,120,Grass
+Leafeon ex,sv8pt5,Prismatic Evolutions,6,Double Rare,H,Pokémon,Stage 1;Tera;ex,270,Grass
+Cottonee,sv8pt5,Prismatic Evolutions,7,Common,H,Pokémon,Basic,60,Grass
+Whimsicott,sv8pt5,Prismatic Evolutions,8,Rare,H,Pokémon,Stage 1,100,Grass
+Applin,sv8pt5,Prismatic Evolutions,9,Common,H,Pokémon,Basic,40,Grass
+Dipplin,sv8pt5,Prismatic Evolutions,10,Uncommon,H,Pokémon,Stage 1,80,Grass
+Hydrapple ex,sv8pt5,Prismatic Evolutions,11,Double Rare,H,Pokémon,Stage 2;ex,330,Grass
+Teal Mask Ogerpon ex,sv8pt5,Prismatic Evolutions,12,Double Rare,H,Pokémon,Basic;Tera;ex,210,Grass
+Flareon ex,sv8pt5,Prismatic Evolutions,14,Double Rare,H,Pokémon,Stage 1;Tera;ex,270,Fire
+Litleo,sv8pt5,Prismatic Evolutions,15,Common,H,Pokémon,Basic,70,Fire
+Pyroar,sv8pt5,Prismatic Evolutions,16,Uncommon,H,Pokémon,Stage 1,120,Fire
+Hearthflame Mask Ogerpon ex,sv8pt5,Prismatic Evolutions,17,Double Rare,H,Pokémon,Basic;Tera;ex,210,Fire
+Slowpoke,sv8pt5,Prismatic Evolutions,18,Common,H,Pokémon,Basic,70,Water
+Slowking,sv8pt5,Prismatic Evolutions,19,Uncommon,H,Pokémon,Stage 1,130,Water
+Goldeen,sv8pt5,Prismatic Evolutions,20,Common,H,Pokémon,Basic,50,Water
+Seaking,sv8pt5,Prismatic Evolutions,21,Uncommon,H,Pokémon,Stage 1,110,Water
+Vaporeon ex,sv8pt5,Prismatic Evolutions,23,Double Rare,H,Pokémon,Stage 1;Tera;ex,280,Water
+Suicune,sv8pt5,Prismatic Evolutions,24,Uncommon,H,Pokémon,Basic,120,Water
+Glaceon,sv8pt5,Prismatic Evolutions,25,Rare,H,Pokémon,Stage 1,120,Water
+Glaceon ex,sv8pt5,Prismatic Evolutions,26,Double Rare,H,Pokémon,Stage 1;Tera;ex,270,Water
+Wellspring Mask Ogerpon ex,sv8pt5,Prismatic Evolutions,27,Double Rare,H,Pokémon,Basic;Tera;ex,210,Water
+Pikachu ex,sv8pt5,Prismatic Evolutions,28,Double Rare,H,Pokémon,Basic;Tera;ex,190,Lightning
+Jolteon ex,sv8pt5,Prismatic Evolutions,30,Double Rare,H,Pokémon,Stage 1;Tera;ex,260,Lightning
+Iron Thorns ex,sv8pt5,Prismatic Evolutions,32,Double Rare,H,Pokémon,Basic;ex;Future,230,Lightning
+Espeon ex,sv8pt5,Prismatic Evolutions,34,Double Rare,H,Pokémon,Stage 1;Tera;ex,270,Psychic
+Duskull,sv8pt5,Prismatic Evolutions,35,Common,H,Pokémon,Basic,60,Psychic
+Dusclops,sv8pt5,Prismatic Evolutions,36,Common,H,Pokémon,Stage 1,90,Psychic
+Dusknoir,sv8pt5,Prismatic Evolutions,37,Rare,H,Pokémon,Stage 2,160,Psychic
+Spritzee,sv8pt5,Prismatic Evolutions,38,Common,H,Pokémon,Basic,60,Psychic
+Aromatisse,sv8pt5,Prismatic Evolutions,39,Common,H,Pokémon,Stage 1,120,Psychic
+Sylveon,sv8pt5,Prismatic Evolutions,40,Rare,H,Pokémon,Stage 1,120,Psychic
+Sylveon ex,sv8pt5,Prismatic Evolutions,41,Double Rare,H,Pokémon,Stage 1;Tera;ex,270,Psychic
+Flutter Mane,sv8pt5,Prismatic Evolutions,43,Rare,H,Pokémon,Basic;Ancient,90,Psychic
+Munkidori,sv8pt5,Prismatic Evolutions,44,Rare,H,Pokémon,Basic,110,Psychic
+Fezandipiti,sv8pt5,Prismatic Evolutions,45,Rare,H,Pokémon,Basic,120,Psychic
+Iron Boulder,sv8pt5,Prismatic Evolutions,46,Rare,H,Pokémon,Basic;Future,140,Psychic
+Larvitar,sv8pt5,Prismatic Evolutions,47,Common,H,Pokémon,Basic,70,Fighting
+Pupitar,sv8pt5,Prismatic Evolutions,48,Common,H,Pokémon,Stage 1,90,Fighting
+Riolu,sv8pt5,Prismatic Evolutions,50,Common,H,Pokémon,Basic,70,Fighting
+Lucario ex,sv8pt5,Prismatic Evolutions,51,Double Rare,H,Pokémon,Stage 1;ex,260,Fighting
+Hippopotas,sv8pt5,Prismatic Evolutions,52,Common,H,Pokémon,Basic,90,Fighting
+Hippowdon,sv8pt5,Prismatic Evolutions,53,Common,H,Pokémon,Stage 1,150,Fighting
+Bloodmoon Ursaluna,sv8pt5,Prismatic Evolutions,54,Rare,H,Pokémon,Basic,150,Fighting
+Great Tusk,sv8pt5,Prismatic Evolutions,55,Uncommon,H,Pokémon,Basic;Ancient,140,Fighting
+Okidogi,sv8pt5,Prismatic Evolutions,57,Rare,H,Pokémon,Basic,130,Fighting
+Cornerstone Mask Ogerpon ex,sv8pt5,Prismatic Evolutions,58,Double Rare,H,Pokémon,Basic;Tera;ex,210,Fighting
+Umbreon ex,sv8pt5,Prismatic Evolutions,60,Double Rare,H,Pokémon,Stage 1;Tera;ex,280,Darkness
+Sneasel,sv8pt5,Prismatic Evolutions,61,Common,H,Pokémon,Basic,60,Darkness
+Houndour,sv8pt5,Prismatic Evolutions,62,Common,H,Pokémon,Basic,70,Darkness
+Houndoom,sv8pt5,Prismatic Evolutions,63,Common,H,Pokémon,Stage 1,120,Darkness
+Tyranitar ex,sv8pt5,Prismatic Evolutions,64,Double Rare,H,Pokémon,Stage 2;ex,340,Darkness
+Roaring Moon,sv8pt5,Prismatic Evolutions,65,Rare,H,Pokémon,Basic;Ancient,140,Darkness
+Bronzor,sv8pt5,Prismatic Evolutions,66,Common,H,Pokémon,Basic,70,Metal
+Bronzong,sv8pt5,Prismatic Evolutions,67,Uncommon,H,Pokémon,Stage 1,130,Metal
+Heatran,sv8pt5,Prismatic Evolutions,68,Uncommon,H,Pokémon,Basic,130,Metal
+Duraludon,sv8pt5,Prismatic Evolutions,69,Common,H,Pokémon,Basic,130,Metal
+Archaludon,sv8pt5,Prismatic Evolutions,70,Rare,H,Pokémon,Stage 1,180,Metal
+Dreepy,sv8pt5,Prismatic Evolutions,71,Common,H,Pokémon,Basic,70,Dragon
+Drakloak,sv8pt5,Prismatic Evolutions,72,Common,H,Pokémon,Stage 1,90,Dragon
+Dragapult ex,sv8pt5,Prismatic Evolutions,73,Double Rare,H,Pokémon,Stage 2;Tera;ex,320,Dragon
+Eevee,sv8pt5,Prismatic Evolutions,74,Common,H,Pokémon,Basic,50,Colorless
+Eevee ex,sv8pt5,Prismatic Evolutions,75,Double Rare,H,Pokémon,Basic;Tera;ex,200,Colorless
+Snorlax ex,sv8pt5,Prismatic Evolutions,76,Double Rare,H,Pokémon,Basic;ex,260,Colorless
+Caterpie,sv9,Journey Together,1,Common,I,Pokémon,Basic,50,Grass
+Metapod,sv9,Journey Together,2,Common,I,Pokémon,Stage 1,90,Grass
+Butterfree,sv9,Journey Together,3,Rare,I,Pokémon,Stage 2,120,Grass
+Paras,sv9,Journey Together,4,Common,I,Pokémon,Basic,70,Grass
+Parasect,sv9,Journey Together,5,Common,I,Pokémon,Stage 1,120,Grass
+Petilil,sv9,Journey Together,6,Common,H,Pokémon,Basic,50,Grass
+Lilligant,sv9,Journey Together,7,Common,H,Pokémon,Stage 1,110,Grass
+Maractus,sv9,Journey Together,8,Uncommon,I,Pokémon,Basic,110,Grass
+Karrablast,sv9,Journey Together,9,Common,I,Pokémon,Basic,60,Grass
+Foongus,sv9,Journey Together,10,Common,H,Pokémon,Basic,50,Grass
+Amoonguss ex,sv9,Journey Together,11,Double Rare,H,Pokémon,Stage 1;ex,260,Grass
+Shelmet,sv9,Journey Together,12,Common,I,Pokémon,Basic,70,Grass
+Accelgor,sv9,Journey Together,13,Uncommon,I,Pokémon,Stage 1,100,Grass
+Durant,sv9,Journey Together,14,Common,H,Pokémon,Basic,90,Grass
+Virizion,sv9,Journey Together,15,Uncommon,H,Pokémon,Basic,120,Grass
+Sprigatito,sv9,Journey Together,16,Common,I,Pokémon,Basic,60,Grass
+Floragato,sv9,Journey Together,17,Common,I,Pokémon,Stage 1,90,Grass
+Meowscarada,sv9,Journey Together,18,Rare,I,Pokémon,Stage 2,160,Grass
+Nymble,sv9,Journey Together,19,Common,H,Pokémon,Basic,50,Grass
+Magmar,sv9,Journey Together,20,Common,I,Pokémon,Basic,80,Fire
+Magmortar,sv9,Journey Together,21,Rare,I,Pokémon,Stage 1,130,Fire
+Torchic,sv9,Journey Together,22,Common,H,Pokémon,Basic,60,Fire
+Combusken,sv9,Journey Together,23,Uncommon,H,Pokémon,Stage 1,90,Fire
+Blaziken ex,sv9,Journey Together,24,Double Rare,H,Pokémon,Stage 2;ex,320,Fire
+Torkoal,sv9,Journey Together,25,Common,H,Pokémon,Basic,130,Fire
+N's Darumaka,sv9,Journey Together,26,Common,I,Pokémon,Basic,80,Fire
+N's Darmanitan,sv9,Journey Together,27,Uncommon,I,Pokémon,Stage 1,140,Fire
+Larvesta,sv9,Journey Together,28,Common,H,Pokémon,Basic,80,Fire
+Volcarona,sv9,Journey Together,29,Uncommon,H,Pokémon,Stage 1,140,Fire
+Reshiram ex,sv9,Journey Together,30,Double Rare,H,Pokémon,Basic;ex,220,Fire
+Volcanion ex,sv9,Journey Together,31,Double Rare,I,Pokémon,Basic;ex,220,Fire
+Articuno,sv9,Journey Together,32,Uncommon,I,Pokémon,Basic,110,Water
+Remoraid,sv9,Journey Together,33,Common,I,Pokémon,Basic,60,Water
+Octillery,sv9,Journey Together,34,Uncommon,I,Pokémon,Stage 1,110,Water
+Lotad,sv9,Journey Together,35,Common,I,Pokémon,Basic,60,Water
+Lombre,sv9,Journey Together,36,Common,I,Pokémon,Stage 1,90,Water
+Ludicolo,sv9,Journey Together,37,Rare,I,Pokémon,Stage 2,140,Water
+Wingull,sv9,Journey Together,38,Common,H,Pokémon,Basic,60,Water
+Pelipper,sv9,Journey Together,39,Uncommon,H,Pokémon,Stage 1,120,Water
+Wailmer,sv9,Journey Together,40,Common,I,Pokémon,Basic,130,Water
+Wailord,sv9,Journey Together,41,Rare,I,Pokémon,Stage 1,240,Water
+Regice,sv9,Journey Together,42,Uncommon,H,Pokémon,Basic,120,Water
+Veluza ex,sv9,Journey Together,43,Double Rare,H,Pokémon,Basic;ex,210,Water
+Alolan Geodude,sv9,Journey Together,44,Common,H,Pokémon,Basic,60,Lightning
+Alolan Graveler,sv9,Journey Together,45,Common,H,Pokémon,Stage 1,100,Lightning
+Alolan Golem,sv9,Journey Together,46,Uncommon,H,Pokémon,Stage 2,180,Lightning
+Iono's Voltorb,sv9,Journey Together,47,Common,I,Pokémon,Basic,70,Lightning
+Iono's Electrode,sv9,Journey Together,48,Uncommon,I,Pokémon,Stage 1,100,Lightning
+N's Joltik,sv9,Journey Together,49,Common,I,Pokémon,Basic,40,Lightning
+Togedemaru,sv9,Journey Together,50,Common,H,Pokémon,Basic,80,Lightning
+Tapu Koko ex,sv9,Journey Together,51,Double Rare,H,Pokémon,Basic;ex,200,Lightning
+Iono's Tadbulb,sv9,Journey Together,52,Common,I,Pokémon,Basic,60,Lightning
+Iono's Bellibolt ex,sv9,Journey Together,53,Double Rare,I,Pokémon,Stage 1;ex,280,Lightning
+Iono's Wattrel,sv9,Journey Together,54,Common,I,Pokémon,Basic,60,Lightning
+Iono's Kilowattrel,sv9,Journey Together,55,Rare,I,Pokémon,Stage 1,120,Lightning
+Lillie's Clefairy ex,sv9,Journey Together,56,Double Rare,I,Pokémon,Basic;ex,190,Psychic
+Alolan Marowak,sv9,Journey Together,57,Uncommon,H,Pokémon,Stage 1,120,Psychic
+Mr. Mime,sv9,Journey Together,58,Common,I,Pokémon,Basic,90,Psychic
+Shuppet,sv9,Journey Together,59,Common,I,Pokémon,Basic,60,Psychic
+Banette,sv9,Journey Together,60,Uncommon,I,Pokémon,Stage 1,90,Psychic
+Beldum,sv9,Journey Together,61,Common,I,Pokémon,Basic,60,Psychic
+Metang,sv9,Journey Together,62,Common,I,Pokémon,Stage 1,100,Psychic
+Metagross,sv9,Journey Together,63,Rare,I,Pokémon,Stage 2,170,Psychic
+N's Sigilyph,sv9,Journey Together,64,Common,I,Pokémon,Basic,110,Psychic
+Oricorio,sv9,Journey Together,65,Common,H,Pokémon,Basic,80,Psychic
+Lillie's Cutiefly,sv9,Journey Together,66,Common,I,Pokémon,Basic,30,Psychic
+Lillie's Ribombee,sv9,Journey Together,67,Rare,I,Pokémon,Stage 1,70,Psychic
+Lillie's Comfey,sv9,Journey Together,68,Common,I,Pokémon,Basic,70,Psychic
+Mimikyu ex,sv9,Journey Together,69,Double Rare,H,Pokémon,Basic;ex,190,Psychic
+Dhelmise,sv9,Journey Together,70,Common,H,Pokémon,Basic,130,Psychic
+Impidimp,sv9,Journey Together,71,Common,H,Pokémon,Basic,70,Psychic
+Morgrem,sv9,Journey Together,72,Common,H,Pokémon,Stage 1,90,Psychic
+Grimmsnarl,sv9,Journey Together,73,Uncommon,H,Pokémon,Stage 2,170,Psychic
+Milcery,sv9,Journey Together,74,Common,H,Pokémon,Basic,50,Psychic
+Alcremie ex,sv9,Journey Together,75,Double Rare,H,Pokémon,Stage 1;ex,250,Psychic
+Cubone,sv9,Journey Together,76,Common,H,Pokémon,Basic,70,Fighting
+Swinub,sv9,Journey Together,77,Common,I,Pokémon,Basic,70,Fighting
+Piloswine,sv9,Journey Together,78,Common,I,Pokémon,Stage 1,100,Fighting
+Mamoswine ex,sv9,Journey Together,79,Double Rare,I,Pokémon,Stage 2;ex,340,Fighting
+Larvitar,sv9,Journey Together,80,Common,I,Pokémon,Basic,70,Fighting
+Pupitar,sv9,Journey Together,81,Common,I,Pokémon,Stage 1,90,Fighting
+Regirock,sv9,Journey Together,82,Rare,I,Pokémon,Basic,130,Fighting
+Pancham,sv9,Journey Together,83,Common,I,Pokémon,Basic,60,Fighting
+Rockruff,sv9,Journey Together,84,Common,I,Pokémon,Basic,70,Fighting
+Lycanroc,sv9,Journey Together,85,Rare,I,Pokémon,Stage 1,120,Fighting
+Snivy,zsv10pt5,Black Bolt,1,Common,I,Pokémon,Basic,70,Grass
+Servine,zsv10pt5,Black Bolt,2,Common,I,Pokémon,Stage 1,100,Grass
+Serperior ex,zsv10pt5,Black Bolt,3,Double Rare,I,Pokémon,Stage 2;ex,320,Grass
+Pansage,zsv10pt5,Black Bolt,4,Common,I,Pokémon,Basic,70,Grass
+Simisage,zsv10pt5,Black Bolt,5,Uncommon,I,Pokémon,Stage 1,100,Grass
+Petilil,zsv10pt5,Black Bolt,6,Common,I,Pokémon,Basic,60,Grass
+Lilligant,zsv10pt5,Black Bolt,7,Uncommon,I,Pokémon,Stage 1,100,Grass
+Maractus,zsv10pt5,Black Bolt,8,Common,I,Pokémon,Basic,100,Grass
+Karrablast,zsv10pt5,Black Bolt,9,Common,I,Pokémon,Basic,60,Grass
+Foongus,zsv10pt5,Black Bolt,10,Common,I,Pokémon,Basic,50,Grass
+Amoonguss,zsv10pt5,Black Bolt,11,Uncommon,I,Pokémon,Stage 1,120,Grass
+Victini,zsv10pt5,Black Bolt,12,Rare,I,Pokémon,Basic,80,Fire
+Darumaka,zsv10pt5,Black Bolt,13,Common,I,Pokémon,Basic,80,Fire
+Darmanitan,zsv10pt5,Black Bolt,14,Uncommon,I,Pokémon,Stage 1,140,Fire
+Larvesta,zsv10pt5,Black Bolt,15,Common,I,Pokémon,Basic,60,Fire
+Volcarona,zsv10pt5,Black Bolt,16,Rare,I,Pokémon,Stage 1,120,Fire
+Panpour,zsv10pt5,Black Bolt,17,Common,I,Pokémon,Basic,70,Water
+Simipour,zsv10pt5,Black Bolt,18,Uncommon,I,Pokémon,Stage 1,100,Water
+Tympole,zsv10pt5,Black Bolt,19,Common,I,Pokémon,Basic,60,Water
+Palpitoad,zsv10pt5,Black Bolt,20,Common,I,Pokémon,Stage 1,90,Water
+Seismitoad,zsv10pt5,Black Bolt,21,Uncommon,I,Pokémon,Stage 2,170,Water
+Tirtouga,zsv10pt5,Black Bolt,22,Uncommon,I,Pokémon,Stage 1,100,Water
+Carracosta,zsv10pt5,Black Bolt,23,Rare,I,Pokémon,Stage 2,180,Water
+Alomomola,zsv10pt5,Black Bolt,24,Uncommon,I,Pokémon,Basic,110,Water
+Cubchoo,zsv10pt5,Black Bolt,25,Common,I,Pokémon,Basic,70,Water
+Beartic,zsv10pt5,Black Bolt,26,Rare,I,Pokémon,Stage 1,150,Water
+Cryogonal,zsv10pt5,Black Bolt,27,Uncommon,I,Pokémon,Basic,90,Water
+Kyurem ex,zsv10pt5,Black Bolt,28,Double Rare,I,Pokémon,Basic;ex,230,Water
+Emolga,zsv10pt5,Black Bolt,29,Common,I,Pokémon,Basic,70,Lightning
+Tynamo,zsv10pt5,Black Bolt,30,Common,I,Pokémon,Basic,40,Lightning
+Eelektrik,zsv10pt5,Black Bolt,31,Uncommon,I,Pokémon,Stage 1,90,Lightning
+Eelektross,zsv10pt5,Black Bolt,32,Uncommon,I,Pokémon,Stage 2,160,Lightning
+Thundurus,zsv10pt5,Black Bolt,33,Rare,I,Pokémon,Basic,120,Lightning
+Zekrom ex,zsv10pt5,Black Bolt,34,Double Rare,I,Pokémon,Basic;ex,230,Lightning
+Munna,zsv10pt5,Black Bolt,35,Common,I,Pokémon,Basic,70,Psychic
+Musharna,zsv10pt5,Black Bolt,36,Uncommon,I,Pokémon,Stage 1,120,Psychic
+Solosis,zsv10pt5,Black Bolt,37,Common,I,Pokémon,Basic,40,Psychic
+Duosion,zsv10pt5,Black Bolt,38,Common,I,Pokémon,Stage 1,70,Psychic
+Reuniclus,zsv10pt5,Black Bolt,39,Uncommon,I,Pokémon,Stage 2,140,Psychic
+Elgyem,zsv10pt5,Black Bolt,40,Common,I,Pokémon,Basic,60,Psychic
+Beheeyem,zsv10pt5,Black Bolt,41,Uncommon,I,Pokémon,Stage 1,90,Psychic
+Golett,zsv10pt5,Black Bolt,42,Common,I,Pokémon,Basic,90,Psychic
+Golurk,zsv10pt5,Black Bolt,43,Uncommon,I,Pokémon,Stage 1,160,Psychic
+Meloetta ex,zsv10pt5,Black Bolt,44,Double Rare,I,Pokémon,Basic;ex,200,Psychic
+Drilbur,zsv10pt5,Black Bolt,45,Common,I,Pokémon,Basic,70,Fighting
+Excadrill ex,zsv10pt5,Black Bolt,46,Double Rare,I,Pokémon,Stage 1;ex,270,Fighting
+Timburr,zsv10pt5,Black Bolt,47,Common,I,Pokémon,Basic,70,Fighting
+Gurdurr,zsv10pt5,Black Bolt,48,Common,I,Pokémon,Stage 1,100,Fighting
+Conkeldurr,zsv10pt5,Black Bolt,49,Rare,I,Pokémon,Stage 2,140,Fighting
+Throh,zsv10pt5,Black Bolt,50,Uncommon,I,Pokémon,Basic,130,Fighting
+Dwebble,zsv10pt5,Black Bolt,51,Common,I,Pokémon,Basic,70,Fighting
+Crustle,zsv10pt5,Black Bolt,52,Uncommon,I,Pokémon,Stage 1,150,Fighting
+Landorus,zsv10pt5,Black Bolt,53,Rare,I,Pokémon,Basic,130,Fighting
+Venipede,zsv10pt5,Black Bolt,54,Common,I,Pokémon,Basic,80,Darkness
+Whirlipede,zsv10pt5,Black Bolt,55,Common,I,Pokémon,Stage 1,100,Darkness
+Scolipede,zsv10pt5,Black Bolt,56,Uncommon,I,Pokémon,Stage 2,160,Darkness
+Sandile,zsv10pt5,Black Bolt,57,Common,I,Pokémon,Basic,70,Darkness
+Krokorok,zsv10pt5,Black Bolt,58,Common,I,Pokémon,Stage 1,100,Darkness
+Krookodile,zsv10pt5,Black Bolt,59,Uncommon,I,Pokémon,Stage 2,170,Darkness
+Escavalier,zsv10pt5,Black Bolt,60,Uncommon,I,Pokémon,Stage 1,130,Metal
+Klink,zsv10pt5,Black Bolt,61,Common,I,Pokémon,Basic,60,Metal
+Klang,zsv10pt5,Black Bolt,62,Common,I,Pokémon,Stage 1,90,Metal
+Klinklang,zsv10pt5,Black Bolt,63,Rare,I,Pokémon,Stage 2,150,Metal
+Pawniard,zsv10pt5,Black Bolt,64,Common,I,Pokémon,Basic,60,Metal
+Bisharp,zsv10pt5,Black Bolt,65,Uncommon,I,Pokémon,Stage 1,120,Metal
+Cobalion,zsv10pt5,Black Bolt,66,Rare,I,Pokémon,Basic,120,Metal
+Genesect ex,zsv10pt5,Black Bolt,67,Double Rare,I,Pokémon,Basic;ex,220,Metal
+Axew,zsv10pt5,Black Bolt,68,Common,I,Pokémon,Basic,70,Dragon
+Fraxure,zsv10pt5,Black Bolt,69,Common,I,Pokémon,Stage 1,100,Dragon
+Haxorus,zsv10pt5,Black Bolt,70,Rare,I,Pokémon,Stage 2,170,Dragon
+Pidove,zsv10pt5,Black Bolt,71,Common,I,Pokémon,Basic,60,Colorless
+Tranquill,zsv10pt5,Black Bolt,72,Common,I,Pokémon,Stage 1,80,Colorless
