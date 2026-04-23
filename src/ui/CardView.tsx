@@ -100,6 +100,14 @@ export function CardView({ card, selected, onClick }: Props) {
   );
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  asleep: "ZZ",
+  burned: "BRN",
+  confused: "CNF",
+  paralyzed: "PAR",
+  poisoned: "PSN",
+};
+
 export function PokemonInPlayView({
   p,
   selected,
@@ -127,6 +135,15 @@ export function PokemonInPlayView({
         HP {Math.max(0, p.card.hp - p.damage)}/{p.card.hp}
       </div>
       {p.damage > 0 && <div className="dmg">-{p.damage}</div>}
+      {p.statuses.length > 0 && (
+        <div className="statuses">
+          {p.statuses.map((s) => (
+            <span key={s} className={`status status-${s}`} title={s}>
+              {STATUS_LABELS[s] ?? s}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="energy">{energyInitials || "—"}</div>
       <AbilitiesBlock card={p.card} />
       <div className="atks">

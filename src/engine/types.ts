@@ -22,7 +22,25 @@ export interface Attack {
   damage: number; // parsed base damage; modifiers (+, ×, -) live in text
   damageText?: string; // original API string, e.g. "30+", "20×"
   text?: string;
+  effects?: AttackEffect[]; // resolved at attack time (coin flips, statuses, etc.)
 }
+
+// Discriminated union of engine-understood attack effects. Text for effects
+// not matching any of these is preserved in Attack.text for display, but
+// doesn't trigger engine behavior.
+export type AttackEffect =
+  | { kind: "flipHeadsBonus"; bonus: number } // "Flip a coin. If heads, this attack does N more damage."
+  | { kind: "flipTailsFizzle" } // "Flip a coin. If tails, this attack does nothing."
+  | { kind: "flipHeadsDouble" } // "Flip a coin. If heads, this attack does X more damage." with bonus=base
+  | { kind: "perAttachedEnergy"; perEnergy: number; energyType?: EnergyType } // "N damage for each Energy attached."
+  | { kind: "benchSnipe"; damage: number; target: "opponentBench" | "allBench" | "allOpponents" }
+  | { kind: "selfDamage"; damage: number } // "This Pokémon also does N damage to itself."
+  | { kind: "applyStatus"; status: StatusCondition; target: "defender" | "self" }
+  | { kind: "heal"; amount: number; target: "self" | "active" }
+  | { kind: "discardOwnEnergy"; count: number } // "Discard N Energy from this Pokémon."
+  | { kind: "drawCards"; count: number };
+
+export type StatusCondition = "asleep" | "burned" | "confused" | "paralyzed" | "poisoned";
 
 export interface Ability {
   name: string;
@@ -86,6 +104,7 @@ export interface PokemonInPlay {
   evolvedFrom: PokemonCard[]; // stack of pre-evolutions
   playedThisTurn: boolean;
   evolvedThisTurn: boolean;
+  statuses: StatusCondition[]; // asleep/paralyzed/confused are mutually exclusive with each other; poisoned/burned can coexist
 }
 
 export type PlayerId = "p1" | "p2";
@@ -118,6 +137,13 @@ export interface LogEntry {
   text: string;
 }
 
+// Minimal RNG interface attached to GameState so effects can flip coins,
+// shuffle, and pick targets without threading an extra parameter everywhere.
+export interface GameRng {
+  next(): number;
+  int(maxExclusive: number): number;
+}
+
 export interface GameState {
   players: Record<PlayerId, PlayerState>;
   activePlayer: PlayerId;
@@ -127,4 +153,5 @@ export interface GameState {
   log: LogEntry[];
   // True on the very first player's first turn — they cannot attack.
   firstTurnNoAttack: boolean;
+  rng: GameRng;
 }

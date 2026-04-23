@@ -19,6 +19,7 @@ import type {
   TrainerCard,
   WeaknessResistance,
 } from "../engine/types";
+import { extractEffects } from "./effectPatterns";
 
 export interface ApiCard {
   id: string;
@@ -85,12 +86,14 @@ function parseDamage(raw: string | undefined): { damage: number; text?: string }
 
 function mapAttack(a: NonNullable<ApiCard["attacks"]>[number]): Attack {
   const parsed = parseDamage(a.damage);
+  const { effects, baseDamageOverride } = extractEffects(a);
   return {
     name: a.name,
     cost: asEnergyTypes(a.cost),
-    damage: parsed.damage,
+    damage: baseDamageOverride ?? parsed.damage,
     damageText: parsed.text,
     text: a.text,
+    effects: effects.length > 0 ? effects : undefined,
   };
 }
 

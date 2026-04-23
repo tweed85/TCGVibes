@@ -145,6 +145,23 @@ body {
   -webkit-box-orient: vertical;
   color: #475569;
 }
+.card .statuses {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+.card .status {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 0 3px;
+  border-radius: 2px;
+  color: white;
+}
+.status-asleep { background: #6366f1; }
+.status-burned { background: #dc2626; }
+.status-confused { background: #d97706; }
+.status-paralyzed { background: #ca8a04; }
+.status-poisoned { background: #7c3aed; }
 
 .controls {
   display: flex;

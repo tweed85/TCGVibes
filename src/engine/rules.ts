@@ -7,6 +7,7 @@ import type {
   PlayerState,
   PokemonCard,
   PokemonInPlay,
+  StatusCondition,
 } from "./types";
 import type { Rng } from "./rng";
 
@@ -27,7 +28,17 @@ export function makePokemonInPlay(card: PokemonCard): PokemonInPlay {
     evolvedFrom: [],
     playedThisTurn: true,
     evolvedThisTurn: false,
+    statuses: [],
   };
+}
+
+// Coin flip backed by the game RNG. Logs the result when `label` is given.
+export function flipCoin(state: GameState, label?: string): boolean {
+  const heads = state.rng.next() < 0.5;
+  if (label) {
+    logEvent(state, "system", `${label}: ${heads ? "heads" : "tails"}.`);
+  }
+  return heads;
 }
 
 export function opponentOf(p: PlayerId): PlayerId {
@@ -124,6 +135,7 @@ export function setupGame(
     winner: null,
     log: [],
     firstTurnNoAttack: true,
+    rng,
   };
   logEvent(state, "system", "Game start. P1 goes first.");
   // P1 draws for turn 1.
@@ -152,6 +164,99 @@ export function canPayCost(
 
 export const energyProvidedBy = (p: PokemonInPlay): EnergyType[] =>
   p.attachedEnergy.flatMap((e) => e.provides);
+
+// --- Status conditions -----------------------------------------------------
+
+// Asleep, Confused, and Paralyzed are mutually exclusive with each other
+// (applying one replaces any of the others). Burned and Poisoned can stack
+// with anything.
+const EXCLUSIVE_STATUSES: StatusCondition[] = ["asleep", "confused", "paralyzed"];
+
+export function hasStatus(p: PokemonInPlay, s: StatusCondition): boolean {
+  return p.statuses.includes(s);
+}
+
+export function addStatus(
+  state: GameState,
+  p: PokemonInPlay,
+  s: StatusCondition,
+): void {
+  if (EXCLUSIVE_STATUSES.includes(s)) {
+    p.statuses = p.statuses.filter((x) => !EXCLUSIVE_STATUSES.includes(x));
+  }
+  if (!p.statuses.includes(s)) p.statuses.push(s);
+  logEvent(state, "system", `${p.card.name} is now ${s}.`);
+}
+
+export function removeStatus(p: PokemonInPlay, s: StatusCondition): void {
+  p.statuses = p.statuses.filter((x) => x !== s);
+}
+
+export function clearAllStatuses(p: PokemonInPlay): void {
+  p.statuses = [];
+}
+
+// Called after damage-from-status so we honor KO timing.
+function damageFromStatus(
+  state: GameState,
+  owner: PlayerId,
+  p: PokemonInPlay,
+  amount: number,
+  reason: string,
+): void {
+  if (!p || state.phase === "gameOver") return;
+  p.damage += amount;
+  logEvent(state, "system", `${p.card.name} takes ${amount} damage (${reason}).`);
+  if (p.damage >= p.card.hp) {
+    // KO handled by the caller's knockOut flow.
+    knockOutIfNeeded(state, owner);
+  }
+}
+
+function knockOutIfNeeded(state: GameState, ownerId: PlayerId): void {
+  const owner = state.players[ownerId];
+  if (owner.active && owner.active.damage >= owner.active.card.hp) {
+    knockOut(state, ownerId);
+  }
+}
+
+// Pokémon Checkup: runs at the end of each turn, before switching players.
+// Order (simplified from the official rulebook): Asleep wake-check, Paralysis
+// auto-wake, Burned damage + wake-check, Poisoned damage.
+export function pokemonCheckup(state: GameState): void {
+  if (state.phase === "gameOver") return;
+  for (const pid of ["p1", "p2"] as PlayerId[]) {
+    const pl = state.players[pid];
+    const a = pl.active;
+    if (!a) continue;
+
+    if (hasStatus(a, "asleep")) {
+      const woke = flipCoin(state, `${a.card.name} asleep flip`);
+      if (woke) {
+        removeStatus(a, "asleep");
+        logEvent(state, "system", `${a.card.name} woke up.`);
+      }
+    }
+    if (hasStatus(a, "paralyzed")) {
+      // Paralysis auto-cures between turns.
+      removeStatus(a, "paralyzed");
+      logEvent(state, "system", `${a.card.name} is no longer paralyzed.`);
+    }
+    if (hasStatus(a, "burned")) {
+      damageFromStatus(state, pid, a, 20, "burn");
+      if ((state.phase as string) === "gameOver") return;
+      const cured = flipCoin(state, `${a.card.name} burn flip`);
+      if (cured) {
+        removeStatus(a, "burned");
+        logEvent(state, "system", `${a.card.name}'s burn is cured.`);
+      }
+    }
+    if (hasStatus(a, "poisoned")) {
+      damageFromStatus(state, pid, a, 10, "poison");
+      if ((state.phase as string) === "gameOver") return;
+    }
+  }
+}
 
 // --- Damage / KO / win -----------------------------------------------------
 
@@ -234,6 +339,10 @@ export function endTurn(state: GameState): void {
       p.evolvedThisTurn = false;
     }
   }
+  // Pokémon Checkup: process status effects on both actives.
+  pokemonCheckup(state);
+  if ((state.phase as string) === "gameOver") return;
+
   state.firstTurnNoAttack = false;
   state.activePlayer = opponentOf(state.activePlayer);
   state.turn += 1;

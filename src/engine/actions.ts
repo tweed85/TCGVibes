@@ -11,14 +11,18 @@ import type {
 import {
   applyDamage,
   canPayCost,
+  clearAllStatuses,
   endTurn as endTurnRule,
   energyProvidedBy,
+  flipCoin,
+  hasStatus,
   isBasic,
   isPokemon,
   logEvent,
   makePokemonInPlay,
   opponentOf,
 } from "./rules";
+import { resolveAttackEffects } from "./effects";
 
 export type ActionResult =
   | { ok: true }
@@ -88,7 +92,8 @@ export function evolve(
   pl.hand.splice(handIndex, 1);
   target.evolvedFrom.push(target.card);
   target.card = card;
-  target.damage = target.damage; // damage persists through evolution
+  // damage persists; all Special Conditions are removed on evolution.
+  clearAllStatuses(target);
   target.evolvedThisTurn = true;
   logEvent(state, player, `evolves into ${card.name}.`);
   return ok;
@@ -182,6 +187,8 @@ export function retreat(
   if (!g.ok) return g;
   const pl = state.players[player];
   if (!pl.active) return fail("No Active Pokémon.");
+  if (hasStatus(pl.active, "asleep")) return fail("Asleep Pokémon can't retreat.");
+  if (hasStatus(pl.active, "paralyzed")) return fail("Paralyzed Pokémon can't retreat.");
   if (benchIndex < 0 || benchIndex >= pl.bench.length)
     return fail("Invalid bench slot.");
   const cost = pl.active.card.retreatCost ?? [];
@@ -195,6 +202,8 @@ export function retreat(
   }
   const [newActive] = pl.bench.splice(benchIndex, 1);
   const oldActive = pl.active;
+  // Retreating clears all Special Conditions from the retreating Pokémon.
+  clearAllStatuses(oldActive);
   pl.active = newActive;
   pl.bench.push(oldActive);
   logEvent(state, player, `retreats ${oldActive.card.name}; ${newActive.card.name} is now Active.`);
@@ -213,11 +222,29 @@ export function attack(
   const pl = state.players[player];
   const atk = pl.active;
   if (!atk) return fail("No Active Pokémon.");
+  if (hasStatus(atk, "asleep")) return fail("Asleep Pokémon can't attack.");
+  if (hasStatus(atk, "paralyzed")) return fail("Paralyzed Pokémon can't attack.");
   const move = atk.card.attacks[attackIndex];
   if (!move) return fail("No such attack.");
   const provided = energyProvidedBy(atk);
   if (!canPayCost(provided, move.cost))
     return fail("Not enough Energy for that attack.");
+
+  // Confusion: flip on attack; on tails, attack fails and 30 damage to self.
+  if (hasStatus(atk, "confused")) {
+    const ok2 = flipCoin(state, `${atk.card.name} confusion flip`);
+    if (!ok2) {
+      atk.damage += 30;
+      logEvent(state, "system", `${atk.card.name} hurts itself in confusion (30 damage).`);
+      if (atk.damage >= atk.card.hp) {
+        // KO self; handled by applyDamage-style KO logic.
+        applyDamage(state, player, 0); // no-op, triggers KO check? applyDamage checks active.
+      }
+      const phase2: string = state.phase;
+      if (phase2 !== "gameOver") endTurnRule(state);
+      return ok;
+    }
+  }
 
   const defOwner = opponentOf(player);
   const def = state.players[defOwner].active;
@@ -233,8 +260,27 @@ export function attack(
       damage = Math.max(0, damage - (parseInt(res.value.slice(1), 10) || 30));
     }
   }
+
+  // Resolve structured attack effects (coin flips, per-energy bonuses, bench
+  // snipes, status infliction, etc.). Effects can modify `damage` and/or
+  // trigger their own side-effects; `aborted` means the attack did nothing.
+  const result = resolveAttackEffects(state, {
+    attacker: atk,
+    attackerOwner: player,
+    defender: def,
+    defenderOwner: defOwner,
+    move,
+    damage,
+  });
+  damage = result.damage;
+
   logEvent(state, player, `attacks with ${move.name} for ${damage}.`);
   if (damage > 0) applyDamage(state, defOwner, damage);
+  // Post-damage effects (self-damage, status applications) happen after the
+  // main hit so e.g. KOs land before side effects apply.
+  if ((state.phase as string) !== "gameOver") {
+    result.postDamage?.();
+  }
   // applyDamage may set phase to gameOver (KO + win). Only end turn if game still live.
   const phaseAfter: string = state.phase;
   if (phaseAfter !== "gameOver") endTurnRule(state);
