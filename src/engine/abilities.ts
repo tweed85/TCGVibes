@@ -260,6 +260,23 @@ const NAMED_ABILITY_EFFECTS: Record<string, AbilityEffect> = {
     oncePerTurn: true,
   },
   "Emergency Rotation": { kind: "emergencyRotationFromHand", requiresOppStage2: true, oncePerTurn: true },
+  // Fezandipiti ex — if any of your Pokémon were KO'd during opponent's last
+  // turn, draw 3 cards. Once-per-turn.
+  "Flip the Script": {
+    kind: "drawN",
+    count: 3,
+    oncePerTurn: true,
+    condition: { kind: "yourPokemonKoedLastOppTurn" },
+  },
+  // Fan Rotom — once during your FIRST turn, search up to 3 Colorless
+  // Pokémon with 100 HP or less.
+  "Fan Call": {
+    kind: "fanCallFirstTurn",
+    energyType: "Colorless",
+    hpMax: 100,
+    max: 3,
+    oncePerTurn: true,
+  },
 };
 
 export function detectAbilityEffect(a: { name: string; type: string; text: string }): AbilityEffect | undefined {
@@ -347,6 +364,12 @@ function checkCondition(
       }
       return { ok: true };
     }
+    case "yourPokemonKoedLastOppTurn": {
+      if (!state.players[player].yourPokemonKoedLastOppTurn) {
+        return { ok: false, reason: "Requires one of your Pokémon to have been Knocked Out last turn." };
+      }
+      return { ok: true };
+    }
   }
 }
 
@@ -391,6 +414,27 @@ export function activateAbility(
     return { ok: false, reason: "Ability already used this turn." };
   if (!abilitiesActiveOn(state, holder.card))
     return { ok: false, reason: "Abilities are disabled by the current Stadium." };
+  // Psyduck "Damp" — "Pokémon in play (both yours and your opponent's) lose
+  // any Ability that requires the Pokémon using it to Knock Out itself."
+  // We apply this by blocking activation of self-KO abilities whenever any
+  // ability-active Psyduck with Damp is in play on either side.
+  {
+    const dampInPlay = (["p1", "p2"] as PlayerId[]).some((pid) => {
+      const side = state.players[pid];
+      for (const p of [side.active, ...side.bench]) {
+        if (!p) continue;
+        if (!abilitiesActiveOn(state, p.card)) continue;
+        if ((p.card.abilities ?? []).some((a) => a.name === "Damp")) return true;
+      }
+      return false;
+    });
+    if (dampInPlay) {
+      const k = ability.effect.kind;
+      if (k === "putCountersOnOppThenSelfKO" || k === "attachNFromDiscardThenSelfKO") {
+        return { ok: false, reason: "Psyduck's Damp blocks self-KO abilities." };
+      }
+    }
+  }
 
   const e = ability.effect;
 
@@ -1392,6 +1436,24 @@ export function activateAbility(
       // is in play, so this case is effectively unreachable via the current
       // UI. We leave a clear failure to signal the limitation.
       return { ok: false, reason: "Activating abilities from hand isn't supported yet." };
+    }
+
+    case "fanCallFirstTurn": {
+      // Fan Rotom — first turn of the activating player only. Search up to
+      // `max` Pokémon of `energyType` with HP ≤ `hpMax`.
+      if (state.turn !== 1) {
+        return { ok: false, reason: "Fan Call only works on your first turn." };
+      }
+      const pred = (c: Card): c is PokemonCard =>
+        c.supertype === "Pokémon" &&
+        c.types.includes(e.energyType) &&
+        c.hp <= e.hpMax;
+      if (!setDeckSearchPick(state, player, pred, e.max, `${ability.name}: pick up to ${e.max} ${e.energyType} Pokémon (≤${e.hpMax} HP)`)) {
+        logEvent(state, player, `uses ${ability.name}: no matching Pokémon.`);
+      } else {
+        logEvent(state, player, `uses ${ability.name}.`);
+      }
+      break;
     }
   }
 

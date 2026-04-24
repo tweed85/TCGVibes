@@ -11,7 +11,7 @@
 // plain `text` so the UI can display them even though they won't fire.
 
 import { addStatus, drawCards, flipCoin, logEvent } from "./rules";
-import { benchDamageBlocked } from "./ongoingEffects";
+import { benchDamageBlocked, benchDamageBlockedByFlowerCurtain } from "./ongoingEffects";
 import type {
   Attack,
   AttackEffect,
@@ -146,14 +146,23 @@ export function resolveAttackEffects(
             logEvent(state, "system", `Battle Cage blocks bench damage.`);
             return;
           }
-          const targets: PokemonInPlay[] = [];
+          const targets: Array<[PlayerId, PokemonInPlay]> = [];
           if (e.target === "opponentBench" || e.target === "allBench" || e.target === "allOpponents") {
-            targets.push(...state.players[ctx.defenderOwner].bench);
+            for (const p of state.players[ctx.defenderOwner].bench) targets.push([ctx.defenderOwner, p]);
           }
           if (e.target === "allBench") {
-            targets.push(...state.players[ctx.attackerOwner].bench);
+            for (const p of state.players[ctx.attackerOwner].bench) targets.push([ctx.attackerOwner, p]);
           }
-          for (const t of targets) {
+          for (const [ownerId, t] of targets) {
+            // Shaymin Flower Curtain — non-rule-box bench Pokémon on owner's
+            // side are immune to opp-attack bench damage.
+            if (
+              ownerId === ctx.defenderOwner &&
+              benchDamageBlockedByFlowerCurtain(state, ownerId, t)
+            ) {
+              logEvent(state, "system", `Flower Curtain protects ${t.card.name}.`);
+              continue;
+            }
             t.damage += e.damage;
             logEvent(
               state,
@@ -307,6 +316,10 @@ export function resolveAttackEffects(
             target = opp.bench[state.snipeTargetOverride];
           } else {
             target = opp.bench.slice().sort((a, b) => b.damage - a.damage)[0];
+          }
+          if (benchDamageBlockedByFlowerCurtain(state, ctx.defenderOwner, target)) {
+            logEvent(state, "system", `Flower Curtain protects ${target.card.name}.`);
+            return;
           }
           target.damage += e.damage;
           logEvent(state, "system", `${target.card.name} takes ${e.damage} damage (snipe).`);
@@ -486,6 +499,81 @@ export function resolveAttackEffects(
         );
         break;
       }
+
+      case "placeCountersPerHandCard": {
+        // Alakazam "Powerful Hand" — place N damage counters on opp's Active
+        // for each card in the attacker's hand. Counter placement bypasses
+        // weakness/resistance — we apply it via postHook after normal damage.
+        postHooks.push(() => {
+          if (!ctx.defender) return;
+          const handCount = state.players[ctx.attackerOwner].hand.length;
+          const counters = e.countersPerCard * handCount;
+          if (counters <= 0) return;
+          ctx.defender.damage += counters * 10;
+          logEvent(
+            state,
+            "system",
+            `${ctx.move.name}: ${handCount} cards in hand → ${counters} damage counter(s) on ${ctx.defender.card.name}.`,
+          );
+        });
+        break;
+      }
+
+      case "fizzleIfNoStadium": {
+        // Fan Rotom "Assault Landing": "If there is no Stadium in play, this
+        // attack does nothing." Zero out damage AND skip all queued postHooks.
+        if (!state.stadium) {
+          damage = 0;
+          postHooks.length = 0;
+          logEvent(state, "system", `${ctx.move.name} fizzles — no Stadium in play.`);
+        }
+        break;
+      }
+
+      case "shieldNextTurn": {
+        // Dunsparce "Dig" — flip (or auto) heads → shield the attacker during
+        // the opponent's upcoming turn. We mark the attacker's shieldedUntilTurn
+        // and the damage pipeline checks it.
+        postHooks.push(() => {
+          let heads = true;
+          if (e.requiresHeads) heads = flipCoin(state, `${ctx.move.name} shield flip`);
+          if (heads) {
+            ctx.attacker.shieldedUntilTurn = state.turn + 1;
+            logEvent(state, "system", `${ctx.attacker.card.name} is shielded during the opponent's next turn.`);
+          }
+        });
+        break;
+      }
+
+      case "searchEnergyAttachBenchType": {
+        // Shaymin "Send Flowers" — search deck for any Energy, attach to one
+        // of your Benched Pokémon of the given type. Auto-pick the first
+        // Energy and first matching bench ally.
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          const bench = pl.bench.filter((p) => p.card.types.includes(e.pokemonType));
+          if (bench.length === 0) {
+            logEvent(state, "system", `${ctx.move.name}: no Benched ${e.pokemonType} Pokémon.`);
+            return;
+          }
+          const target = bench[0];
+          const idx = pl.deck.findIndex((c) => c.supertype === "Energy");
+          if (idx < 0) {
+            logEvent(state, "system", `${ctx.move.name}: no Energy in deck.`);
+            return;
+          }
+          const [en] = pl.deck.splice(idx, 1);
+          target.attachedEnergy.push(en as import("./types").EnergyCard);
+          // Shuffle the remainder.
+          const arr = pl.deck;
+          for (let i = arr.length - 1; i > 0; i--) {
+            const j = state.rng.int(i + 1);
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+          }
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: attaches ${en.name} to ${target.card.name}.`);
+        });
+        break;
+      }
       default: {
         // Exhaustiveness guard — unknown effect kinds are preserved on the
         // Attack.text for display and skipped here.
@@ -573,6 +661,14 @@ export function describeEffects(effects: AttackEffect[] | undefined): string {
           return `bench up to ${e.max} Basics`;
         case "flipUntilTailsPerHeads":
           return `geom ${e.perHeads}/heads`;
+        case "placeCountersPerHandCard":
+          return `${e.countersPerCard}× counter per hand card`;
+        case "fizzleIfNoStadium":
+          return "fizzles without Stadium";
+        case "shieldNextTurn":
+          return e.requiresHeads ? "flip→shield next turn" : "shield next turn";
+        case "searchEnergyAttachBenchType":
+          return `search Energy → Bench ${e.pokemonType}`;
       }
     })
     .join(", ");

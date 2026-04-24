@@ -60,7 +60,11 @@ export type AttackEffect =
   | { kind: "discardTopOfOppDeck"; count: number } // Mill the opp deck by N
   | { kind: "discardOppTools" } // "Before doing damage, discard all Tools from opp's Active"
   | { kind: "callForFamily"; max: number } // "Search your deck for up to N Basic Pokémon and put them onto your Bench."
-  | { kind: "flipUntilTailsPerHeads"; perHeads: number }; // Geometric damage ("Flip until you get tails")
+  | { kind: "flipUntilTailsPerHeads"; perHeads: number } // Geometric damage ("Flip until you get tails")
+  | { kind: "placeCountersPerHandCard"; countersPerCard: number } // Alakazam "Powerful Hand"
+  | { kind: "fizzleIfNoStadium" } // Fan Rotom "Assault Landing"
+  | { kind: "shieldNextTurn"; requiresHeads: boolean } // Dunsparce "Dig" — prevent damage+effects next turn
+  | { kind: "searchEnergyAttachBenchType"; pokemonType: EnergyType }; // Shaymin DRI "Send Flowers"
 
 export type StatusCondition = "asleep" | "burned" | "confused" | "paralyzed" | "poisoned";
 
@@ -75,7 +79,7 @@ export interface Ability {
 export type AbilityEffect =
   | { kind: "drawOne"; oncePerTurn: true }
   | { kind: "drawTwo"; oncePerTurn: true }
-  | { kind: "drawN"; count: number; oncePerTurn: true }
+  | { kind: "drawN"; count: number; oncePerTurn: true; condition?: AbilityCondition }
   | { kind: "healSelf"; amount: number; oncePerTurn: true }
   | { kind: "healAny"; amount: number; oncePerTurn: true } // heal one of your Pokémon
   | { kind: "searchBasicEnergy"; count: number; energyType?: EnergyType; oncePerTurn: true }
@@ -125,6 +129,7 @@ export type AbilityEffect =
   | { kind: "drawToNIfSupporterPlayedName"; targetHand: number; supporterName: string; oncePerTurn: true } // Shadowy Envoy
   | { kind: "searchEnergyIfSupporterPlayedName"; energyType: EnergyType; count: number; supporterName: string; oncePerTurn: true } // Frilled Generator
   | { kind: "emergencyRotationFromHand"; requiresOppStage2: boolean; oncePerTurn: true } // Emergency Rotation (activated from hand)
+  | { kind: "fanCallFirstTurn"; energyType: EnergyType; hpMax: number; max: number; oncePerTurn: true } // Fan Rotom "Fan Call"
   | { kind: "searchDeckAnyCard"; oncePerTurn: true; condition?: AbilityCondition } // search for any 1 card
   | { kind: "searchDeckPokemon"; oncePerTurn: true } // search for any 1 Pokémon
   | { kind: "switchWithBench"; oncePerTurn: true }
@@ -136,7 +141,8 @@ export type AbilityEffect =
 // Conditional gates evaluated at activation time. If the condition fails,
 // the button is disabled (or the activation blocked with a reason).
 export type AbilityCondition =
-  | { kind: "activeHasAbilityNamed"; abilityName: string };
+  | { kind: "activeHasAbilityNamed"; abilityName: string }
+  | { kind: "yourPokemonKoedLastOppTurn" };
 
 export interface WeaknessResistance {
   type: EnergyType;
@@ -201,6 +207,10 @@ export interface PokemonInPlay {
   // next turn, this/Defending Pokémon can't …" text. Inclusive turn number.
   cantAttackUntilTurn?: number;
   cantRetreatUntilTurn?: number;
+  // Dunsparce "Dig": heads on the attack sets this to state.turn + 1 so
+  // during the opponent's next turn, all incoming damage and non-damage
+  // effects directed at this Pokémon are prevented.
+  shieldedUntilTurn?: number;
 }
 
 export type PlayerId = "p1" | "p2";
@@ -242,6 +252,10 @@ export interface PlayerState {
   // (Shadowy Envoy → Janine's Secret Art, Frilled Generator → Canari).
   // Cleared at end of turn.
   lastSupporterNameThisTurn: string | null;
+  // True during this player's turn when ≥1 of their Pokémon was KO'd during
+  // the opponent's turn that just ended. Consumed by Flip the Script / etc.
+  // Cleared at the end of this player's turn.
+  yourPokemonKoedLastOppTurn: boolean;
   // Set true once this player's Legacy Energy has triggered its "opp takes
   // 1 fewer Prize" effect. "Can't be applied more than once per game."
   legacyEnergyUsed: boolean;

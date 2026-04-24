@@ -64,6 +64,25 @@ export function benchDamageBlocked(state: GameState): boolean {
   return state.stadium?.card.name === "Battle Cage";
 }
 
+// Shaymin "Flower Curtain": "Prevent all damage done to your Benched Pokémon
+// that don't have a Rule Box by attacks from your opponent's Pokémon." Returns
+// true when the given bench Pokémon is immune to incoming opponent-attack
+// damage thanks to a Shaymin with Flower Curtain on the same side.
+export function benchDamageBlockedByFlowerCurtain(
+  state: GameState,
+  ownerId: PlayerId,
+  benched: PokemonInPlay,
+): boolean {
+  if (hasRuleBox(benched.card)) return false;
+  const side = state.players[ownerId];
+  const allies = [side.active, ...side.bench].filter((p): p is PokemonInPlay => !!p);
+  return allies.some(
+    (p) =>
+      abilitiesActiveOn(state, p.card) &&
+      (p.card.abilities ?? []).some((a) => a.name === "Flower Curtain"),
+  );
+}
+
 // Dizzying Valley: Confused doesn't clear on evolve/devolve.
 export function confusedPersistsOnEvolve(state: GameState): boolean {
   return state.stadium?.card.name === "Dizzying Valley";

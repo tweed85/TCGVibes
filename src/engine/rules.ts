@@ -90,6 +90,7 @@ export function createPlayer(
     stadiumUsedThisTurn: false,
     lastDitchUsedThisTurn: false,
     lastSupporterNameThisTurn: null,
+    yourPokemonKoedLastOppTurn: false,
     legacyEnergyUsed: false,
     isAI,
   };
@@ -568,6 +569,10 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
   const owner = state.players[ownerId];
   if (!owner.active) return;
   const ko = owner.active;
+  // If the KO happens on the opponent's turn, flag the KO'd player so their
+  // Flip-the-Script-style "if one of your Pokémon was KO'd last turn" gate
+  // can fire on their next turn.
+  if (state.activePlayer !== ownerId) owner.yourPokemonKoedLastOppTurn = true;
   // Resolve KO-triggered Tool effects BEFORE the KO'd card goes to discard,
   // so the Tool is still "attached" for any condition checks. These effects
   // take place from the KO'd player's perspective.
@@ -711,6 +716,9 @@ export function resolveBenchKOs(state: GameState): boolean {
     const survivors: typeof pl.bench = [];
     for (const p of pl.bench) {
       if (p.damage >= effectiveMaxHp(p, state)) {
+        // Bench KO during the opponent's turn flags the owner for next-turn
+        // Flip-the-Script gating.
+        if (state.activePlayer !== pid) pl.yourPokemonKoedLastOppTurn = true;
         const prizes = prizeValue(p.card);
         logEvent(
           state,
@@ -794,6 +802,10 @@ export function endTurn(state: GameState): void {
   prev.stadiumUsedThisTurn = false;
   prev.lastDitchUsedThisTurn = false;
   prev.lastSupporterNameThisTurn = null;
+  // The OPPONENT's "my Pokémon got KO'd during their last (i.e. just-ended)
+  // turn" flag applies during their UPCOMING turn. Clear the ending player's
+  // own flag here (they've had their chance to consume it).
+  prev.yourPokemonKoedLastOppTurn = false;
   // Turn-scoped attack bonuses (Black Belt's Training, Premium Power Pro,
   // Kieran's boost branch) reset at end of the player's turn.
   prev.thisTurnAttackBonuses = [];

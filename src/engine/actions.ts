@@ -266,6 +266,24 @@ export function playTrainer(
     return fail("Can't play Item cards this turn (Itchy Pollen).");
   }
 
+  // Genesect "ACE Nullifier" — "If this Pokémon has a Pokémon Tool attached,
+  // your opponent can't play any ACE SPEC cards from their hand." Block the
+  // play of ACE SPEC trainers when the opponent has a Genesect+Tool in play
+  // with its Ability active.
+  if (t.subtypes.includes("ACE SPEC")) {
+    const oppId: PlayerId = player === "p1" ? "p2" : "p1";
+    const opp = state.players[oppId];
+    const blocker = [opp.active, ...opp.bench].find(
+      (p) =>
+        !!p &&
+        p.tools.length > 0 &&
+        (p.card.abilities ?? []).some((a) => a.name === "ACE Nullifier"),
+    );
+    if (blocker) {
+      return fail(`${blocker.card.name}'s ACE Nullifier blocks ACE SPEC cards.`);
+    }
+  }
+
   // Tool: must be attached to a Pokémon in play with no Tool already.
   if (isTool) {
     const targetId = target?.kind === "inPlay" ? target.instanceId : null;
@@ -438,6 +456,12 @@ function executeAttackHit(
   if (!move) return;
   const defOwner = opponentOf(player);
   const def = state.players[defOwner].active;
+  // Dunsparce "Dig" (and similar) — if the defender is shielded during this
+  // turn, the attack does nothing at all: no damage, no non-damage effects.
+  if (def?.shieldedUntilTurn !== undefined && state.turn <= def.shieldedUntilTurn) {
+    logEvent(state, "system", `${def.card.name} is shielded — ${move.name} has no effect.`);
+    return;
+  }
   let damage = move.damage;
   damage += stadiumAttackBonus(state, atk, def);
   damage += passiveAttackBonus(state, player, atk, def);

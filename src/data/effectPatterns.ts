@@ -352,6 +352,45 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
     }
   }
 
+  // ---- Place N damage counters per card in your hand ----------------------
+  // Alakazam "Powerful Hand": "Place 2 damage counters on your opponent's
+  // Active Pokémon for each card in your hand." The damage number is 0 (or
+  // missing); the effect places counters directly.
+  {
+    const m = text.match(/place (\d+) damage counters?\s+on your opponent'?s active pok[eé]mon\s+for each card in your hand/i);
+    if (m) {
+      effects.push({ kind: "placeCountersPerHandCard", countersPerCard: parseInt(m[1], 10) });
+      baseDamageOverride = 0;
+    }
+  }
+
+  // ---- Fizzle if no Stadium in play ---------------------------------------
+  // Fan Rotom "Assault Landing": "If there is no Stadium in play, this
+  // attack does nothing."
+  if (/if there is no stadium in play, this attack does nothing/i.test(text)) {
+    effects.push({ kind: "fizzleIfNoStadium" });
+  }
+
+  // ---- Coin-flip shield (prevent all damage & effects next turn) ----------
+  // Dunsparce "Dig": "Flip a coin. If heads, during your opponent's next turn,
+  // prevent all damage from and effects of attacks done to this Pokémon."
+  if (/flip a coin\. if heads, during your opponent'?s next turn, prevent all damage from and effects of attacks done to this pok[eé]mon/i.test(text)) {
+    effects.push({ kind: "shieldNextTurn", requiresHeads: true });
+  } else if (/during your opponent'?s next turn, prevent all damage from and effects of attacks done to this pok[eé]mon/i.test(text)) {
+    effects.push({ kind: "shieldNextTurn", requiresHeads: false });
+  }
+
+  // ---- Search Energy → attach to a Benched Pokémon of type X --------------
+  // Shaymin "Send Flowers": "Search your deck for an Energy card and attach
+  // it to 1 of your Benched Grass Pokémon."
+  {
+    const m = text.match(/search your deck for an energy card and attach it to 1 of your benched ([A-Za-z]+) pok[eé]mon/i);
+    if (m) {
+      const t = matchEnergyType(m[1]);
+      if (t) effects.push({ kind: "searchEnergyAttachBenchType", pokemonType: t });
+    }
+  }
+
   return { effects, baseDamageOverride };
 }
 
