@@ -20,6 +20,17 @@ import type {
   PokemonInPlay,
 } from "./types";
 
+// Mist Energy / Rocky Fighting Energy: "Prevent all effects of attacks used by
+// your opponent's Pokémon done to the Pokémon this card is attached to."
+// Damage still goes through — only non-damage effects are prevented.
+function effectsPrevented(defender: PokemonInPlay): boolean {
+  for (const e of defender.attachedEnergy) {
+    if (e.name === "Mist Energy") return true;
+    if (e.name === "Rocky Fighting Energy" && defender.card.types.includes("Fighting")) return true;
+  }
+  return false;
+}
+
 export interface AttackContext {
   attacker: PokemonInPlay;
   attackerOwner: PlayerId;
@@ -170,6 +181,10 @@ export function resolveAttackEffects(
           const target =
             e.target === "self" ? ctx.attacker : ctx.defender;
           if (!target) return;
+          if (e.target === "defender" && ctx.defender && effectsPrevented(ctx.defender)) {
+            logEvent(state, "system", `${ctx.defender.card.name}'s attached Energy prevents the status effect.`);
+            return;
+          }
           addStatus(state, target, e.status);
         });
         break;
@@ -193,6 +208,21 @@ export function resolveAttackEffects(
           for (let i = 0; i < e.count; i++) {
             const en = ctx.attacker.attachedEnergy.shift();
             if (!en) break;
+            // Boomerang Energy: "If this card is discarded by an effect of
+            // an attack used by the Pokémon this card is attached to, attach
+            // this card from your discard pile to that Pokémon after
+            // attacking." Net result = card stays on the attacker; we keep
+            // it attached (cost count is still satisfied since we consumed
+            // the slot).
+            if (en.name === "Boomerang Energy") {
+              ctx.attacker.attachedEnergy.push(en);
+              logEvent(
+                state,
+                "system",
+                `${en.name} returns to ${ctx.attacker.card.name} after the attack.`,
+              );
+              continue;
+            }
             attPl.discard.push(en);
             logEvent(
               state,
@@ -241,6 +271,10 @@ export function resolveAttackEffects(
       case "defenderCantRetreatNextTurn": {
         postHooks.push(() => {
           if (!ctx.defender) return;
+          if (effectsPrevented(ctx.defender)) {
+            logEvent(state, "system", `${ctx.defender.card.name}'s attached Energy prevents the retreat-lock.`);
+            return;
+          }
           ctx.defender.cantRetreatUntilTurn = state.turn + 1;
           logEvent(state, "system", `${ctx.defender.card.name} can't retreat next turn.`);
         });
@@ -261,12 +295,19 @@ export function resolveAttackEffects(
         postHooks.push(() => {
           const opp = state.players[ctx.defenderOwner];
           if (opp.bench.length === 0) return;
-          // AI heuristic: pick the highest-damage-counter-on-KO target.
-          // For a player attack, a target picker modal would be ideal; auto-pick
-          // the most-damaged bench Pokémon so the snipe is maximally impactful.
-          const target = opp.bench
-            .slice()
-            .sort((a, b) => b.damage - a.damage)[0];
+          // Use the UI-supplied override index if present; otherwise fall
+          // back to the "most-damaged" heuristic (useful for the AI and for
+          // the auto-pick branch of the player modal).
+          let target: typeof opp.bench[number];
+          if (
+            state.snipeTargetOverride !== null &&
+            state.snipeTargetOverride >= 0 &&
+            state.snipeTargetOverride < opp.bench.length
+          ) {
+            target = opp.bench[state.snipeTargetOverride];
+          } else {
+            target = opp.bench.slice().sort((a, b) => b.damage - a.damage)[0];
+          }
           target.damage += e.damage;
           logEvent(state, "system", `${target.card.name} takes ${e.damage} damage (snipe).`);
         });
@@ -307,6 +348,10 @@ export function resolveAttackEffects(
         postHooks.push(() => {
           const opp = state.players[ctx.defenderOwner];
           if (!opp.active) return;
+          if (ctx.defender && effectsPrevented(ctx.defender)) {
+            logEvent(state, "system", `${ctx.defender.card.name}'s attached Energy prevents the discard.`);
+            return;
+          }
           for (let i = 0; i < e.count; i++) {
             const energy = opp.active.attachedEnergy.shift();
             if (!energy) break;
@@ -323,6 +368,10 @@ export function resolveAttackEffects(
           if (!heads) return;
           const opp = state.players[ctx.defenderOwner];
           if (!opp.active) return;
+          if (ctx.defender && effectsPrevented(ctx.defender)) {
+            logEvent(state, "system", `${ctx.defender.card.name}'s attached Energy prevents the discard.`);
+            return;
+          }
           const energy = opp.active.attachedEnergy.shift();
           if (!energy) return;
           opp.discard.push(energy);

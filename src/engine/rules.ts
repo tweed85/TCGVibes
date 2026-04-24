@@ -87,6 +87,10 @@ export function createPlayer(
     thisTurnAttackBonuses: [],
     nextOpponentTurnDamageReductions: [],
     itemsBlockedNextTurn: false,
+    stadiumUsedThisTurn: false,
+    lastDitchUsedThisTurn: false,
+    lastSupporterNameThisTurn: null,
+    legacyEnergyUsed: false,
     isAI,
   };
 }
@@ -132,6 +136,11 @@ export function setupGame(
     onPromoteResolved: null,
     pendingSecondAttack: null,
     pendingPick: null,
+    pendingSwitchTarget: null,
+    pendingInPlayTarget: null,
+    pendingHandReveal: null,
+    pendingRareCandyChoice: null,
+    snipeTargetOverride: null,
     coinFlip: { step: "pickGuess" },
     rng,
   };
@@ -279,24 +288,100 @@ export function completeSetup(
 
 // --- Energy cost matching --------------------------------------------------
 
+// Wildcard marker. Emitted by effectiveEnergyProvides for Prism / Luminous /
+// Legacy / Neo Upper Energy. In the pool, "*" matches any specific-type cost
+// and also counts as a valid Colorless payment.
+export const WILD_ENERGY = "*";
+
+// Runtime-effective provides for an attached Energy card. Takes the holder
+// into account for conditional special energies (Ignition, Prism, Neo Upper,
+// Luminous). Returns an array of strings — each entry is one energy unit
+// (payable against 1 specific-type cost or 1 Colorless cost).
+export function effectiveEnergyProvides(
+  e: import("./types").EnergyCard,
+  holder: PokemonCard,
+  holderAttached?: import("./types").EnergyCard[],
+): string[] {
+  const subs = holder.subtypes ?? [];
+  const isBasicHolder = subs.includes("Basic");
+  const isStage2Holder = subs.includes("Stage 2");
+  const isEvolutionHolder = !!holder.evolvesFrom;
+  switch (e.name) {
+    case "Team Rocket's Energy":
+      // "provides 2 in any combination of Psychic and Darkness." Two slots,
+      // each payable as P or C, or D or C. We approximate as one P + one D;
+      // cost P+D, 2C, and 1 P (or 1 D) all resolve correctly.
+      return ["Psychic", "Darkness"];
+    case "Prism Energy":
+      return isBasicHolder ? [WILD_ENERGY] : ["Colorless"];
+    case "Luminous Energy": {
+      // "If the Pokémon this card is attached to has any other Special Energy
+      // attached, this card provides Colorless Energy instead."
+      const others = (holderAttached ?? []).filter((x) => x !== e);
+      const anyOtherSpecial = others.some((x) => (x.subtypes ?? []).includes("Special"));
+      return anyOtherSpecial ? ["Colorless"] : [WILD_ENERGY];
+    }
+    case "Legacy Energy":
+      return [WILD_ENERGY];
+    case "Ignition Energy":
+      // Provides C, or CCC on an Evolution holder. End-of-turn discard is
+      // handled separately in endTurn().
+      return isEvolutionHolder ? ["Colorless", "Colorless", "Colorless"] : ["Colorless"];
+    case "Neo Upper Energy":
+      return isStage2Holder ? [WILD_ENERGY, WILD_ENERGY] : ["Colorless"];
+    case "Growing Grass Energy":
+      return ["Grass"];
+    case "Rocky Fighting Energy":
+      return ["Fighting"];
+    case "Telepathic Psychic Energy":
+      return ["Psychic"];
+  }
+  // Default: use the static provides (basic energy has its own type; plain
+  // special energies default to Colorless).
+  return e.provides.slice();
+}
+
 export function canPayCost(
-  attached: EnergyType[],
+  attached: string[] | EnergyType[],
   cost: EnergyType[],
 ): boolean {
-  const pool = attached.slice();
+  const pool = (attached as string[]).slice();
   // First match specific-type costs, then Colorless can be paid by anything.
   const specific = cost.filter((c) => c !== "Colorless");
   const colorless = cost.length - specific.length;
   for (const need of specific) {
-    const i = pool.indexOf(need);
+    // Prefer an exact-type match, else consume a wildcard.
+    let i = pool.indexOf(need);
+    if (i === -1) i = pool.indexOf(WILD_ENERGY);
     if (i === -1) return false;
     pool.splice(i, 1);
   }
   return pool.length >= colorless;
 }
 
-export const energyProvidedBy = (p: PokemonInPlay): EnergyType[] =>
-  p.attachedEnergy.flatMap((e) => e.provides);
+export const energyProvidedBy = (p: PokemonInPlay): string[] =>
+  p.attachedEnergy.flatMap((e) => effectiveEnergyProvides(e, p.card, p.attachedEnergy));
+
+// Some Special Energies have ongoing attachment gates (Team Rocket's Energy:
+// "If this card is attached to anything other than a Team Rocket's Pokémon,
+// discard this card."). Call this after any effect that moves or reassigns
+// energies (Energy Switch, Scramble Switch, N's Plan, etc.) to enforce.
+export function enforceSpecialEnergyAttachRules(state: GameState): void {
+  for (const pid of ["p1", "p2"] as PlayerId[]) {
+    const pl = state.players[pid];
+    for (const p of [pl.active, ...pl.bench]) {
+      if (!p) continue;
+      for (let i = p.attachedEnergy.length - 1; i >= 0; i--) {
+        const e = p.attachedEnergy[i];
+        if (e.name === "Team Rocket's Energy" && !p.card.name.startsWith("Team Rocket's ")) {
+          p.attachedEnergy.splice(i, 1);
+          pl.discard.push(e);
+          logEvent(state, pid, `${e.name} is discarded from ${p.card.name} (not a Team Rocket's Pokémon).`);
+        }
+      }
+    }
+  }
+}
 
 // --- Status conditions -----------------------------------------------------
 
@@ -488,18 +573,33 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
   // take place from the KO'd player's perspective.
   for (const act of toolOnKoActions(state, ko)) {
     if (act.kind === "searchDeckAnyN") {
-      // Amulet of Hope — grab the top N cards (AI-style auto-pick; the real
-      // rule is search, but we approximate for speed and no interactive pick
-      // is available mid-KO).
-      let taken = 0;
-      for (let i = 0; i < act.count; i++) {
-        const c = owner.deck.shift();
-        if (!c) break;
-        owner.hand.push(c);
-        taken++;
-      }
-      if (taken > 0) {
-        logEvent(state, ownerId, `Amulet of Hope: takes ${taken} card(s) from deck.`);
+      // Amulet of Hope — search your deck for up to N cards. Mid-KO we can't
+      // open an interactive pick (pendingPromote needs the phase), so we do
+      // a priority-based auto-search: Basic Pokémon first (so the promoted
+      // Active has backup), then draw-Supporters (Iono / Professor's), then
+      // Pokémon evolutions, then anything else. Still shuffles afterward.
+      const priority = (c: Card): number => {
+        if (c.supertype === "Pokémon" && c.subtypes.includes("Basic")) return 4;
+        if (c.supertype === "Trainer" && c.subtypes.includes("Supporter")) return 3;
+        if (c.supertype === "Pokémon") return 2;
+        if (c.supertype === "Energy") return 1;
+        return 0;
+      };
+      const sortedIdxs = owner.deck
+        .map((c, i) => ({ i, prio: priority(c) }))
+        .sort((a, b) => b.prio - a.prio)
+        .slice(0, act.count)
+        .map((x) => x.i)
+        .sort((a, b) => b - a); // splice from high to low index
+      const taken: Card[] = [];
+      for (const i of sortedIdxs) taken.push(...owner.deck.splice(i, 1));
+      owner.hand.push(...taken);
+      if (taken.length > 0) {
+        logEvent(
+          state,
+          ownerId,
+          `Amulet of Hope: searches deck for ${taken.map((c) => c.name).join(", ")}.`,
+        );
       }
       // Shuffle afterwards per the card text.
       const arr = owner.deck;
@@ -508,9 +608,15 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
         [arr[i], arr[j]] = [arr[j], arr[i]];
       }
     } else if (act.kind === "moveEnergyToBench") {
-      // Heavy Baton — move up to 4 Energy from the KO'd Pokémon to a Benched Pokémon.
-      const target = owner.bench[0];
-      if (target) {
+      // Heavy Baton — move Energy from the KO'd Pokémon to a Benched ally.
+      // Auto-target: prefer the Benched Pokémon that already has the most
+      // attached Energy (continuation-of-game heuristic: reinforce the
+      // heaviest hitter). Ties broken by lowest instanceId so runs are
+      // deterministic.
+      if (owner.bench.length > 0 && ko.attachedEnergy.length > 0) {
+        const target = owner.bench
+          .slice()
+          .sort((a, b) => b.attachedEnergy.length - a.attachedEnergy.length)[0];
         let moved = 0;
         while (moved < act.max && ko.attachedEnergy.length > 0) {
           const [e] = ko.attachedEnergy.splice(0, 1);
@@ -523,10 +629,36 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
       }
     }
   }
+  // Flygon Sandy Flapping — when this Pokémon is KO'd in the Active Spot
+  // from opponent's damage, discard top 2 of opp's deck.
+  {
+    const hasSandyFlapping = (ko.card.abilities ?? []).some(
+      (a) => a.name === "Sandy Flapping",
+    );
+    if (hasSandyFlapping) {
+      const oppId = opponentOf(ownerId);
+      const opp = state.players[oppId];
+      const top = opp.deck.splice(0, 2);
+      if (top.length > 0) {
+        opp.discard.push(...top);
+        logEvent(state, ownerId, `Sandy Flapping (KO): discards ${top.length} card(s) from ${opp.name}'s deck.`);
+      }
+    }
+  }
+
   const basePrizes = prizeValue(ko.card);
-  const prizes = Math.max(0, basePrizes - prizeReductionFromTools(ko));
+  let reduction = prizeReductionFromTools(ko);
+  // Legacy Energy — once per game per player: if KO'd by opponent's attack,
+  // opp takes 1 fewer Prize.
+  const hasLegacy = ko.attachedEnergy.some((e) => e.name === "Legacy Energy");
+  if (hasLegacy && !owner.legacyEnergyUsed) {
+    reduction += 1;
+    owner.legacyEnergyUsed = true;
+    logEvent(state, ownerId, `Legacy Energy triggers — opponent takes 1 fewer Prize.`);
+  }
+  const prizes = Math.max(0, basePrizes - reduction);
   if (prizes !== basePrizes) {
-    logEvent(state, "system", `${ko.card.name} Knocked Out — prizes reduced (Lillie's Pearl).`);
+    logEvent(state, "system", `${ko.card.name} Knocked Out — prizes reduced.`);
   }
   logEvent(
     state,
@@ -644,9 +776,24 @@ export function endTurn(state: GameState): void {
       }
     }
   }
+  // Ignition Energy: "discard it at the end of your turn." Scan all of the
+  // ending player's Pokémon and discard any attached Ignition Energy cards.
+  for (const p of [prev.active, ...prev.bench]) {
+    if (!p) continue;
+    for (let i = p.attachedEnergy.length - 1; i >= 0; i--) {
+      if (p.attachedEnergy[i].name === "Ignition Energy") {
+        const [e] = p.attachedEnergy.splice(i, 1);
+        prev.discard.push(e);
+        logEvent(state, prev.id, `Ignition Energy discards itself at end of turn.`);
+      }
+    }
+  }
   prev.energyAttachedThisTurn = false;
   prev.supporterPlayedThisTurn = false;
   prev.retreatedThisTurn = false;
+  prev.stadiumUsedThisTurn = false;
+  prev.lastDitchUsedThisTurn = false;
+  prev.lastSupporterNameThisTurn = null;
   // Turn-scoped attack bonuses (Black Belt's Training, Premium Power Pro,
   // Kieran's boost branch) reset at end of the player's turn.
   prev.thisTurnAttackBonuses = [];

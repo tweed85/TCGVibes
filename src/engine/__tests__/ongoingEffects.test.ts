@@ -14,6 +14,7 @@ import {
   effectiveAttackCost,
   prizeReductionFromTools,
   applySurvivalBrace,
+  passiveAttackBonus,
 } from "../ongoingEffects";
 import type {
   GameState,
@@ -292,18 +293,18 @@ describe("stadiumDamageReduction — defender-side reductions", () => {
     expect(stadiumDamageReduction(s, atk, def)).toBe(30);
   });
 
-  it("Neutralization Zone blocks all damage to non-rule-box", () => {
-    const atk = mkInPlay(mkPokemon());
+  it("Neutralization Zone reduces 20 when the attacker has a Rule Box", () => {
+    const atkEx = mkInPlay(mkPokemon({ subtypes: ["Basic", "ex"] }));
     const def = mkInPlay(mkPokemon({ subtypes: ["Basic"] }));
     const s = mkState({ stadium: { card: mkStadium("Neutralization Zone"), controller: "p1" } });
-    expect(stadiumDamageReduction(s, atk, def)).toBeGreaterThanOrEqual(9999);
+    expect(stadiumDamageReduction(s, atkEx, def)).toBe(20);
   });
 
-  it("Neutralization Zone does NOT block damage to a rule-box Pokémon", () => {
-    const atk = mkInPlay(mkPokemon());
-    const defEx = mkInPlay(mkPokemon({ subtypes: ["Basic", "ex"] }));
+  it("Neutralization Zone does nothing when the attacker is non-Rule-Box", () => {
+    const atk = mkInPlay(mkPokemon({ subtypes: ["Basic"] }));
+    const def = mkInPlay(mkPokemon({ subtypes: ["Basic"] }));
     const s = mkState({ stadium: { card: mkStadium("Neutralization Zone"), controller: "p1" } });
-    expect(stadiumDamageReduction(s, atk, defEx)).toBe(0);
+    expect(stadiumDamageReduction(s, atk, def)).toBe(0);
   });
 
   it("Occa Berry reduces 60 vs Fire attacker", () => {
@@ -369,6 +370,77 @@ describe("prizeReductionFromTools — Lillie's Pearl", () => {
       tools: [mkTool("Lillie's Pearl")],
     });
     expect(prizeReductionFromTools(p)).toBe(1);
+  });
+});
+
+describe("passiveAttackBonus — Pokémon-ability buffs", () => {
+  function mkAbility(name: string, text: string) {
+    return { name, type: "Ability", text };
+  }
+
+  it("Garganacl Powerful a-Salt adds +30 to Fighting attackers", () => {
+    const s = mkState();
+    // Holder: Garganacl on bench.
+    const garganacl = mkInPlay(
+      mkPokemon({
+        name: "Garganacl",
+        abilities: [mkAbility("Powerful a-Salt", "Attacks used by your Fighting Pokémon do 30 more damage to your opponent's Active Pokémon (before applying Weakness and Resistance).") as any],
+      }),
+    );
+    // Attacker: Fighting-type.
+    const atk = mkInPlay(mkPokemon({ name: "Koraidon ex", types: ["Fighting"] }));
+    s.players.p1.active = atk;
+    s.players.p1.bench = [garganacl];
+    expect(passiveAttackBonus(s, "p1", atk, null)).toBe(30);
+  });
+
+  it("Non-Fighting attacker gets no Garganacl buff", () => {
+    const s = mkState();
+    const garganacl = mkInPlay(
+      mkPokemon({
+        name: "Garganacl",
+        abilities: [mkAbility("Powerful a-Salt", "Attacks used by your Fighting Pokémon do 30 more damage to your opponent's Active Pokémon (before applying Weakness and Resistance).") as any],
+      }),
+    );
+    const atk = mkInPlay(mkPokemon({ types: ["Fire"] }));
+    s.players.p1.active = atk;
+    s.players.p1.bench = [garganacl];
+    expect(passiveAttackBonus(s, "p1", atk, null)).toBe(0);
+  });
+
+  it("Serperior ex Regal Cheer adds +20 to all your Pokémon's attacks", () => {
+    const s = mkState();
+    const serperior = mkInPlay(
+      mkPokemon({
+        name: "Serperior ex",
+        abilities: [mkAbility("Regal Cheer", "Attacks used by your Pokémon do 20 more damage to your opponent's Active Pokémon (before applying Weakness and Resistance).") as any],
+      }),
+    );
+    const atk = mkInPlay(mkPokemon({ types: ["Water"] }));
+    s.players.p1.active = atk;
+    s.players.p1.bench = [serperior];
+    expect(passiveAttackBonus(s, "p1", atk, null)).toBe(20);
+  });
+
+  it("Multiple passive abilities STACK", () => {
+    const s = mkState();
+    const serperior = mkInPlay(
+      mkPokemon({
+        name: "Serperior ex",
+        abilities: [mkAbility("Regal Cheer", "...") as any],
+      }),
+    );
+    const lilligant = mkInPlay(
+      mkPokemon({
+        name: "Lilligant",
+        abilities: [mkAbility("Sunny Day", "...") as any],
+      }),
+    );
+    const atk = mkInPlay(mkPokemon({ types: ["Grass"] }));
+    s.players.p1.active = atk;
+    s.players.p1.bench = [serperior, lilligant];
+    // Regal Cheer +20, Sunny Day +20 for Grass — total +40.
+    expect(passiveAttackBonus(s, "p1", atk, null)).toBe(40);
   });
 });
 

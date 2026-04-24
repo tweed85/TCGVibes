@@ -78,9 +78,53 @@ export type AbilityEffect =
   | { kind: "drawN"; count: number; oncePerTurn: true }
   | { kind: "healSelf"; amount: number; oncePerTurn: true }
   | { kind: "healAny"; amount: number; oncePerTurn: true } // heal one of your Pokémon
-  | { kind: "searchBasicEnergy"; count: number; oncePerTurn: true }
+  | { kind: "searchBasicEnergy"; count: number; energyType?: EnergyType; oncePerTurn: true }
   | { kind: "attachEnergyFromHand"; energyType: EnergyType; oncePerTurn: true }
+  | { kind: "attachEnergyFromHandThenDraw"; energyType: EnergyType; drawCount: number; oncePerTurn: true } // Teal Dance
   | { kind: "attachEnergyFromDiscardToSelf"; oncePerTurn: true } // any Basic Energy from discard → self
+  | { kind: "attachEnergyFromDiscardToBench"; energyType: EnergyType; oncePerTurn: true } // Dynamotor
+  | { kind: "attachEnergyFromHandToBenchNameN"; energyType: EnergyType; max: number; namePrefix: string; oncePerTurn: true } // Golden Flame: up to 2 Fire to Bench Ethan's
+  | { kind: "moveOwnBasicEnergyBetween"; oncePerTurn: true } // Happy Switch
+  | { kind: "moveDamageOwnToOpp"; counters: number; energyConditionType?: EnergyType; oncePerTurn: true } // Adrena-Brain (needs Darkness attached)
+  | { kind: "applyStatusToOppActive"; status: StatusCondition; activeOnly: boolean; oncePerTurn: true } // Calming Light, Scalding Steam
+  | { kind: "healEachOwn"; amount: number; oncePerTurn: true } // Lovely Fragrance
+  | { kind: "switchToActiveFromBench"; oncePerTurn: true } // Showtime (Meowscarada) — self must be Benched
+  | { kind: "benchFromDiscardHpMax"; hpMax: number; activeOnly: boolean; oncePerTurn: true } // Gentle Fin
+  | { kind: "searchDeckStadium"; oncePerTurn: true } // Changing Seasons
+  | { kind: "searchDeckPokemonNamePrefix"; namePrefix: string; oncePerTurn: true } // Gathering of Blossoms (Erika's)
+  | { kind: "top6RevealSupporter"; oncePerTurn: true; activeOnly: boolean } // Attract Customers
+  | { kind: "peekTopMayDiscard"; oncePerTurn: true } // Snack Seek
+  // -- remaining-unwired sweep --
+  | { kind: "bothPlayersDrawOne"; activeOnly: boolean; oncePerTurn: true } // Alluring Wings
+  | { kind: "flipReturnOppActiveEnergyToHand"; oncePerTurn: true } // Boisterous Wind
+  | { kind: "searchDeckTrainerByName"; trainerName: string; oncePerTurn: true } // Bonded by the Journey
+  | { kind: "flipGustOppWithStatus"; status: StatusCondition; oncePerTurn: true } // Captivating Invitation
+  | { kind: "putCountersOnOppThenSelfKO"; counters: number; oncePerTurn: true } // Cursed Blast
+  | { kind: "swapHandCardWithDeckTop"; oncePerTurn: true } // Evidence Gathering
+  | { kind: "searchEvolutionPokemonGated"; oncePerTurn: true; energyConditionAttached?: EnergyType } // Evolutionary Guidance
+  | { kind: "switchWithActiveIfMegaExInPlay"; oncePerTurn: true } // Excited Dash
+  | { kind: "healAnyIfMegaExTypeInPlay"; amount: number; requiredType: EnergyType; oncePerTurn: true } // Excited Heal
+  | { kind: "healAnyIfEnergyAttached"; amount: number; energyType: EnergyType; oncePerTurn: true } // Fermented Juice
+  | { kind: "discardSelfEnergyDrawToN"; energyType: EnergyType; targetHand: number; oncePerTurn: true } // Flashing Draw
+  | { kind: "oppShuffleToBottomDrawN"; drawCount: number; oncePerTurn: true } // Grand Wing
+  | { kind: "revealOppHandPutOnOppBench"; hpMax: number; oncePerTurn: true } // Look for Prey
+  | { kind: "top4AttachEnergyType"; energyType: EnergyType; oncePerTurn: true } // Metal Maker
+  | { kind: "searchEvolutionPokemonOfType"; energyType: EnergyType; max: number; oncePerTurn: true } // Metallic Signal
+  | { kind: "attachNFromDiscardThenSelfKO"; count: number; oncePerTurn: true } // Overvolt Discharge
+  | { kind: "attachMixedFromHand"; typeA: EnergyType; typeB: EnergyType; max: number; oncePerTurn: true } // Pyro Dance
+  | { kind: "flipChooseStatusOpp"; oncePerTurn: true } // Selective Slime
+  | { kind: "flipDiscardRandomFromOppHand"; oncePerTurn: true } // Sky Hunt
+  | { kind: "switchBenchedTypeToActiveWithStatus"; energyType: EnergyType; status: StatusCondition; excludeSameName: boolean; oncePerTurn: true } // Subjugating Chains
+  | { kind: "swapWithBenchAndForceOppPromote"; oncePerTurn: true } // Torrential Whirlpool
+  | { kind: "discardHandEnergyStatusOppActive"; energyType: EnergyType; status: StatusCondition; oncePerTurn: true } // Torrid Scales
+  | { kind: "putHandToBottomDrawToN"; targetHand: number; oncePerTurn: true } // Up-Tempo
+  | { kind: "attachEnergyFromHandToActiveNamePrefix"; namePrefix: string; oncePerTurn: true } // Lethargic Charge
+  | { kind: "devolveOppEvolution"; activeOnly: boolean; oncePerTurn: true } // Ancient Wing
+  | { kind: "discardToolFromHandGustOpp"; toolName: string; oncePerTurn: true } // Beckoning Tail
+  | { kind: "discardBottomDeckSelfToTop"; oncePerTurn: true } // Flustered Leap
+  | { kind: "drawToNIfSupporterPlayedName"; targetHand: number; supporterName: string; oncePerTurn: true } // Shadowy Envoy
+  | { kind: "searchEnergyIfSupporterPlayedName"; energyType: EnergyType; count: number; supporterName: string; oncePerTurn: true } // Frilled Generator
+  | { kind: "emergencyRotationFromHand"; requiresOppStage2: boolean; oncePerTurn: true } // Emergency Rotation (activated from hand)
   | { kind: "searchDeckAnyCard"; oncePerTurn: true; condition?: AbilityCondition } // search for any 1 card
   | { kind: "searchDeckPokemon"; oncePerTurn: true } // search for any 1 Pokémon
   | { kind: "switchWithBench"; oncePerTurn: true }
@@ -186,6 +230,21 @@ export interface PlayerState {
   // Budew's Itchy Pollen and similar attacks set this on the opponent so they
   // can't play Item cards during their next turn. Cleared when that turn ends.
   itemsBlockedNextTurn: boolean;
+  // True if this player has used the in-play Stadium's activated ability
+  // this turn (stadiums with once-per-turn "may" effects).
+  stadiumUsedThisTurn: boolean;
+  // Tracks "Last-Ditch" ability group usage ("You can't use more than 1
+  // Ability that has 'Last-Ditch' in its name each turn."). Cleared at end
+  // of turn.
+  lastDitchUsedThisTurn: boolean;
+  // Name of the last Supporter this player played this turn (null if none).
+  // Used by abilities gated on a specific Supporter having been played
+  // (Shadowy Envoy → Janine's Secret Art, Frilled Generator → Canari).
+  // Cleared at end of turn.
+  lastSupporterNameThisTurn: string | null;
+  // Set true once this player's Legacy Energy has triggered its "opp takes
+  // 1 fewer Prize" effect. "Can't be applied more than once per game."
+  legacyEnergyUsed: boolean;
   isAI: boolean;
 }
 
@@ -232,6 +291,50 @@ export type PendingPickFallback =
   | "bottomOfDeck" // a few peek effects
   | "returnToDiscard"; // discard-recovery effects
 
+// Reveal-opponent's-hand prompt. The initiator (`player`) picks which cards
+// from the target's hand (`target`) to act on (discard / move to bottom).
+// Filter restricts which hand cards are eligible.
+export interface PendingHandReveal {
+  player: PlayerId;
+  target: PlayerId;
+  label: string;
+  min: number;
+  max: number;
+  filter: "item" | "tool" | "itemOrTool" | "supporter" | "any";
+  action: "discard" | "toBottomOfDeck";
+  // Optional follow-up run by the resolver after the pick completes.
+  postAction?:
+    | { kind: "drawUntilHand"; targetSize: number } // Naveen
+    | { kind: "searchDeckAnyPokemon"; max: number; label: string }; // Ultra Ball
+}
+
+// Click-an-in-play-Pokémon prompt. `scope` restricts which side/slot is
+// pickable; `filter` narrows further (e.g. "only Pokémon with a Tool").
+// `action` tells the resolver what to do with the chosen target.
+export interface PendingInPlayTarget {
+  player: PlayerId; // whose click resolves this
+  label: string;
+  scope: "own" | "opp" | "both";
+  slot: "active" | "bench" | "anywhere";
+  filter?:
+    | "hasTool"
+    | "hasSpecialEnergy"
+    | "hasAnyEnergy"
+    | "hasBasicEnergy"
+    | "isBasic"
+    | "anyPokemon";
+  // Action descriptor. `remaining` supports multi-pick effects (Tool Scrapper).
+  action:
+    | { kind: "enhancedHammer" }
+    | { kind: "crushingHammer" }
+    | { kind: "pokemonCatcher" }
+    | { kind: "toolScrapper"; remaining: number }
+    | { kind: "heavyBaton"; count: number; source: string } // source = KO'd Pokémon instanceId (already gone; source fed via state)
+    | { kind: "scoopUpCyclone" }
+    | { kind: "lisiasAppeal" }
+    | { kind: "nPlanEnergySource"; remaining: number };
+}
+
 export interface PendingPick {
   player: PlayerId;
   // Human-readable description of what to pick.
@@ -247,6 +350,11 @@ export interface PendingPick {
   // Where the pool came from — surfaced in the UI so the user knows Prize
   // cards are never involved in a deck search.
   source: "deck" | "deckTop" | "deckBottom" | "discard";
+  // If true, the turn ends immediately when this pick resolves (Lumiose City).
+  endTurnOnResolve?: boolean;
+  // If true, picked Pokémon go straight onto the Bench instead of the hand
+  // (Nest Ball, Buddy-Buddy Poffin, Hop's Bag, Lumiose City).
+  toBench?: boolean;
 }
 
 export interface LogEntry {
@@ -287,6 +395,28 @@ export interface GameState {
   // If non-null, a player is being asked to pick cards from a pool (search /
   // peek / discard recovery). Blocks normal actions until resolved.
   pendingPick: PendingPick | null;
+  // If non-null, the named player must click one of their own benched
+  // Pokémon to complete a switch (e.g., the Switch item). The UI shows a
+  // status prompt; clicking a bench Pokémon resolves it.
+  pendingSwitchTarget: PlayerId | null;
+  // If non-null, a player must click an in-play Pokémon (own or opponent,
+  // scoped by the action) to complete a trainer effect that needs a target
+  // (Enhanced Hammer, Crushing Hammer on heads, Tool Scrapper, Heavy Baton,
+  // Scoop Up Cyclone).
+  pendingInPlayTarget: PendingInPlayTarget | null;
+  // If non-null, a hand-reveal pick is pending (Eri, Xerosic's Machinations).
+  pendingHandReveal: PendingHandReveal | null;
+  // If non-null, Rare Candy has been played on a Basic and the player must
+  // pick which Stage 2 (from their hand) to use when multiple match.
+  pendingRareCandyChoice: {
+    player: PlayerId;
+    targetInstanceId: string;
+    handIndexes: number[]; // indexes into the player's hand at the moment of the pick
+  } | null;
+  // Override for `snipeOne`-style attacks: when set, the effect targets the
+  // opponent's bench Pokémon at this index instead of auto-picking. Cleared
+  // after the attack.
+  snipeTargetOverride: number | null;
   // Pre-game coin flip / first-player choice. Non-null until the winner has
   // picked first/second and hands are about to be dealt.
   coinFlip: CoinFlipState | null;

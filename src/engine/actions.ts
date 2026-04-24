@@ -26,7 +26,13 @@ import {
   resolveBenchKOs,
 } from "./rules";
 import { resolveAttackEffects } from "./effects";
-import { fireTriggeredOnEvolve } from "./abilities";
+import {
+  fireTriggeredOnBench,
+  fireTriggeredOnEvolve,
+  fireTriggeredOnMoveToActive,
+  fireTriggeredOnMoveToBench,
+} from "./abilities";
+import { setDeckSearchPick } from "./pendingPick";
 import {
   applySurvivalBrace,
   benchPlacementDamage,
@@ -36,6 +42,7 @@ import {
   effectiveMaxHp,
   effectiveRetreatCost,
   maxBenchSize,
+  passiveAttackBonus,
   stadiumAttackBonus,
   stadiumDamageReduction,
   toolOnDamageActions,
@@ -82,6 +89,8 @@ export function playBasicToBench(
   }
   pl.bench.push(p);
   logEvent(state, player, `plays ${card.name} to the Bench.`);
+  // Fire any triggered-on-bench abilities (Meowth ex Last-Ditch Catch, etc.).
+  fireTriggeredOnBench(state, player, p);
   return ok;
 }
 
@@ -111,11 +120,14 @@ export function evolve(
   if (!target) return fail("Target not in play.");
   if (target.card.name !== card.evolvesFrom)
     return fail(`${card.name} evolves from ${card.evolvesFrom}, not ${target.card.name}.`);
-  // Forest of Vitality lets Grass Pokémon evolve on their play turn (after turn 1).
-  if (target.playedThisTurn && !canEvolveOnPlayTurn(state, card))
-    return fail("Can't evolve a Pokémon played this turn.");
+  // Check once-per-turn evolution FIRST so nothing (including Forest of
+  // Vitality) can chain Basic → Stage 1 → Stage 2 on the same instance.
   if (target.evolvedThisTurn) return fail("Already evolved this turn.");
   if (state.turn === 1) return fail("No evolving on the first turn.");
+  // Forest of Vitality only overrides the played-this-turn rule for a Basic
+  // Grass target on its first evolution of the turn.
+  if (target.playedThisTurn && !canEvolveOnPlayTurn(state, target))
+    return fail("Can't evolve a Pokémon played this turn.");
 
   pl.hand.splice(handIndex, 1);
   target.evolvedFrom.push(target.card);
@@ -168,10 +180,57 @@ export function attachEnergy(
     return fail("Must select an Energy card.");
   const target = findInPlayByInstance(state, player, targetInstanceId);
   if (!target) return fail("Target not in play.");
+  // Team Rocket's Energy: "This card can only be attached to a Team Rocket's
+  // Pokémon. If this card is attached to anything other than a Team Rocket's
+  // Pokémon, discard this card." Block the attach pre-emptively for clearer UX.
+  if (card.name === "Team Rocket's Energy" && !target.card.name.startsWith("Team Rocket's ")) {
+    return fail("Team Rocket's Energy can only be attached to a Team Rocket's Pokémon.");
+  }
   pl.hand.splice(handIndex, 1);
   target.attachedEnergy.push(card as EnergyCard);
   pl.energyAttachedThisTurn = true;
   logEvent(state, player, `attaches ${card.name} to ${target.card.name}.`);
+  // On-attach triggers for special energies.
+  const oppId2: PlayerId = player === "p1" ? "p2" : "p1";
+  void oppId2; // suppress unused — reserved for future use
+  if (card.name === "Enriching Energy") {
+    // "When you attach this card from your hand to a Pokémon, draw 4 cards."
+    let drawn = 0;
+    for (let i = 0; i < 4; i++) {
+      const c = pl.deck.shift();
+      if (!c) break;
+      pl.hand.push(c);
+      drawn++;
+    }
+    if (drawn > 0) logEvent(state, player, `Enriching Energy: draws ${drawn}.`);
+  } else if (card.name === "Jet Energy") {
+    // "When you attach this card from your hand to 1 of your Benched Pokémon,
+    // switch that Pokémon with your Active Pokémon." Only triggers if the
+    // attach target is a benched ally.
+    const benchIdx = pl.bench.findIndex((b) => b.instanceId === target.instanceId);
+    if (benchIdx >= 0 && pl.active) {
+      const incoming = pl.bench.splice(benchIdx, 1)[0];
+      const outgoing = pl.active;
+      clearAllStatuses(outgoing);
+      pl.active = incoming;
+      pl.bench.push(outgoing);
+      logEvent(state, player, `Jet Energy: switches ${outgoing.card.name} → ${incoming.card.name}.`);
+      fireTriggeredOnMoveToActive(state, player, incoming);
+      fireTriggeredOnMoveToBench(state, player, outgoing);
+    }
+  } else if (card.name === "Telepathic Psychic Energy") {
+    // "When you attach this card from your hand to a Psychic Pokémon, search
+    // your deck for up to 2 Basic Psychic Pokémon and put them onto your
+    // Bench. Then, shuffle your deck."
+    if (target.card.types.includes("Psychic") && pl.bench.length < 5) {
+      const pred = (c: Card) =>
+        c.supertype === "Pokémon" && c.subtypes.includes("Basic") && c.types.includes("Psychic");
+      const slots = Math.min(2, 5 - pl.bench.length);
+      if (!setDeckSearchPick(state, player, pred, slots, "Telepathic Psychic Energy: pick up to 2 Basic Psychic Pokémon to Bench", { toBench: true })) {
+        logEvent(state, player, "finds no Basic Psychic Pokémon.");
+      }
+    }
+  }
   return ok;
 }
 
@@ -241,6 +300,22 @@ export function playTrainer(
     // Stage 2s) — sweep bench KOs so any Pokémon now past its cap is
     // removed before further actions run.
     resolveBenchKOs(state);
+    // Area Zero Underdepths allows 8 bench; if that Stadium just left play
+    // (replaced by a normal one), trim the bench back to 5 by discarding
+    // the newest benched Pokémon (and attached cards).
+    for (const pid of ["p1", "p2"] as PlayerId[]) {
+      const side = state.players[pid];
+      while (side.bench.length > 5) {
+        const [discarded] = side.bench.splice(side.bench.length - 1, 1);
+        side.discard.push(
+          discarded.card,
+          ...discarded.evolvedFrom,
+          ...discarded.attachedEnergy,
+          ...(discarded.tools ?? []),
+        );
+        logEvent(state, "system", `${discarded.card.name} is discarded (bench reduced to 5).`);
+      }
+    }
     return ok;
   }
 
@@ -249,7 +324,10 @@ export function playTrainer(
   if (block) return fail(block);
   pl.hand.splice(handIndex, 1);
   applyTrainerEffect(state, player, t, target);
-  if (isSupporter) pl.supporterPlayedThisTurn = true;
+  if (isSupporter) {
+    pl.supporterPlayedThisTurn = true;
+    pl.lastSupporterNameThisTurn = t.name;
+  }
   pl.discard.push(t);
   logEvent(state, player, `plays ${t.name}.`);
   return ok;
@@ -301,6 +379,10 @@ export function retreat(
   pl.bench.push(oldActive);
   pl.retreatedThisTurn = true;
   logEvent(state, player, `retreats ${oldActive.card.name}; ${newActive.card.name} is now Active.`);
+  // Triggered-on-move hooks (Buzzing Boost on new Active, Fall Back to Reload
+  // / Zero to Hero on the one that moved to Bench).
+  fireTriggeredOnMoveToActive(state, player, newActive);
+  fireTriggeredOnMoveToBench(state, player, oldActive);
   return ok;
 }
 
@@ -325,6 +407,7 @@ export function promoteBenchToActive(
   state.pendingPromote = null;
   state.phase = "main";
   logEvent(state, player, `promotes ${promoted.card.name} to Active.`);
+  fireTriggeredOnMoveToActive(state, player, promoted);
 
   const cont = state.onPromoteResolved;
   state.onPromoteResolved = null;
@@ -357,6 +440,7 @@ function executeAttackHit(
   const def = state.players[defOwner].active;
   let damage = move.damage;
   damage += stadiumAttackBonus(state, atk, def);
+  damage += passiveAttackBonus(state, player, atk, def);
   damage += turnAttackBonus(state, player, atk, def);
   if (def) {
     const atkType = atk.card.types[0];
@@ -382,15 +466,32 @@ function executeAttackHit(
     damage,
   });
   damage = result.damage;
-  // Survival Brace: cap damage so full-HP defender survives with 10 HP.
+  // Survival Brace: cap damage so full-HP defender survives with 10 HP; it
+  // discards after triggering.
+  let survivalBraceTriggered = false;
   if (def && damage > 0) {
+    const before = damage;
     damage = applySurvivalBrace(state, def, damage);
+    if (damage !== before) survivalBraceTriggered = true;
   }
   logEvent(state, player, `attacks with ${move.name} for ${damage}.`);
   if (damage > 0) applyDamage(state, defOwner, damage);
-  // Tool "on damage" triggers (Lucky Helmet draw, Punk Helmet counter,
-  // Team Rocket's Hypnotizer asleep, Deluxe Bomb counter).
+  // Spiky Energy — "If the Pokémon this card is attached to is in the Active
+  // Spot and is damaged by an attack, put 2 damage counters on the Attacking
+  // Pokémon." Fires once per Spiky Energy attached, even on KO.
   if (def && damage > 0) {
+    const spikyCount = def.attachedEnergy.filter((e) => e.name === "Spiky Energy").length;
+    if (spikyCount > 0) {
+      const counter = spikyCount * 20;
+      atk.damage += counter;
+      logEvent(state, "system", `${atk.card.name} takes ${counter} damage from Spiky Energy.`);
+    }
+  }
+  // Tool "on damage" triggers (Lucky Helmet draw, Punk Helmet counter,
+  // Team Rocket's Hypnotizer asleep, Deluxe Bomb counter). Deluxe Bomb
+  // self-discards after triggering.
+  if (def && damage > 0) {
+    const toDiscardAfter: string[] = [];
     for (const act of toolOnDamageActions(state, def, true)) {
       if (act.kind === "drawCards") {
         const d = state.players[defOwner];
@@ -405,9 +506,19 @@ function executeAttackHit(
       } else if (act.kind === "counterDamage") {
         atk.damage += act.damage;
         logEvent(state, "system", `${atk.card.name} takes ${act.damage} counter damage.`);
+        // Deluxe Bomb is a single-shot item-tool that discards after trigger.
+        if (def.tools.some((t) => t.name === "Deluxe Bomb")) toDiscardAfter.push("Deluxe Bomb");
       } else if (act.kind === "applyStatusToAttacker") {
         if (!atk.statuses.includes(act.status)) atk.statuses.push(act.status);
         logEvent(state, "system", `${atk.card.name} is now ${act.status}.`);
+      }
+    }
+    for (const name of toDiscardAfter) {
+      const i = def.tools.findIndex((t) => t.name === name);
+      if (i >= 0) {
+        const [tool] = def.tools.splice(i, 1);
+        state.players[defOwner].discard.push(tool);
+        logEvent(state, defOwner, `discards ${tool.name} (triggered).`);
       }
     }
   }
@@ -423,6 +534,15 @@ function executeAttackHit(
           logEvent(state, defOwner, `discards ${tool.name} (berry triggered).`);
         }
       }
+    }
+  }
+  // Survival Brace: one-shot tool, discards after trigger.
+  if (def && survivalBraceTriggered) {
+    const i = def.tools.findIndex((t) => t.name === "Survival Brace");
+    if (i >= 0) {
+      const [tool] = def.tools.splice(i, 1);
+      state.players[defOwner].discard.push(tool);
+      logEvent(state, defOwner, `discards ${tool.name} (Survival Brace triggered).`);
     }
   }
   if ((state.phase as string) !== "gameOver") {
@@ -516,6 +636,8 @@ export function attack(
 
   executeAttackHit(state, player, attackIndex);
   finishHit(state, player, attackIndex, false);
+  // Per-attack overrides (snipe target, etc.) are single-use — consumed.
+  state.snipeTargetOverride = null;
   return ok;
 }
 
@@ -529,6 +651,7 @@ export function resumeSecondAttack(state: GameState): void {
   state.pendingSecondAttack = null;
   executeAttackHit(state, player, attackIndex);
   finishHit(state, player, attackIndex, true);
+  state.snipeTargetOverride = null;
 }
 
 export function endTurn(state: GameState, player: PlayerId): ActionResult {

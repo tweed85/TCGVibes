@@ -6,9 +6,11 @@
   --text: #e2e8f0;
   --muted: #94a3b8;
   --accent: #f59e0b;
+  --accent-hi: #fbbf24;
   --danger: #ef4444;
   --ok: #22c55e;
   --purple: #9333ea;
+  --info: #22d3ee;
   --card-bg: #f8fafc;
   --card-text: #0f172a;
 
@@ -19,6 +21,40 @@
   --hand-card-h: 100px;
   --mini-card-w: 58px;
   --mini-card-h: 78px;
+
+  /* Typography scale. */
+  --text-xs: 10px;
+  --text-sm: 11px;
+  --text-base: 12px;
+  --text-lg: 14px;
+  --text-xl: 16px;
+
+  /* Shadow tokens. */
+  --shadow-card: 0 2px 6px rgba(0, 0, 0, 0.4);
+  --shadow-card-hover: 0 6px 14px rgba(0, 0, 0, 0.55);
+  --shadow-modal: 0 20px 60px rgba(0, 0, 0, 0.8);
+
+  /* Energy-type palette (used for colored energy pips and attack-cost chips). */
+  --energy-fire: #ef4444;
+  --energy-water: #3b82f6;
+  --energy-grass: #22c55e;
+  --energy-lightning: #eab308;
+  --energy-psychic: #a855f7;
+  --energy-fighting: #b45309;
+  --energy-darkness: #1f2937;
+  --energy-metal: #94a3b8;
+  --energy-dragon: #c084fc;
+  --energy-fairy: #ec4899;
+  --energy-colorless: #cbd5e1;
+}
+
+@keyframes tcg-pulse-glow {
+  0%, 100% { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(34, 211, 238, 0.6); }
+  50% { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 0 6px rgba(34, 211, 238, 0); }
+}
+@keyframes tcg-attention {
+  0%, 100% { transform: translateX(-50%) scale(1); }
+  50% { transform: translateX(-50%) scale(1.04); }
 }
 
 * { box-sizing: border-box; }
@@ -164,14 +200,55 @@ body {
 /*  Board — two player strips sandwiching a shared Stadium slot              */
 /* -------------------------------------------------------------------------- */
 
+.turn-indicator {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: var(--text-base);
+  font-weight: 700;
+  letter-spacing: 1px;
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  border: 2px solid transparent;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  animation: tcg-attention 0.6s ease-out 1;
+}
+.turn-indicator.yours {
+  background: rgba(245, 158, 11, 0.95);
+  color: #111;
+  border-color: var(--accent-hi);
+}
+.turn-indicator.theirs {
+  /* Cyan-tinted pulse so opponent turn is unmistakable even on dark bg. */
+  background: rgba(6, 182, 212, 0.92);
+  color: #061121;
+  border-color: #67e8f9;
+  animation: tcg-pulse-glow 2.2s ease-in-out infinite;
+}
+.turn-indicator .turn-meta {
+  font-weight: 500;
+  font-size: var(--text-sm);
+  opacity: 0.85;
+  letter-spacing: 0.4px;
+}
+
 .board {
   grid-area: board;
   display: grid;
-  /* Each side sizes to whatever its cards need (min-content floor so cards
-     never collapse below their own height); Stadium sits in the middle at
-     its natural size. This prevents the old `1fr auto 1fr` from squeezing
-     either side below a single card's height and forcing overlap. */
-  grid-template-rows: min-content auto min-content;
+  /* Stadium lives as a right-side column that spans both player rows, so the
+     Active-above-Active axis is preserved and the Stadium reads as a shared
+     side zone rather than a strip between the two Actives. */
+  grid-template-columns: 1fr 140px;
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    "opp-side stadium"
+    "my-side  stadium";
   gap: 8px;
   min-height: 0;
   /* Subtle green felt so the mat reads like a playmat instead of a panel. */
@@ -181,6 +258,9 @@ body {
   border-radius: 10px;
   padding: 8px;
 }
+
+.side.opponent { grid-area: opp-side; }
+.side.me { grid-area: my-side; }
 
 /* Each side is a 3-row strip:
      back-row   (prizes | meta | deck/discard)
@@ -245,10 +325,15 @@ body {
 }
 .prize-card {
   aspect-ratio: 3 / 4;
-  background: linear-gradient(135deg, #7c2d12, #b91c1c);
+  background:
+    linear-gradient(135deg, #7c2d12, #b91c1c),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.05) 0 3px, transparent 3px 6px);
+  background-blend-mode: overlay;
   border-radius: 3px;
   min-height: 14px;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 1px 2px rgba(0, 0, 0, 0.5);
 }
 .prize-card.empty {
   background: transparent;
@@ -311,14 +396,21 @@ body {
   position: absolute;
   bottom: 2px;
   right: 2px;
-  background: rgba(15, 23, 42, 0.85);
+  background: rgba(0, 0, 0, 0.78);
   color: #fff;
   font-weight: 700;
-  font-size: 10px;
-  padding: 1px 5px;
+  font-size: var(--text-sm);
+  padding: 1px 6px;
   border-radius: 8px;
   z-index: 2;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
+.zone-stack[role="button"] {
+  cursor: pointer;
+  transition: filter 0.12s ease, transform 0.12s ease;
+}
+.zone-stack[role="button"]:hover { filter: brightness(1.2); transform: translateY(-1px); }
 .zone-stack.empty .stack-slot {
   border: 1px dashed rgba(148, 163, 184, 0.35);
   border-radius: 5px;
@@ -364,36 +456,48 @@ body {
 .card.empty-slot {
   width: var(--card-w);
   min-height: var(--card-h);
-  background: transparent;
-  border: 1px dashed #475569;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(148, 163, 184, 0.05) 0 6px,
+      transparent 6px 14px
+    );
+  border: 1px dashed rgba(148, 163, 184, 0.35);
   color: #64748b;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: var(--text-xs);
   cursor: default;
+  box-shadow: none;
 }
+.card.empty-slot:hover { transform: none; box-shadow: none; }
 
 /* -------------------------------------------------------------------------- */
 /*  Stadium slot — shared zone between the two sides                          */
 /* -------------------------------------------------------------------------- */
 
 .stadium-slot {
+  grid-area: stadium;
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: 6px 10px;
-  min-height: calc(var(--mini-card-h) + 20px);
-  margin: 2px 0;
-  border-top: 1px dashed rgba(124, 58, 237, 0.4);
-  border-bottom: 1px dashed rgba(124, 58, 237, 0.4);
-  background:
-    linear-gradient(to right, transparent, rgba(124, 58, 237, 0.06), transparent);
+  gap: 8px;
+  padding: 10px 8px;
+  min-width: 0;
+  border-left: 2px dashed rgba(124, 58, 237, 0.4);
+  background: linear-gradient(
+    to right,
+    rgba(124, 58, 237, 0.08),
+    transparent 70%
+  );
 }
 .stadium-card-wrap {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
 }
 .stadium-card-wrap > .card {
   width: var(--mini-card-w);
@@ -407,14 +511,22 @@ body {
   font-weight: 600;
 }
 .stadium-empty {
-  font-size: 10px;
-  color: rgba(148, 163, 184, 0.6);
+  font-size: var(--text-xs);
+  color: rgba(148, 163, 184, 0.75);
   text-transform: uppercase;
   letter-spacing: 1px;
-  border: 1px dashed rgba(124, 58, 237, 0.3);
+  border: 1px dashed rgba(124, 58, 237, 0.35);
   border-radius: 4px;
-  padding: 4px 12px;
+  padding: 5px 14px;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(167, 139, 250, 0.05) 0 6px,
+      transparent 6px 14px
+    );
+  font-weight: 600;
 }
+.stadium-empty::before { content: "🏟 "; opacity: 0.55; }
 
 /* -------------------------------------------------------------------------- */
 /*  Hand strip (player)                                                       */
@@ -493,13 +605,27 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--text-sm);
   min-height: 16px;
 }
-.action-bar .status-line .msg { color: var(--accent); flex: 1; }
+.action-bar .status-line .msg {
+  color: var(--accent);
+  flex: 1;
+  font-weight: 500;
+}
+.action-bar .status-line .msg.waiting {
+  color: var(--info);
+  animation: tcg-blink 1.8s ease-in-out infinite;
+}
+@keyframes tcg-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
 .action-bar .status-line .promote-msg {
   color: var(--danger);
   font-weight: 700;
+  letter-spacing: 0.4px;
+  animation: tcg-blink 1.2s ease-in-out infinite;
 }
 .action-bar .status-line .turn-flags {
   display: flex;
@@ -538,7 +664,29 @@ body {
 .action-bar .group.end { margin-left: auto; }
 
 .action-bar button { min-height: 36px; }
-.action-bar button.ability { border-color: var(--purple); }
+.action-bar button.ability {
+  border-color: var(--purple);
+  background: linear-gradient(180deg, rgba(147, 51, 234, 0.2), rgba(147, 51, 234, 0.08));
+  color: #e9d5ff;
+}
+.action-bar button.ability:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(147, 51, 234, 0.35), rgba(147, 51, 234, 0.15));
+  border-color: #c084fc;
+}
+/* Attack buttons: use accent as the "primary action" affordance. */
+.action-bar .attack-btn {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.25), rgba(245, 158, 11, 0.08));
+  border-color: rgba(245, 158, 11, 0.6);
+  color: #fef3c7;
+}
+.action-bar .attack-btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.45), rgba(245, 158, 11, 0.18));
+  border-color: var(--accent-hi);
+}
+.action-bar .attack-btn .atk-name { color: #fff; }
+.action-bar .attack-btn .atk-damage { color: var(--accent-hi); font-weight: 700; }
+/* Retreat buttons: cool tone so they read as a different class of action. */
+.action-bar .group:nth-child(n) > .group-label { /* no-op — specificity anchor */ }
 
 /* -------------------------------------------------------------------------- */
 /*  Log (floating panel)                                                      */
@@ -575,10 +723,20 @@ body {
   font-size: 11px;
   margin-top: 4px;
 }
-.log-content .entry { line-height: 1.4; }
+.log-content .entry { line-height: 1.45; padding: 1px 2px; }
 .log-content .entry.p1 { color: #fbbf24; }
 .log-content .entry.p2 { color: #60a5fa; }
 .log-content .entry.system { color: #94a3b8; font-style: italic; }
+.log-content .entry.turn-sep {
+  border-top: 1px dashed rgba(148, 163, 184, 0.22);
+  margin-top: 4px;
+  padding-top: 4px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-style: normal;
+}
 
 /* Floating extras wrapper lives between hand and action bar so it doesn't
    steal the bottom slot from the action bar. */
@@ -599,21 +757,34 @@ body {
   color: var(--card-text);
   border-radius: 6px;
   padding: 6px;
-  font-size: 11px;
+  font-size: var(--text-sm);
   cursor: pointer;
   user-select: none;
   border: 2px solid transparent;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
 }
-
-.card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.3); }
+.card:hover:not(.empty-slot):not(.selected) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+.card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.35), var(--shadow-card-hover);
+  transform: translateY(-1px);
+}
 .card.facedown {
   background: linear-gradient(135deg, #1e40af, #3730a3);
   color: #fff;
   justify-content: center;
   align-items: center;
+  /* Subtle diagonal sheen so facedown cards read as patterned, not flat. */
+  background-image:
+    linear-gradient(135deg, #1e40af, #3730a3),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.04) 0 3px, transparent 3px 6px);
 }
 .card .name { font-weight: 600; font-size: 12px; line-height: 1.15; }
 .card .type { color: #64748b; font-size: 10px; line-height: 1.15; }
@@ -647,11 +818,17 @@ body {
   flex-wrap: wrap;
 }
 .card .status {
-  font-size: 9px;
+  font-size: var(--text-xs);
   font-weight: 700;
-  padding: 0 3px;
-  border-radius: 2px;
+  padding: 1px 4px;
+  border-radius: 3px;
   color: white;
+  min-width: 26px;
+  text-align: center;
+  letter-spacing: 0.3px;
+  outline: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
 }
 .status-asleep { background: #6366f1; }
 .status-burned { background: #dc2626; }
@@ -710,19 +887,21 @@ body {
 }
 .card.in-play .hp-badge {
   align-self: flex-end;
-  background: rgba(15, 23, 42, 0.82);
+  background: rgba(15, 23, 42, 0.92);
   color: #fff;
   font-weight: 700;
-  font-size: 11px;
-  padding: 1px 5px;
+  font-size: var(--text-base);
+  padding: 2px 7px;
   border-radius: 10px;
   letter-spacing: 0.2px;
-  min-width: 34px;
+  min-width: 38px;
   text-align: center;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
 .card.in-play .hp-badge[data-low="true"] {
-  background: rgba(220, 38, 38, 0.92);
+  background: rgba(239, 68, 68, 0.98);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.2);
 }
 .card.in-play .statuses {
   align-self: flex-start;
@@ -730,23 +909,55 @@ body {
   gap: 2px;
   flex-wrap: wrap;
 }
-.card.in-play .in-play-overlay .energy-badge {
+.card.in-play .in-play-overlay .energy-row {
   align-self: flex-start;
-  background: rgba(37, 99, 235, 0.92);
-  color: #fff;
-  font-weight: 700;
-  font-size: 10px;
-  padding: 1px 5px;
-  border-radius: 8px;
-  letter-spacing: 1px;
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+  max-width: 70%;
 }
+.card.in-play .in-play-overlay .energy-pip {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.75);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+  line-height: 1;
+}
+.card.in-play .in-play-overlay .energy-pip.energy-Fire { background: var(--energy-fire); }
+.card.in-play .in-play-overlay .energy-pip.energy-Water { background: var(--energy-water); }
+.card.in-play .in-play-overlay .energy-pip.energy-Grass { background: var(--energy-grass); }
+.card.in-play .in-play-overlay .energy-pip.energy-Lightning { background: var(--energy-lightning); color: #111; text-shadow: 0 1px 1px rgba(255,255,255,0.6); }
+.card.in-play .in-play-overlay .energy-pip.energy-Psychic { background: var(--energy-psychic); }
+.card.in-play .in-play-overlay .energy-pip.energy-Fighting { background: var(--energy-fighting); }
+.card.in-play .in-play-overlay .energy-pip.energy-Darkness { background: var(--energy-darkness); }
+.card.in-play .in-play-overlay .energy-pip.energy-Metal { background: var(--energy-metal); color: #111; text-shadow: 0 1px 1px rgba(255,255,255,0.5); }
+.card.in-play .in-play-overlay .energy-pip.energy-Dragon { background: var(--energy-dragon); }
+.card.in-play .in-play-overlay .energy-pip.energy-Fairy { background: var(--energy-fairy); }
+.card.in-play .in-play-overlay .energy-pip.energy-Colorless { background: var(--energy-colorless); color: #111; text-shadow: 0 1px 1px rgba(255,255,255,0.5); }
+/* Wildcard sentinel "*" for Prism/Luminous/Legacy/Neo Upper. */
+.card.in-play .in-play-overlay .energy-pip.energy-wild {
+  background: conic-gradient(
+    var(--energy-fire), var(--energy-lightning), var(--energy-grass),
+    var(--energy-water), var(--energy-psychic), var(--energy-fighting),
+    var(--energy-darkness), var(--energy-fire)
+  );
+}
+
 .card.in-play .in-play-overlay .tool-badge {
   align-self: flex-end;
   background: rgba(5, 150, 105, 0.92);
   color: #fff;
-  font-size: 10px;
-  padding: 1px 4px;
+  font-size: var(--text-xs);
+  padding: 1px 5px;
   border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
 .muted { color: var(--muted); font-size: 11px; }
@@ -761,18 +972,40 @@ button {
   border: 1px solid var(--panel-3);
   border-radius: 4px;
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: var(--text-base);
   cursor: pointer;
   min-height: 32px;
-  transition: background 0.1s;
+  transition: background 0.1s ease, transform 0.08s ease, box-shadow 0.1s ease, border-color 0.1s ease;
 }
-button:hover:not(:disabled) { background: var(--panel-3); }
-button:disabled { opacity: 0.4; cursor: not-allowed; }
+button:hover:not(:disabled) {
+  background: var(--panel-3);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+button:active:not(:disabled) { transform: translateY(0); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--panel-2) 0 6px,
+    rgba(255, 255, 255, 0.03) 6px 12px
+  );
+  color: var(--muted);
+}
 button.primary {
   background: var(--accent);
   color: #1f2937;
   border-color: var(--accent);
   font-weight: 600;
+}
+button.primary:hover:not(:disabled) {
+  background: var(--accent-hi);
+  border-color: var(--accent-hi);
 }
 
 /* Winner overlay. */
@@ -807,6 +1040,8 @@ button.primary {
   }
   .header h1 { font-size: 14px; }
   .header .meta { font-size: 10px; }
+  /* Keep the side Stadium column but narrow it so bench keeps its width. */
+  .board { grid-template-columns: 1fr 110px; }
 }
 
 /* Short viewports: keep things tight vertically. */
@@ -901,8 +1136,27 @@ button.primary {
     min-height: var(--mini-card-h);
   }
 
-  .stadium-slot { padding: 2px 4px; min-height: 0; }
-  .stadium-card-wrap { gap: 6px; }
+  /* Collapse the right-side Stadium column back to a full-width strip below
+     the player rows on narrow screens. The side column would crush bench
+     content otherwise. */
+  .board {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    grid-template-areas:
+      "opp-side"
+      "my-side"
+      "stadium";
+  }
+  .stadium-slot {
+    padding: 2px 4px;
+    min-height: 0;
+    flex-direction: row;
+    border-left: none;
+    border-top: 1px dashed rgba(124, 58, 237, 0.4);
+    border-bottom: 1px dashed rgba(124, 58, 237, 0.4);
+    background: linear-gradient(to right, transparent, rgba(124, 58, 237, 0.06), transparent);
+  }
+  .stadium-card-wrap { flex-direction: row; gap: 6px; }
   .stadium-caption { font-size: 9px; }
 
   .opp-strip { padding: 3px 6px; gap: 6px; font-size: 10px; }
@@ -936,23 +1190,36 @@ button.primary {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.75);
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(3px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 50;
   padding: 16px;
+  animation: tcg-fade-in 0.15s ease-out;
+}
+@keyframes tcg-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 .modal {
-  background: var(--panel);
-  border-radius: 10px;
-  padding: 16px;
+  background: linear-gradient(180deg, var(--panel), #18233a);
+  border-radius: 12px;
+  padding: 18px;
   width: min(720px, 100%);
   max-height: 90vh;
   display: flex;
   flex-direction: column;
   gap: 10px;
   overflow-y: auto;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  box-shadow: var(--shadow-modal);
+  animation: tcg-modal-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes tcg-modal-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .modal-header {
   display: flex;
@@ -1049,6 +1316,58 @@ button.primary {
 /* Pick modal — chooser for search / peek effects. */
 .pick-modal { max-width: 90vw; width: min(1000px, 100%); }
 .discard-viewer { max-width: 95vw; width: min(1100px, 100%); }
+
+/* Zoom: big card image floating over a dim backdrop. Click anywhere outside
+   the card to close. */
+.card-zoom-backdrop {
+  cursor: zoom-out;
+}
+.card-zoom {
+  position: relative;
+  max-width: 90vw;
+  max-height: 92vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.card-zoom img {
+  max-width: 90vw;
+  max-height: 92vh;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+}
+.card-zoom-fallback {
+  transform: scale(3);
+  transform-origin: center;
+}
+.card-zoom-close {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: var(--panel);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+}
+.card-zoom-close:hover { background: var(--accent); color: #111; }
+
+/* Attack-button layout — stacks name above damage so the → N preview fits. */
+.attack-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 6px 10px;
+  line-height: 1.1;
+  min-width: 100px;
+}
+.attack-btn .atk-name { font-weight: 600; font-size: 12px; }
+.attack-btn .atk-damage { font-size: 11px; color: var(--accent); }
 .zone-stack.discard[role="button"]:hover {
   filter: brightness(1.15);
   transition: filter 0.1s ease;

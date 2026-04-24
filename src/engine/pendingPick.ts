@@ -6,7 +6,8 @@
 // is pending, the game is paused (phase = "pick"); other player actions are
 // blocked until the pick resolves.
 
-import { logEvent } from "./rules";
+import { endTurn as endTurnRule, logEvent, makePokemonInPlay } from "./rules";
+import { fireTriggeredOnBench } from "./abilities";
 import type {
   Card,
   GameState,
@@ -50,6 +51,7 @@ export function setDeckSearchPick(
   pred: (c: Card) => boolean,
   max: number,
   label: string,
+  options: { toBench?: boolean } = {},
 ): boolean {
   const pl = state.players[player];
   const safeDeck = excludePrizes(pl, pl.deck);
@@ -73,6 +75,7 @@ export function setDeckSearchPick(
     max: Math.min(max, pool.length),
     unpicked: "shuffleIntoDeck",
     source: "deck",
+    toBench: options.toBench,
   };
   state.phase = "pick";
   return true;
@@ -235,7 +238,37 @@ export function resolvePendingPick(
     logEvent(state, player, "picks nothing.");
   }
 
+  // Pokémon from the pick go to hand by default. A few effects instead bench
+  // them directly (Nest Ball, Buddy-Buddy Poffin, Hop's Bag, Lumiose City).
+  // Newly benched Pokémon fire any triggered-on-bench abilities.
+  const benchedFromPick: import("./types").PokemonInPlay[] = [];
+  if (pick.toBench && picked.length > 0) {
+    for (const c of picked) {
+      if (c.supertype !== "Pokémon") continue;
+      // Cards are moved to hand by the block above; pull them back out.
+      const hi = pl.hand.lastIndexOf(c);
+      if (hi < 0) continue;
+      pl.hand.splice(hi, 1);
+      if (pl.bench.length >= 5) {
+        // No open slot — the card stays in hand as a pragmatic fallback.
+        pl.hand.push(c);
+        logEvent(state, player, `${c.name} stays in hand (bench is full).`);
+        continue;
+      }
+      const inPlay = makePokemonInPlay(c);
+      inPlay.playedThisTurn = true;
+      pl.bench.push(inPlay);
+      benchedFromPick.push(inPlay);
+      logEvent(state, player, `benches ${c.name}.`);
+    }
+  }
+
+  const shouldEndTurn = pick.endTurnOnResolve === true;
   state.pendingPick = null;
   state.phase = "main";
+  // Fire triggered-on-bench abilities *after* clearing pendingPick so any
+  // ability that opens its own pendingPick (e.g. Last-Ditch Catch) takes hold.
+  for (const p of benchedFromPick) fireTriggeredOnBench(state, player, p);
+  if (shouldEndTurn) endTurnRule(state);
   return ok;
 }

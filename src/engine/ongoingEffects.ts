@@ -69,12 +69,29 @@ export function confusedPersistsOnEvolve(state: GameState): boolean {
   return state.stadium?.card.name === "Dizzying Valley";
 }
 
-// Forest of Vitality: Grass Pokémon can evolve the turn they're played
-// (except on turn 1).
-export function canEvolveOnPlayTurn(state: GameState, evolved: PokemonCard): boolean {
+// Forest of Vitality — "Each player's Grass Pokémon can evolve during the
+// turn that player played them from their hand."
+//
+// This only overrides the "can't evolve a Pokémon played this turn" rule for
+// a Basic Grass Pokémon being evolved for the FIRST time that turn. It does
+// NOT override "can't evolve the same Pokémon more than once per turn" —
+// that guard stays in place via target.evolvedThisTurn.
+//
+// The type check runs against the Pokémon currently in play (target), not
+// against the evolution card in hand. If a Grass Basic evolves into a non-
+// Grass Stage 1 this turn via FoV, the new Stage 1 can't re-evolve this turn
+// regardless (evolvedThisTurn blocks), so we don't need to check the
+// evolution card's type.
+export function canEvolveOnPlayTurn(
+  state: GameState,
+  target: PokemonInPlay,
+): boolean {
   if (state.stadium?.card.name !== "Forest of Vitality") return false;
   if (state.turn === 1) return false;
-  return evolved.types.includes("Grass");
+  // Must be a Basic (not already evolved) and a Grass Pokémon.
+  if (!target.card.subtypes.includes("Basic")) return false;
+  if (target.evolvedThisTurn) return false;
+  return target.card.types.includes("Grass");
 }
 
 // Risky Ruins: when a Basic non-Darkness is placed on the bench, it takes
@@ -125,6 +142,12 @@ export function effectiveMaxHp(p: PokemonInPlay, state: GameState): number {
   if (state.stadium) hp += stadiumHpDelta(state.stadium.card, p.card);
   if (toolsActive(state)) {
     for (const tool of p.tools) hp += toolHpDelta(tool, p.card);
+  }
+  // Growing Grass Energy: +20 HP on the Grass Pokémon it's attached to.
+  if (hasType(p.card, "Grass")) {
+    for (const e of p.attachedEnergy) {
+      if (e.name === "Growing Grass Energy") hp += 20;
+    }
   }
   return Math.max(10, hp);
 }
@@ -225,6 +248,146 @@ export function turnDamageReduction(
   return total;
 }
 
+// --- Passive attack-bonus abilities --------------------------------------
+//
+// Bench-wide buffs expressed as Pokémon abilities ("Attacks used by your
+// Fighting Pokémon do 30 more damage…"). We scan all of the attacker's
+// in-play Pokémon for these abilities and sum the bonus that applies to the
+// current (attacker, defender) pair. Each entry encodes the gate as a
+// predicate + a bonus computation.
+
+interface PassiveAttackBonus {
+  appliesTo: (
+    attacker: PokemonInPlay,
+    holder: PokemonInPlay,
+    defender: PokemonInPlay | null,
+    state: GameState,
+  ) => boolean;
+  bonus: (
+    attacker: PokemonInPlay,
+    holder: PokemonInPlay,
+    defender: PokemonInPlay | null,
+    state: GameState,
+  ) => number;
+}
+
+const PASSIVE_ATTACK_BONUSES: Record<string, PassiveAttackBonus> = {
+  "Powerful a-Salt": {
+    // Garganacl — your Fighting Pokémon attacks do +30 to Active.
+    appliesTo: (a) => hasType(a.card, "Fighting"),
+    bonus: () => 30,
+  },
+  "Excited Power": {
+    // Seviper — if you have any Darkness Mega Evolution ex in play, this
+    // Pokémon's attacks do +120. Applies only to the holder.
+    appliesTo: (a, h, _d, s) => {
+      if (a.instanceId !== h.instanceId) return false;
+      const pl = Object.values(s.players).find((p) => p.active === h || p.bench.includes(h));
+      if (!pl) return false;
+      const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+      return allies.some(
+        (p) =>
+          p.card.types.includes("Darkness") &&
+          p.card.subtypes.some((s) => /^Mega/i.test(s)) &&
+          p.card.subtypes.includes("ex"),
+      );
+    },
+    bonus: () => 120,
+  },
+  "Supreme Overlord": {
+    // Kingambit — attacks by this Pokémon do +30 per Prize the opponent has taken.
+    appliesTo: (a, h) => a.instanceId === h.instanceId,
+    bonus: (_a, _h, _d, s) => {
+      const attackerPl = Object.values(s.players).find(
+        (p) => p.active && p.active.instanceId === _a.instanceId,
+      );
+      if (!attackerPl) return 0;
+      const oppPl = Object.values(s.players).find((p) => p !== attackerPl);
+      if (!oppPl) return 0;
+      const taken = 6 - oppPl.prizes.length;
+      return 30 * taken;
+    },
+  },
+  "Cheer On to Glory": {
+    // Cynthia's Roserade — your Cynthia's Pokémon attacks do +30.
+    appliesTo: (a) => isNamed(a.card, "Cynthia's "),
+    bonus: () => 30,
+  },
+  "Lose Cool": {
+    // Annihilape — if this Pokémon has ≥2 damage counters, +120 to its attacks.
+    appliesTo: (a, h) => a.instanceId === h.instanceId && Math.floor(h.damage / 10) >= 2,
+    bonus: () => 120,
+  },
+  "Cobalt Command": {
+    // Iron Crown ex — your Future Pokémon (except Iron Crown ex) do +20.
+    appliesTo: (a) =>
+      a.card.subtypes.includes("Future") && a.card.name !== "Iron Crown ex",
+    bonus: () => 20,
+  },
+  "Compound Eyes": {
+    // Galvantula — this Pokémon's attacks do +50 vs Active with any Ability.
+    appliesTo: (a, h, d) =>
+      a.instanceId === h.instanceId &&
+      !!d &&
+      (d.card.abilities?.length ?? 0) > 0,
+    bonus: () => 50,
+  },
+  "Primal Knowledge": {
+    // Carracosta — your Pokémon do +30 vs Active Evolution Pokémon.
+    appliesTo: (_a, _h, d) => !!d && !!d.card.evolvesFrom,
+    bonus: () => 30,
+  },
+  "Victory Cheer": {
+    // Victini — your Evolution Fire Pokémon attacks do +10.
+    appliesTo: (a) => hasType(a.card, "Fire") && !!a.card.evolvesFrom,
+    bonus: () => 10,
+  },
+  "Sunny Day": {
+    // Lilligant — your Grass and Fire Pokémon attacks do +20.
+    appliesTo: (a) => hasType(a.card, "Grass") || hasType(a.card, "Fire"),
+    bonus: () => 20,
+  },
+  "Extra Helpings": {
+    // Hop's Snorlax — your Hop's Pokémon attacks do +30 (doesn't stack).
+    appliesTo: (a) => isNamed(a.card, "Hop's "),
+    bonus: () => 30,
+  },
+  "Regal Cheer": {
+    // Serperior ex — your Pokémon attacks do +20.
+    appliesTo: () => true,
+    bonus: () => 20,
+  },
+};
+
+// Sum of all passive attack-bonus abilities from the attacker's side that
+// apply to the current (attacker, defender) pair. "Extra Helpings" doesn't
+// stack — we dedupe by ability name before summing to honor that.
+export function passiveAttackBonus(
+  state: GameState,
+  attackerOwner: PlayerId,
+  attacker: PokemonInPlay,
+  defender: PokemonInPlay | null,
+): number {
+  const pl = state.players[attackerOwner];
+  const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+  const contributions = new Map<string, number>();
+  for (const holder of allies) {
+    if (!abilitiesActiveOn(state, holder.card)) continue;
+    for (const ability of holder.card.abilities ?? []) {
+      const rule = PASSIVE_ATTACK_BONUSES[ability.name];
+      if (!rule) continue;
+      if (!rule.appliesTo(attacker, holder, defender, state)) continue;
+      const amt = rule.bonus(attacker, holder, defender, state);
+      // For name-keyed non-stacking abilities, keep the first/max.
+      const prev = contributions.get(ability.name) ?? 0;
+      contributions.set(ability.name, Math.max(prev, amt));
+    }
+  }
+  let total = 0;
+  for (const amt of contributions.values()) total += amt;
+  return total;
+}
+
 // --- Attack damage modifiers ----------------------------------------------
 
 // Pre-Weakness/Resistance damage bonus the attacker contributes (from the
@@ -283,7 +446,9 @@ export function stadiumDamageReduction(
         if (isNamed(defCard, "Steven's ")) red += 30;
         break;
       case "Neutralization Zone":
-        if (!hasRuleBox(defCard)) red += 9999;
+        // Reduces damage *from* attackers with a rule box (ex/V) by 20.
+        // Gates on the attacker, not the defender.
+        if (hasRuleBox(attacker.card)) red += 20;
         break;
     }
   }
@@ -411,6 +576,11 @@ export function applySurvivalBrace(
 export function prizeReductionFromTools(defender: PokemonInPlay): number {
   let reduction = 0;
   for (const tool of defender.tools) {
+    // Lillie's Pearl text: "If the Pokémon this card is attached to is in the
+    // Active Spot and is Knocked Out by damage from your opponent's attack,
+    // your opponent takes 1 fewer Prize card." — so we want the holder to be
+    // a Lillie's Pokémon (the isNamed gate) but the prize-reduction applies
+    // regardless of attacker naming.
     if (tool.name === "Lillie's Pearl" && isNamed(defender.card, "Lillie's ")) {
       reduction += 1;
     }
@@ -463,6 +633,90 @@ export function toolOnDamageActions(
 export type ToolOnKoAction =
   | { kind: "searchDeckAnyN"; count: number } // Amulet of Hope
   | { kind: "moveEnergyToBench"; max: number }; // Heavy Baton (retreat-cost=4 gate)
+
+// Estimate the damage an attack would deal before committing to it. Mirrors
+// the attack()-time computation: base damage → attacker bonuses (Postwick /
+// tool) → turn bonuses → Weakness × → Resistance − → stadium/turn defender
+// reductions → structured attack effects (only deterministic ones applied).
+// Coin flips and counter scaling are approximated by their *median* value so
+// the preview is stable. Good enough for a UI hint — not authoritative.
+export function estimateAttackDamage(
+  state: GameState,
+  attackerOwner: PlayerId,
+  attacker: PokemonInPlay,
+  move: import("./types").Attack,
+): number {
+  const defOwner: PlayerId = attackerOwner === "p1" ? "p2" : "p1";
+  const def = state.players[defOwner].active;
+  let d = move.damage;
+  d += stadiumAttackBonus(state, attacker, def);
+  d += passiveAttackBonus(state, attackerOwner, attacker, def);
+  // Turn-scoped bonuses (Black Belt's Training, Premium Power Pro).
+  const atkPl = state.players[attackerOwner];
+  for (const b of atkPl.thisTurnAttackBonuses) {
+    if (b.againstEx && (!def || !def.card.subtypes.includes("ex"))) continue;
+    if (b.attackerType && !attacker.card.types.includes(b.attackerType)) continue;
+    d += b.amount;
+  }
+  if (def) {
+    const atkType = attacker.card.types[0];
+    const weak = def.card.weaknesses?.find((w) => w.type === atkType);
+    const res = def.card.resistances?.find((w) => w.type === atkType);
+    if (weak?.value.startsWith("×")) d *= parseInt(weak.value.slice(1), 10) || 2;
+    if (res?.value.startsWith("-")) d = Math.max(0, d - (parseInt(res.value.slice(1), 10) || 30));
+    d = Math.max(0, d - stadiumDamageReduction(state, attacker, def));
+    // Defender-side turn reduction (Jasmine's Gaze, Iron Defender).
+    const defPl = state.players[defOwner];
+    for (const r of defPl.nextOpponentTurnDamageReductions) {
+      if (r.defenderType && !def.card.types.includes(r.defenderType)) continue;
+      d = Math.max(0, d - r.amount);
+    }
+  }
+  // Deterministic structured effects: handle the most common +damage ones.
+  for (const e of move.effects ?? []) {
+    switch (e.kind) {
+      case "perAttachedEnergy": {
+        const energies = attacker.attachedEnergy;
+        const matching = e.energyType
+          ? energies.filter((en) => en.provides.includes(e.energyType!)).length
+          : energies.length;
+        d += e.perEnergy * matching;
+        break;
+      }
+      case "perFriendlyBench":
+        d += e.perCount * atkPl.bench.length;
+        break;
+      case "perOpponentBench":
+        d += e.perCount * state.players[defOwner].bench.length;
+        break;
+      case "perBothBench":
+        d += e.perCount * (atkPl.bench.length + state.players[defOwner].bench.length);
+        break;
+      case "perDamageCounterOnSelf":
+        d += e.perCount * Math.floor(attacker.damage / 10);
+        break;
+      case "perDamageCounterOnDefender":
+        d += e.perCount * (def ? Math.floor(def.damage / 10) : 0);
+        break;
+      case "perEnergyOnDefender":
+        d += e.perCount * (def?.attachedEnergy.length ?? 0);
+        break;
+      case "perPrizeOppTaken":
+        d += e.perCount * (6 - state.players[defOwner].prizes.length);
+        break;
+      case "flipHeadsBonus":
+        d += e.bonus / 2; // expected value
+        break;
+      case "flipHeadsDouble":
+        d += d / 2; // expected value ≈ 1.5× base
+        break;
+      case "flipTailsFizzle":
+        d /= 2;
+        break;
+    }
+  }
+  return Math.max(0, Math.floor(d));
+}
 
 export function toolOnKoActions(
   state: GameState,

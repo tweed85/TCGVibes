@@ -13,6 +13,16 @@ import type { TrainerTarget } from "./engine/actions";
 import { activateAbility } from "./engine/abilities";
 import { resolveAiCoinChoice, resolveAiPendingPromote, resolveAiSetup, takeAiTurn } from "./engine/ai";
 import { resolvePendingPick } from "./engine/pendingPick";
+import {
+  resolveSwitchTarget,
+  resolveInPlayTarget,
+  cancelInPlayTarget,
+  resolveHandReveal,
+  cancelHandReveal,
+  resolveRareCandyChoice,
+  cancelRareCandyChoice,
+} from "./engine/trainerEffects";
+import { stadiumHasActivatedEffect, useStadium } from "./engine/stadiumActivated";
 import { makeRng } from "./engine/rng";
 import {
   canPayCost,
@@ -24,7 +34,7 @@ import {
   resolveCoinGuess,
   setupGame,
 } from "./engine/rules";
-import { effectiveMaxHp } from "./engine/ongoingEffects";
+import { effectiveMaxHp, estimateAttackDamage } from "./engine/ongoingEffects";
 import type { ActionResult } from "./engine/actions";
 import type { Ability, Card, GameState, PlayerId, PokemonInPlay } from "./engine/types";
 import { buildDeck, validatedDeckSpecs } from "./data/decks";
@@ -34,7 +44,7 @@ import {
   importDecklist,
   type DeckListEntry,
 } from "./data/decklistParser";
-import { CardView, FaceDownCard, PokemonInPlayView } from "./ui/CardView";
+import { CardView, FaceDownCard, PokemonInPlayView, setCardZoomHandler } from "./ui/CardView";
 
 type Selection =
   | { kind: "hand"; index: number }
@@ -57,6 +67,32 @@ interface ImportedDeck {
 // or dataset updates re-resolve cleanly. Bump the key suffix if the schema
 // changes in a breaking way.
 const IMPORTS_STORAGE_KEY = "tcgvibes.imports.v1";
+const SETTINGS_STORAGE_KEY = "tcgvibes.settings.v1";
+
+interface PersistedSettings {
+  openHands?: boolean;
+  gameMode?: "vsCPU" | "local";
+  myDeckId?: string;
+  oppDeckId?: string;
+}
+
+function loadSettings(): PersistedSettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as PersistedSettings;
+  } catch {
+    return {};
+  }
+}
+
+function saveSettings(s: PersistedSettings): void {
+  try {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(s));
+  } catch {
+    // private mode / quota — silently ignore.
+  }
+}
 
 interface PersistedImport {
   id: string;
@@ -100,9 +136,23 @@ function savePersistedImports(imports: ImportedDeck[]): void {
 
 export default function App() {
   const deckSpecs = useMemo(() => validatedDeckSpecs(), []);
+  const savedSettings = useMemo(() => loadSettings(), []);
   const [imports, setImports] = useState<ImportedDeck[]>(() => loadPersistedImports());
-  const [myDeckId, setMyDeckId] = useState(deckSpecs[0]?.id ?? "");
-  const [oppDeckId, setOppDeckId] = useState(deckSpecs[1]?.id ?? deckSpecs[0]?.id ?? "");
+  const knownDeckIds = useMemo(() => {
+    const ids = new Set<string>(deckSpecs.map((d) => d.id));
+    for (const i of loadPersistedImports()) ids.add(i.id);
+    return ids;
+  }, [deckSpecs]);
+  const [myDeckId, setMyDeckId] = useState(
+    savedSettings.myDeckId && knownDeckIds.has(savedSettings.myDeckId)
+      ? savedSettings.myDeckId
+      : deckSpecs[0]?.id ?? "",
+  );
+  const [oppDeckId, setOppDeckId] = useState(
+    savedSettings.oppDeckId && knownDeckIds.has(savedSettings.oppDeckId)
+      ? savedSettings.oppDeckId
+      : deckSpecs[1]?.id ?? deckSpecs[0]?.id ?? "",
+  );
   const rngRef = useRef(makeRng(Date.now()));
 
   // Build a deck for the picker id — either a preset spec or an imported list.
@@ -127,15 +177,25 @@ export default function App() {
   const rerender = useForceRerender();
   const [selected, setSelected] = useState<Selection>(null);
   const [statusMsg, setStatusMsg] = useState<string>("");
-  const [openHands, setOpenHands] = useState(false);
+  const [openHands, setOpenHands] = useState(savedSettings.openHands ?? false);
   const [importOpen, setImportOpen] = useState(false);
   // Gate the game behind a pre-game deck selection step. Nothing runs (AI
   // setup, turn-1 draw, opening modal) until the player clicks Start.
   const [preGameOpen, setPreGameOpen] = useState(true);
   const [discardViewer, setDiscardViewer] = useState<PlayerId | null>(null);
+  const [zoomCard, setZoomCard] = useState<Card | null>(null);
+  // When the user initiates an attack that would snipe a benched opponent,
+  // we pause to let them pick the target. Holds the pending attack index.
+  const [pendingSnipeAttack, setPendingSnipeAttack] = useState<number | null>(null);
+  // Serialized snapshot of the game state at the start of the viewingPlayer's
+  // current turn. Click "Undo" to restore. Invalidated each time a new turn
+  // begins for the viewing player. Doesn't rewind the RNG (we preserve the
+  // current rng instance), so re-rolled actions after undo will differ.
+  const turnSnapshotRef = useRef<string | null>(null);
+  const [canUndo, setCanUndo] = useState(false);
   // Game mode: "vsCPU" leaves p2 as AI; "local" makes both sides human and
   // enables hotseat device-handoff between turns.
-  const [gameMode, setGameMode] = useState<"vsCPU" | "local">("vsCPU");
+  const [gameMode, setGameMode] = useState<"vsCPU" | "local">(savedSettings.gameMode ?? "vsCPU");
   // Who's currently holding the device. Determines which side shows as "me"
   // at the bottom of the playmat. Always "p1" in vs-CPU mode.
   const [viewingPlayer, setViewingPlayer] = useState<PlayerId>("p1");
@@ -153,6 +213,75 @@ export default function App() {
   useEffect(() => {
     savePersistedImports(imports);
   }, [imports]);
+
+  // Persist UI settings (gameMode, openHands, last-selected decks).
+  useEffect(() => {
+    saveSettings({ openHands, gameMode, myDeckId, oppDeckId });
+  }, [openHands, gameMode, myDeckId, oppDeckId]);
+
+  // Wire the global card-zoom handler (CardView calls it on shift+click).
+  useEffect(() => {
+    setCardZoomHandler((c) => setZoomCard(c));
+    return () => setCardZoomHandler(null);
+  }, []);
+
+  // Snapshot state whenever a fresh turn begins for the viewing player, so
+  // the Undo button has a target. Skip during modal-blocked phases.
+  useEffect(() => {
+    if (preGameOpen) return;
+    if (state.winner !== null) return;
+    if (pendingHandoff) return;
+    if (state.phase !== "main") return;
+    if (state.activePlayer !== viewingPlayer) return;
+    // Only save once at the start; later mutations within the turn happen
+    // against the same snapshot until the turn flips.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { rng: _rng, ...serializable } = state;
+    turnSnapshotRef.current = JSON.stringify(serializable);
+    setCanUndo(true);
+  }, [state.turn, state.activePlayer, viewingPlayer, preGameOpen, pendingHandoff]);
+
+  // Export the current game log as a downloadable JSON file. Lightweight
+  // "replay mode" — reading through the log lets you reconstruct the play.
+  const onExportLog = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      turn: state.turn,
+      activePlayer: state.activePlayer,
+      winner: state.winner,
+      players: {
+        p1: { name: state.players.p1.name, prizes: state.players.p1.prizes.length, mulligans: state.players.p1.mulligans },
+        p2: { name: state.players.p2.name, prizes: state.players.p2.prizes.length, mulligans: state.players.p2.mulligans },
+      },
+      log: state.log,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `tcgvibes-game-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setStatusMsg("Game log exported.");
+  };
+
+  const onUndo = () => {
+    if (!turnSnapshotRef.current) return;
+    try {
+      const restored = JSON.parse(turnSnapshotRef.current);
+      // Preserve the live RNG instance — we're not rewinding entropy, only
+      // board state, so a retried search / coin flip will use fresh rolls.
+      stateRef.current = { ...restored, rng: stateRef.current.rng };
+      setSelected(null);
+      setStatusMsg("Undid turn.");
+      setPendingSnipeAttack(null);
+      rerender();
+    } catch {
+      setStatusMsg("Undo failed.");
+    }
+  };
 
   // In local mode, detect when the "current actor" flips and trigger a
   // pass-the-device interstitial so the incoming player can't see the
@@ -226,6 +355,16 @@ export default function App() {
       }, 400);
       return () => clearTimeout(t);
     }
+    // AI owes a switch pick (shouldn't fire normally since trainerEffects
+    // auto-resolves for AI, but defensive safety net).
+    if (state.pendingSwitchTarget && state.players[state.pendingSwitchTarget].isAI) {
+      const target = state.pendingSwitchTarget;
+      const t = setTimeout(() => {
+        resolveSwitchTarget(state, target, 0);
+        rerender();
+      }, 300);
+      return () => clearTimeout(t);
+    }
     if (state.phase === "main" && state.players[state.activePlayer].isAI) {
       const target = state.activePlayer;
       const t = setTimeout(() => {
@@ -234,6 +373,53 @@ export default function App() {
       }, 500);
       return () => clearTimeout(t);
     }
+  });
+
+  // Keyboard shortcuts:
+  //   Esc  → close topmost dismissible modal (discard viewer, import)
+  //   E    → end turn (if main phase + my turn + no blocking modal)
+  //   1-9  → click hand card at that position
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      // Never interfere with typing into inputs (decklist paste, deck name, etc.).
+      const t = ev.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (ev.key === "Escape") {
+        if (zoomCard) { setZoomCard(null); ev.preventDefault(); return; }
+        if (discardViewer) { setDiscardViewer(null); ev.preventDefault(); return; }
+        if (importOpen) { setImportOpen(false); ev.preventDefault(); return; }
+        // Other modals (handoff, setup, pick, coin flip) are intentionally
+        // non-dismissible via Esc to avoid accidental turn skips.
+        return;
+      }
+      // Block shortcuts while any modal owns focus.
+      if (
+        preGameOpen ||
+        pendingHandoff ||
+        state.pendingPick ||
+        state.pendingHandReveal ||
+        discardViewer ||
+        importOpen ||
+        state.phase === "coinFlip" ||
+        (state.phase === "setup" && !state.players[viewingPlayer].setupComplete) ||
+        state.phase === "promoteActive" ||
+        state.winner !== null
+      ) return;
+      if (state.phase !== "main") return;
+      if (state.activePlayer !== viewingPlayer) return;
+      if (ev.key === "e" || ev.key === "E") {
+        onEndTurn();
+        ev.preventDefault();
+      } else if (/^[1-9]$/.test(ev.key)) {
+        const idx = parseInt(ev.key, 10) - 1;
+        if (idx < me.hand.length) {
+          onHandClick(idx);
+          ev.preventDefault();
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   });
 
   const handle = (r: ActionResult, successMsg?: string) => {
@@ -248,6 +434,22 @@ export default function App() {
   const onHandClick = (i: number) => {
     if (promoteOpen) {
       setStatusMsg("Pick a Benched Pokémon to promote to Active.");
+      return;
+    }
+    if (state.pendingInPlayTarget?.player === viewingPlayer) {
+      setStatusMsg("Resolve the target picker first (or cancel).");
+      return;
+    }
+    if (state.pendingHandReveal?.player === viewingPlayer) {
+      setStatusMsg("Resolve the hand-reveal first (or cancel).");
+      return;
+    }
+    // Rare Candy Stage-2 chooser: clicking an eligible Stage 2 resolves it.
+    if (state.pendingRareCandyChoice?.player === viewingPlayer) {
+      const r = resolveRareCandyChoice(state, viewingPlayer, i);
+      if (!r.ok) setStatusMsg(r.reason ?? "Pick a matching Stage 2 from your hand.");
+      else setStatusMsg("Rare Candy evolved.");
+      rerender();
       return;
     }
     if (!myTurn) return;
@@ -294,6 +496,27 @@ export default function App() {
   };
 
   const onInPlayClick = (p: PokemonInPlay, side: "me" | "opp") => {
+    // Pending in-play target prompt (Enhanced Hammer, Crushing Hammer, Tool
+    // Scrapper, Scoop Up Cyclone, etc.) — resolve it by clicking a Pokémon.
+    if (state.pendingInPlayTarget?.player === viewingPlayer) {
+      const targetOwner: PlayerId = side === "me" ? viewingPlayer : (viewingPlayer === "p1" ? "p2" : "p1");
+      const r = resolveInPlayTarget(state, viewingPlayer, targetOwner, p.instanceId);
+      if (!r.ok) setStatusMsg(r.reason ?? "");
+      else setStatusMsg(`Targeted ${p.card.name}.`);
+      rerender();
+      return;
+    }
+    // Pending Switch item — user clicks their own bench to pick the promoter.
+    if (state.pendingSwitchTarget === viewingPlayer && side === "me") {
+      const benchIdx = me.bench.findIndex((b) => b.instanceId === p.instanceId);
+      if (benchIdx >= 0) {
+        const r = resolveSwitchTarget(state, viewingPlayer, benchIdx);
+        if (!r.ok) setStatusMsg(r.reason ?? "");
+        else setStatusMsg(`Switched in ${p.card.name}.`);
+        rerender();
+      }
+      return;
+    }
     if (promoteOpen && side === "me") {
       const benchIdx = me.bench.findIndex((b) => b.instanceId === p.instanceId);
       if (benchIdx >= 0) {
@@ -359,7 +582,23 @@ export default function App() {
 
   const onAttack = (atkIndex: number) => {
     if (!myTurn) return;
+    // If the attack carries a snipeOne effect and the opponent has more than
+    // one benched Pokémon, pause first so the user can pick the target.
+    const move = me.active?.card.attacks[atkIndex];
+    const hasSnipe = move?.effects?.some((e) => e.kind === "snipeOne");
+    if (hasSnipe && opp.bench.length > 1) {
+      setPendingSnipeAttack(atkIndex);
+      return;
+    }
     handle(attack(state, viewingPlayer, atkIndex));
+  };
+
+  const commitSnipeAttack = (benchIdx: number | null) => {
+    if (pendingSnipeAttack === null) return;
+    state.snipeTargetOverride = benchIdx;
+    const atk = pendingSnipeAttack;
+    setPendingSnipeAttack(null);
+    handle(attack(state, viewingPlayer, atk));
   };
 
   const onRetreat = (benchIdx: number) => {
@@ -400,8 +639,10 @@ export default function App() {
       index: i,
       name: a.name,
       damage: a.damage,
+      damageText: a.damageText,
       cost: a.cost,
       payable: canPayCost(provided, a.cost),
+      estimated: estimateAttackDamage(state, viewingPlayer, me.active!, a),
     }));
   })();
 
@@ -453,6 +694,9 @@ export default function App() {
           </label>
           <button onClick={() => setImportOpen(true)}>Import Deck</button>
           <button onClick={() => setPreGameOpen(true)}>Change Decks</button>
+          <button onClick={onExportLog} title="Download this game's event log as JSON">
+            Export Log
+          </button>
           <button className="primary" onClick={onReset}>New Game</button>
         </div>
       </div>
@@ -548,12 +792,41 @@ export default function App() {
         />
       )}
 
+      {zoomCard && (
+        <CardZoomModal card={zoomCard} onClose={() => setZoomCard(null)} />
+      )}
+
+      {pendingSnipeAttack !== null && (
+        <SnipeTargetModal
+          bench={opp.bench}
+          onPick={(idx) => commitSnipeAttack(idx)}
+          onCancel={() => setPendingSnipeAttack(null)}
+        />
+      )}
+
       {state.pendingPick && state.pendingPick.player === viewingPlayer && (
         <PickModal
           pick={state.pendingPick}
           onResolve={(idx) => {
             const r = resolvePendingPick(state, viewingPlayer, idx);
             if (!r.ok) setStatusMsg(r.reason);
+            rerender();
+          }}
+        />
+      )}
+
+      {state.pendingHandReveal && state.pendingHandReveal.player === viewingPlayer && (
+        <HandRevealModal
+          pending={state.pendingHandReveal}
+          hand={state.players[state.pendingHandReveal.target].hand}
+          onConfirm={(idxs) => {
+            const r = resolveHandReveal(state, viewingPlayer, idxs);
+            if (!r.ok) setStatusMsg(r.reason ?? "");
+            rerender();
+          }}
+          onCancel={() => {
+            cancelHandReveal(state);
+            setStatusMsg("Hand reveal cancelled.");
             rerender();
           }}
         />
@@ -609,6 +882,22 @@ export default function App() {
          of the play area and Deck/Discard on the opposite side. We keep
          both sides aligned visually (rather than rotating the opponent)
          so clicking and reading feel natural on a screen. */}
+      {/* Bold turn indicator — always shows who's to act. */}
+      {!preGameOpen && state.phase === "main" && state.winner === null && (
+        <div
+          className={`turn-indicator ${
+            state.activePlayer === viewingPlayer ? "yours" : "theirs"
+          }`}
+        >
+          <span className="turn-label">
+            {state.activePlayer === viewingPlayer
+              ? "YOUR TURN"
+              : `${state.players[state.activePlayer].name.toUpperCase()}'S TURN`}
+          </span>
+          <span className="turn-meta">Turn {state.turn}</span>
+        </div>
+      )}
+
       <div className="board">
         <PlayerSide
           state={state}
@@ -664,12 +953,21 @@ export default function App() {
         <details className="log-details">
           <summary>Log ({state.log.length})</summary>
           <div className="log-content">
-            {state.log.slice(-30).map((e, i) => (
-              <div key={i} className={`entry ${e.player}`}>
-                [T{e.turn}] {e.player !== "system" && `${state.players[e.player].name} `}
-                {e.text}
-              </div>
-            ))}
+            {state.log.slice(-30).map((e, i, arr) => {
+              const prev = i > 0 ? arr[i - 1] : null;
+              const newTurn = prev && prev.turn !== e.turn;
+              return (
+                <div key={i}>
+                  {newTurn && (
+                    <div className="entry turn-sep">— Turn {e.turn} —</div>
+                  )}
+                  <div className={`entry ${e.player}`}>
+                    [T{e.turn}] {e.player !== "system" && `${state.players[e.player].name} `}
+                    {e.text}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </details>
       </div>
@@ -678,23 +976,80 @@ export default function App() {
       <ActionBar
         myTurn={myTurn}
         promoteOpen={promoteOpen}
-        statusMsg={statusMsg}
+        statusMsg={
+          state.pendingRareCandyChoice?.player === viewingPlayer
+            ? "Click a Stage 2 in your hand to use with Rare Candy."
+            : state.pendingInPlayTarget?.player === viewingPlayer
+              ? state.pendingInPlayTarget.label
+              : state.pendingSwitchTarget === viewingPlayer
+                ? "Click a Benched Pokémon to promote to Active."
+                : statusMsg
+        }
         me={me}
         attacks={myActiveAttacks}
         activatable={activatableAbilities}
+        stadiumButton={
+          state.stadium &&
+          stadiumHasActivatedEffect(state.stadium.card.name) &&
+          !me.stadiumUsedThisTurn &&
+          myTurn ? (
+            <div className="group stadium">
+              <div className="group-label">Stadium</div>
+              <div className="group-buttons">
+                <button
+                  onClick={() => {
+                    const r = useStadium(state, viewingPlayer);
+                    if (!r.ok) setStatusMsg(r.reason);
+                    else setStatusMsg(`Activated ${state.stadium!.card.name}.`);
+                    rerender();
+                  }}
+                  title={state.stadium.card.text}
+                >
+                  Use {state.stadium.card.name}
+                </button>
+              </div>
+            </div>
+          ) : null
+        }
+        canUndo={canUndo}
+        onUndo={onUndo}
         onAttack={onAttack}
         onRetreat={onRetreat}
         onEndTurn={onEndTurn}
         onActivateAbility={onActivateAbility}
+        pendingTargetActive={
+          state.pendingInPlayTarget?.player === viewingPlayer ||
+          state.pendingRareCandyChoice?.player === viewingPlayer
+        }
+        onCancelTarget={() => {
+          if (state.pendingInPlayTarget?.player === viewingPlayer) cancelInPlayTarget(state);
+          if (state.pendingRareCandyChoice?.player === viewingPlayer) cancelRareCandyChoice(state);
+          rerender();
+          setStatusMsg("Target cancelled.");
+        }}
       />
 
       {state.winner && (
         <div className="winner">
           <div className="box">
             <h2>{state.players[state.winner].name} wins!</h2>
-            <button className="primary" onClick={onReset}>
-              Play again
-            </button>
+            <p className="muted" style={{ margin: "4px 0 14px", fontSize: 12 }}>
+              {state.winner === viewingPlayer
+                ? "Nice game."
+                : "Tough one — try a different approach."}
+            </p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+              <button className="primary" onClick={onReset}>
+                Rematch (same decks)
+              </button>
+              <button
+                onClick={() => {
+                  setPreGameOpen(true);
+                }}
+              >
+                Change decks…
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -882,12 +1237,17 @@ interface ActionBarProps {
   promoteOpen: boolean;
   statusMsg: string;
   me: GameState["players"]["p1"];
-  attacks: { index: number; name: string; damage: number; cost: string[]; payable: boolean }[];
+  attacks: { index: number; name: string; damage: number; damageText?: string; cost: string[]; payable: boolean; estimated: number }[];
   activatable: { p: PokemonInPlay; a: Ability; i: number }[];
+  stadiumButton?: React.ReactNode;
+  canUndo?: boolean;
+  onUndo?: () => void;
   onAttack: (i: number) => void;
   onRetreat: (i: number) => void;
   onEndTurn: () => void;
   onActivateAbility: (p: PokemonInPlay, i: number) => void;
+  pendingTargetActive?: boolean;
+  onCancelTarget?: () => void;
 }
 
 function ActionBar({
@@ -897,10 +1257,15 @@ function ActionBar({
   me,
   attacks,
   activatable,
+  stadiumButton,
+  canUndo,
+  onUndo,
   onAttack,
   onRetreat,
   onEndTurn,
   onActivateAbility,
+  pendingTargetActive,
+  onCancelTarget,
 }: ActionBarProps) {
   return (
     <div className="action-bar">
@@ -910,7 +1275,17 @@ function ActionBar({
             Your Active was KO'd — click a Benched Pokémon to promote.
           </span>
         ) : (
-          <span className="msg">{statusMsg || (myTurn ? "Your turn." : "CPU thinking…")}</span>
+          <span className={`msg${pendingTargetActive || !myTurn ? " waiting" : ""}`}>
+            {statusMsg || (myTurn ? "Your turn." : "CPU thinking…")}
+            {pendingTargetActive && onCancelTarget && (
+              <button
+                style={{ marginLeft: 8, padding: "2px 8px", fontSize: 12 }}
+                onClick={onCancelTarget}
+              >
+                Cancel
+              </button>
+            )}
+          </span>
         )}
         <div className="turn-flags">
           <span className={me.energyAttachedThisTurn ? "on" : ""}>Energy</span>
@@ -943,16 +1318,24 @@ function ActionBar({
           <div className="group-label">Attacks</div>
           <div className="group-buttons">
             {attacks.length === 0 && <span className="muted">—</span>}
-            {attacks.map((a) => (
-              <button
-                key={a.index}
-                disabled={!myTurn || !a.payable || promoteOpen}
-                onClick={() => onAttack(a.index)}
-                title={a.cost.join(", ")}
-              >
-                {a.name} ({a.damage})
-              </button>
-            ))}
+            {attacks.map((a) => {
+              const baseText = a.damageText ?? String(a.damage);
+              const preview = a.payable && myTurn && a.estimated > 0
+                ? ` → ${a.estimated}`
+                : "";
+              return (
+                <button
+                  key={a.index}
+                  className="attack-btn"
+                  disabled={!myTurn || !a.payable || promoteOpen}
+                  onClick={() => onAttack(a.index)}
+                  title={`Cost: ${a.cost.join(" / ") || "—"}\nBase: ${baseText}\nExpected vs current defender: ${a.estimated}`}
+                >
+                  <span className="atk-name">{a.name}</span>
+                  <span className="atk-damage">{baseText}{preview}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -972,9 +1355,20 @@ function ActionBar({
           </div>
         </div>
 
+        {stadiumButton}
+
         <div className="group end">
           <div className="group-label">&nbsp;</div>
           <div className="group-buttons">
+            {onUndo && (
+              <button
+                disabled={!myTurn || promoteOpen || !canUndo}
+                onClick={onUndo}
+                title="Rewind to the start of this turn"
+              >
+                Undo
+              </button>
+            )}
             <button
               className="primary"
               disabled={!myTurn || promoteOpen}
@@ -1505,6 +1899,78 @@ function SetupModal({
 }
 
 // ---------------------------------------------------------------------------
+//  Snipe target modal — pick which of opp's Benched to hit (snipeOne attacks).
+// ---------------------------------------------------------------------------
+
+function SnipeTargetModal({
+  bench,
+  onPick,
+  onCancel,
+}: {
+  bench: PokemonInPlay[];
+  onPick: (idx: number | null) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="modal-backdrop" onClick={onCancel}>
+      <div className="modal pick-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Pick a Benched Pokémon to snipe</h2>
+        </div>
+        <div className="pick-source-note">
+          This attack hits one of the opponent's Benched Pokémon. Pick any, or
+          let the engine auto-target the most damaged.
+        </div>
+        <div className="pick-pool">
+          {bench.map((p, i) => (
+            <div
+              key={p.instanceId}
+              className="pick-card"
+              onClick={() => onPick(i)}
+            >
+              <CardView card={p.card} />
+            </div>
+          ))}
+        </div>
+        <div className="modal-actions">
+          <button onClick={() => onPick(null)}>Auto-target (most damaged)</button>
+          <button onClick={onCancel}>Cancel attack</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+//  Card zoom modal — shift+click / right-click any card to see it big.
+// ---------------------------------------------------------------------------
+
+function CardZoomModal({
+  card,
+  onClose,
+}: {
+  card: Card;
+  onClose: () => void;
+}) {
+  return (
+    <div className="modal-backdrop card-zoom-backdrop" onClick={onClose}>
+      <div className="card-zoom" onClick={(e) => e.stopPropagation()}>
+        {card.imageLarge ? (
+          <img src={card.imageLarge} alt={card.name} />
+        ) : (
+          <div className="card-zoom-fallback">
+            <CardView card={card} />
+          </div>
+        )}
+        <button className="card-zoom-close" onClick={onClose} aria-label="Close">
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 //  Discard viewer — discard piles are public info in real play. This modal
 //  lets the player click either discard pile and browse every card in it.
 // ---------------------------------------------------------------------------
@@ -1616,6 +2082,92 @@ function PickModal({
             className="primary"
             disabled={!canConfirm}
             onClick={() => onResolve(selected)}
+          >
+            Confirm ({selected.length})
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HandRevealModal({
+  pending,
+  hand,
+  onConfirm,
+  onCancel,
+}: {
+  pending: NonNullable<GameState["pendingHandReveal"]>;
+  hand: Card[];
+  onConfirm: (idxs: number[]) => void;
+  onCancel: () => void;
+}) {
+  const [selected, setSelected] = useState<number[]>([]);
+  const eligible = (i: number) => {
+    const c = hand[i];
+    if (c.supertype !== "Trainer" && pending.filter !== "any") return false;
+    const subs = c.subtypes ?? [];
+    switch (pending.filter) {
+      case "any": return true;
+      case "item": return subs.includes("Item");
+      case "tool": return subs.includes("Pokémon Tool") || subs.includes("Tool");
+      case "itemOrTool":
+        return subs.includes("Item") || subs.includes("Pokémon Tool") || subs.includes("Tool");
+      case "supporter": return subs.includes("Supporter");
+    }
+  };
+  const toggle = (i: number) => {
+    if (!eligible(i)) return;
+    setSelected((cur) => {
+      if (cur.includes(i)) return cur.filter((x) => x !== i);
+      if (cur.length >= pending.max) return cur;
+      return [...cur, i];
+    });
+  };
+  const canConfirm = selected.length >= pending.min && selected.length <= pending.max;
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal pick-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>{pending.label}</h2>
+          <span className="pick-counter">
+            {selected.length} / {pending.max} picked
+          </span>
+        </div>
+        <div className="pick-source-note">
+          {pending.player === pending.target
+            ? `Pick up to ${pending.max} card${pending.max === 1 ? "" : "s"} from your hand.`
+            : `Your opponent's hand is revealed (${hand.length} card${hand.length === 1 ? "" : "s"}). Pick up to ${pending.max} eligible card${pending.max === 1 ? "" : "s"}.`}
+        </div>
+        <div className="pick-pool">
+          {hand.length === 0 && <span className="muted">Empty hand.</span>}
+          {hand.map((c, i) => {
+            const isPickable = eligible(i);
+            const picked = selected.includes(i);
+            return (
+              <div
+                key={i}
+                className={`pick-card${picked ? " picked" : ""}${isPickable ? "" : " ineligible"}`}
+                onClick={() => toggle(i)}
+                title={isPickable ? (picked ? "Click to deselect" : "Click to pick") : "Not eligible"}
+              >
+                <CardView card={c} />
+              </div>
+            );
+          })}
+        </div>
+        <div className="modal-actions">
+          {pending.min === 0 && (
+            <>
+              <button onClick={onCancel}>Cancel</button>
+              <button onClick={() => onConfirm([])}>Skip / Pick nothing</button>
+            </>
+          )}
+          <button
+            className="primary"
+            disabled={!canConfirm}
+            onClick={() => onConfirm(selected)}
           >
             Confirm ({selected.length})
           </button>

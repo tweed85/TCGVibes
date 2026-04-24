@@ -1,5 +1,25 @@
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 import type { Card, PokemonCard, PokemonInPlay } from "../engine/types";
+
+// Shared "zoom" subscriber — the top-level App wires a listener that
+// intercepts shift+click / right-click on any CardView and renders a large
+// zoom modal. Anything interested (basically just App) can call
+// setZoomSubscriber with a handler.
+let zoomHandler: ((card: Card) => void) | null = null;
+export function setCardZoomHandler(fn: ((card: Card) => void) | null): void {
+  zoomHandler = fn;
+}
+
+function maybeZoom(card: Card, ev: MouseEvent): boolean {
+  if (!zoomHandler) return false;
+  if (ev.shiftKey || ev.metaKey || ev.button === 2) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    zoomHandler(card);
+    return true;
+  }
+  return false;
+}
 
 interface Props {
   card: Card;
@@ -126,9 +146,19 @@ function CardTextBody({ card }: { card: Card }) {
 
 export function CardView({ card, selected, onClick }: Props) {
   const cls = `card card-imaged${selected ? " selected" : ""}`;
-  const tip = cardTooltip(card);
+  const tip = cardTooltip(card) + "\n\nShift+click to zoom";
   return (
-    <div className={cls} onClick={onClick} title={tip}>
+    <div
+      className={cls}
+      onClick={(ev) => {
+        if (maybeZoom(card, ev)) return;
+        onClick?.();
+      }}
+      onContextMenu={(ev) => {
+        if (maybeZoom(card, ev)) return;
+      }}
+      title={tip}
+    >
       <CardImage src={card.imageLarge} alt={card.name}>
         <CardTextBody card={card} />
       </CardImage>
@@ -158,15 +188,44 @@ export function PokemonInPlayView({
   const cls = `card card-imaged in-play${selected ? " selected" : ""}`;
   const tip = cardTooltip(p.card);
 
-  // Render energy as type initials (F, W, L, etc.)
-  const energyInitials = p.attachedEnergy
-    .map((e) => (e.provides[0] ?? "C")[0])
-    .join(" ");
+  // Render each attached Energy as a colored pip showing its type initial.
+  // For special energies with a wild or multi-type provides, we render a
+  // rainbow pip marked `*`.
+  const pips = p.attachedEnergy.map((e, i) => {
+    const types = e.provides ?? ["Colorless"];
+    const primary = types[0] ?? "Colorless";
+    // Team Rocket's Energy (P/D), Prism, Luminous, etc. share multi-type
+    // provides; show the first type's color but tag as wild when there are
+    // more than one distinct types.
+    const distinct = new Set(types);
+    const isWild = distinct.size > 1;
+    const cls = `energy-pip energy-${isWild ? "wild" : primary}`;
+    const glyph = isWild ? "*" : (primary[0] ?? "C");
+    return (
+      <span
+        key={`${e.id}-${i}`}
+        className={cls}
+        title={`${e.name} (${types.join("/")})`}
+      >
+        {glyph}
+      </span>
+    );
+  });
 
   const effMax = maxHp ?? p.card.hp;
   const currentHp = Math.max(0, effMax - p.damage);
   return (
-    <div className={cls} onClick={onClick} title={tip}>
+    <div
+      className={cls}
+      onClick={(ev) => {
+        if (maybeZoom(p.card, ev)) return;
+        onClick?.();
+      }}
+      onContextMenu={(ev) => {
+        if (maybeZoom(p.card, ev)) return;
+      }}
+      title={tip + "\n\nShift+click to zoom"}
+    >
       <CardImage src={p.card.imageLarge} alt={p.card.name}>
         <CardTextBody card={p.card} />
       </CardImage>
@@ -183,7 +242,7 @@ export function PokemonInPlayView({
             ))}
           </div>
         )}
-        {energyInitials && <div className="energy-badge">{energyInitials}</div>}
+        {pips.length > 0 && <div className="energy-row">{pips}</div>}
         {p.tools.length > 0 && (
           <div className="tool-badge" title={p.tools.map((t) => t.name).join(", ")}>
             🔧{p.tools.length > 1 ? p.tools.length : ""}

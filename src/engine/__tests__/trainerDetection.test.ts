@@ -61,7 +61,7 @@ describe("detectTrainerEffect — staples", () => {
       ["Drasna", "shuffleHandDrawDrasna"],
       ["Carmine", "discardHandDraw5"],
       ["Iris's Fighting Spirit", "drawUntil6Discard"],
-      ["Naveen", "drawUntil5"],
+      ["Naveen", "naveenPreDiscardDraw5"],
       ["Picnicker", "drawCoinFlip42"],
       ["Emcee's Hype", "draw2Plus2IfOppFew"],
       ["Billy & O'Nare", "draw2Plus2IfHandBig"],

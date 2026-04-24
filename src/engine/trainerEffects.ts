@@ -10,8 +10,9 @@
 // "if Community Center is in play") are mostly approximated or skipped; the
 // core draw/search/heal behaviors are correct.
 
-import { logEvent, makePokemonInPlay } from "./rules";
+import { enforceSpecialEnergyAttachRules, logEvent, makePokemonInPlay } from "./rules";
 import { clearAllStatuses } from "./rules";
+import { fireTriggeredOnMoveToActive, fireTriggeredOnMoveToBench } from "./abilities";
 import { findByName } from "../data/cards";
 import {
   setDeckSearchPick,
@@ -101,7 +102,8 @@ export type TrainerEffectId =
   | "shuffleHandDrawDrasna" // Drasna — flip 8/3
   | "discardHandDraw5" // Carmine
   | "drawUntil6Discard" // Iris's Fighting Spirit (cost: discard 1)
-  | "drawUntil5" // Naveen, Team Rocket's Ariana
+  | "drawUntil5" // Team Rocket's Ariana (no pre-discard)
+  | "naveenPreDiscardDraw5" // Naveen — discard any, then draw to 5
   | "drawCoinFlip42" // Picnicker
   | "draytonTop7" // Drayton — look at top 7, grab a Pokémon + Trainer
   // Supporters — gust / switch / disrupt
@@ -138,7 +140,10 @@ export type TrainerEffectId =
   | "discardOppItemsHand" // Xerosic's Machinations
   | "discardOppToolAndSpecialEnergy" // Ruffian
   | "moveBenchEnergyToActive" // N's Plan
-  | "drawUntilHandSix" // Kofu (put 2 on bottom, draw 4)
+  | "drawUntilHandSix" // (legacy generic draw-to-six helper)
+  | "kofuBottom2Draw4" // Kofu — put 2 on bottom, draw 4
+  | "hasselTop8Take3" // Hassel — look at top 8, take up to 3
+  | "harlequinShuffleFlip" // Harlequin — both shuffle; heads 5/3, tails 3/5
   | "drawPerOppBenched" // Morty's Conviction (cost: discard 1)
   | "top6Take2Discard4" // Explorer's Guidance
   | "ciphermaniacSearch" // Ciphermaniac's Codebreaking
@@ -271,8 +276,10 @@ export function detectTrainerEffect(t: ApiTrainer): TrainerEffectId | undefined 
       /draw cards until you have 6 cards in your hand/i.test(text))
     return "drawUntil6Discard";
 
-  // Draw-until-5 pattern (Naveen, Team Rocket's Ariana, etc.).
-  if (t.name === "Naveen" || t.name === "Team Rocket's Ariana" ||
+  // Naveen — discard any, then draw to 5 (interactive).
+  if (t.name === "Naveen") return "naveenPreDiscardDraw5";
+  // Other draw-until-5 patterns (Team Rocket's Ariana, etc.) — no pre-discard.
+  if (t.name === "Team Rocket's Ariana" ||
       /draw cards until you have 5 cards in your hand/i.test(text))
     return "drawUntil5";
 
@@ -295,6 +302,11 @@ export function detectTrainerEffect(t: ApiTrainer): TrainerEffectId | undefined 
   // Eri — opponent reveals hand, discard up to 2 Items.
   if (t.name === "Eri")
     return "eriDiscardOppItems";
+
+  // Harlequin — both shuffle hands into deck, flip; heads: you 5 opp 3,
+  // tails: you 3 opp 5. Detect by name so the "each player shuffles" regex
+  // below doesn't claim it.
+  if (t.name === "Harlequin") return "harlequinShuffleFlip";
 
   // Iono / Marnie / Professor's Research — shuffle/discard + draw 7 band.
   if (/each player shuffles? their hand into their deck/i.test(text) ||
@@ -369,7 +381,7 @@ export function detectTrainerEffect(t: ApiTrainer): TrainerEffectId | undefined 
   if (t.name === "Xerosic's Machinations") return "discardOppItemsHand";
   if (t.name === "Ruffian") return "discardOppToolAndSpecialEnergy";
   if (t.name === "N's Plan") return "moveBenchEnergyToActive";
-  if (t.name === "Kofu") return "drawUntilHandSix";
+  if (t.name === "Kofu") return "kofuBottom2Draw4";
   if (t.name === "Morty's Conviction") return "drawPerOppBenched";
   if (t.name === "Explorer's Guidance") return "top6Take2Discard4";
   if (t.name === "Ciphermaniac's Codebreaking") return "ciphermaniacSearch";
@@ -377,7 +389,7 @@ export function detectTrainerEffect(t: ApiTrainer): TrainerEffectId | undefined 
   if (t.name === "Caretaker") return "healAllMinor";
   if (t.name === "Lisia's Appeal") return "gustConfuseOppBasic";
   if (t.name === "Dawn") return "searchEvolutionPokemon";
-  if (t.name === "Hassel") return "drawUntilHandSix"; // approx: draw helper
+  if (t.name === "Hassel") return "hasselTop8Take3";
 
   // Team Rocket's Proton on first turn — simplify
   if (t.name === "Team Rocket's Proton") return "searchBasicPokemon2Poffin"; // approx — 2 Basics
@@ -504,6 +516,41 @@ function discardOneOtherFromHand(state: GameState, pl: PlayerId): boolean {
   return true;
 }
 
+// Core swap used by Switch, Kieran, Prime Catcher, Scramble Switch, etc.
+// Moves the Active to the bench and the chosen bench Pokémon into the Active
+// slot, clearing the outgoing Pokémon's Special Conditions (the "switch" rule).
+function performSwitch(state: GameState, player: PlayerId, benchIndex: number): void {
+  const pl = state.players[player];
+  if (!pl.active || benchIndex < 0 || benchIndex >= pl.bench.length) return;
+  const incoming = pl.bench.splice(benchIndex, 1)[0];
+  const outgoing = pl.active;
+  clearAllStatuses(outgoing);
+  pl.active = incoming;
+  pl.bench.push(outgoing);
+  logEvent(state, player, `switches ${outgoing.card.name} → ${incoming.card.name}.`);
+  fireTriggeredOnMoveToActive(state, player, incoming);
+  fireTriggeredOnMoveToBench(state, player, outgoing);
+}
+
+// Resolve the pending-switch prompt: the human picked which benched Pokémon
+// to promote. Clears `pendingSwitchTarget` and performs the swap.
+export function resolveSwitchTarget(
+  state: GameState,
+  player: PlayerId,
+  benchIndex: number,
+): { ok: boolean; reason?: string } {
+  if (state.pendingSwitchTarget !== player) {
+    return { ok: false, reason: "No switch pending." };
+  }
+  const pl = state.players[player];
+  if (benchIndex < 0 || benchIndex >= pl.bench.length) {
+    return { ok: false, reason: "Invalid bench slot." };
+  }
+  performSwitch(state, player, benchIndex);
+  state.pendingSwitchTarget = null;
+  return { ok: true };
+}
+
 // -------- Precondition checks ---------------------------------------------
 
 export function precheckTrainerEffect(
@@ -519,6 +566,63 @@ export function precheckTrainerEffect(
   }
   if (id === "drawUntil6Discard" && pl.hand.length < 2) {
     return "Need an extra card to discard for this Supporter.";
+  }
+  if (id === "kofuBottom2Draw4" && pl.hand.length < 3) {
+    // Needs 2 other cards (beyond Kofu itself) to put on the bottom.
+    return "Kofu needs 2 other cards in your hand to put on the bottom of your deck.";
+  }
+  if (id === "naveenPreDiscardDraw5") {
+    // "If you can't draw any cards in this way, you can't use this card."
+    // We'll be able to draw at least 1 iff the hand (after optional discard)
+    // ends below 5. The player *may* discard to force the draw, so the gate
+    // is: hand must have at least 1 discardable card OR be below 5 already.
+    // In practice: as long as Naveen itself is in hand, hand >= 1 and the
+    // player can always choose to discard enough to get below 5. So this
+    // precheck is essentially "always ok"; we leave a guard in case the
+    // deck is empty.
+    if (pl.deck.length === 0) return "Your deck is empty — can't draw.";
+  }
+  if (id === "gustOppBenched") {
+    const opp = state.players[player === "p1" ? "p2" : "p1"];
+    if (opp.bench.length === 0) return `${opp.name} has no Benched Pokémon to gust.`;
+    const wantsTarget =
+      target?.kind === "oppInPlay" ? target.instanceId :
+      target?.kind === "inPlay" ? target.instanceId : null;
+    if (!wantsTarget) return "Pick an opposing Benched Pokémon to gust.";
+  }
+  if (id === "enhancedHammer") {
+    const opp = state.players[player === "p1" ? "p2" : "p1"];
+    const anySpecial = [opp.active, ...opp.bench].some(
+      (p) => p && p.attachedEnergy.some((e) => e.subtypes.includes("Special")),
+    );
+    if (!anySpecial) return "No Special Energy on any of opponent's Pokémon.";
+  }
+  if (id === "crushingHammer") {
+    const opp = state.players[player === "p1" ? "p2" : "p1"];
+    const anyEnergy = [opp.active, ...opp.bench].some(
+      (p) => p && p.attachedEnergy.length > 0,
+    );
+    if (!anyEnergy) return "No Energy on any of opponent's Pokémon.";
+  }
+  if (id === "flipGustOppBenched") {
+    const opp = state.players[player === "p1" ? "p2" : "p1"];
+    if (opp.bench.length === 0) return `${opp.name} has no Benched Pokémon.`;
+  }
+  if (id === "toolScrapper") {
+    const anyTool = (["p1", "p2"] as PlayerId[]).some((pid) => {
+      const p = state.players[pid];
+      return (p.active?.tools.length ?? 0) > 0 || p.bench.some((b) => b.tools.length > 0);
+    });
+    if (!anyTool) return "No Tools in play.";
+  }
+  if (id === "scoopUpCyclone" && pl.bench.length === 0) {
+    return "No Benched Pokémon to scoop.";
+  }
+  if (id === "gustConfuseOppBasic") {
+    const opp = state.players[player === "p1" ? "p2" : "p1"];
+    if (!opp.bench.some((p) => p.card.subtypes.includes("Basic"))) {
+      return `${opp.name} has no Benched Basic Pokémon.`;
+    }
   }
   if (id === "rareCandyEvolve") {
     // Can't use Rare Candy on turn 1 (rulebook).
@@ -550,6 +654,16 @@ function findStage2InHand(
   hand: Card[],
   basicName: string,
 ): { idx: number; stage2: PokemonCard } | null {
+  const all = findAllStage2InHand(hand, basicName);
+  return all.length > 0 ? all[0] : null;
+}
+
+// All Stage 2 cards in hand that could evolve onto a given Basic via Rare Candy.
+function findAllStage2InHand(
+  hand: Card[],
+  basicName: string,
+): Array<{ idx: number; stage2: PokemonCard }> {
+  const out: Array<{ idx: number; stage2: PokemonCard }> = [];
   for (let i = 0; i < hand.length; i++) {
     const c = hand[i];
     if (c.supertype !== "Pokémon") continue;
@@ -561,10 +675,10 @@ function findStage2InHand(
       stage1.supertype === "Pokémon" &&
       stage1.evolvesFrom === basicName
     ) {
-      return { idx: i, stage2: c as PokemonCard };
+      out.push({ idx: i, stage2: c as PokemonCard });
     }
   }
-  return null;
+  return out;
 }
 
 // -------- Dispatch --------------------------------------------------------
@@ -583,12 +697,20 @@ export function applyTrainerEffect(
     // ---------- Items ------------------------------------------------------
 
     case "searchBasicPokemon1":
-      if (!setDeckSearchPick(state, player, isBasicPokemonCard, 1, "Nest Ball: pick 1 Basic Pokémon")) {
+      if (pl.bench.length >= 5) {
+        logEvent(state, player, "bench is full — Nest Ball has no effect.");
+        return;
+      }
+      if (!setDeckSearchPick(state, player, isBasicPokemonCard, 1, "Nest Ball: pick 1 Basic Pokémon to Bench", { toBench: true })) {
         logEvent(state, player, "finds no Basic Pokémon.");
       }
       return;
     case "searchBasicPokemon2Poffin":
-      if (!setDeckSearchPick(state, player, isBasicPokemonUpTo70Hp, 2, "Buddy-Buddy Poffin: pick up to 2 Basic Pokémon (70 HP or less)")) {
+      if (pl.bench.length >= 5) {
+        logEvent(state, player, "bench is full — Poffin has no effect.");
+        return;
+      }
+      if (!setDeckSearchPick(state, player, isBasicPokemonUpTo70Hp, 2, "Buddy-Buddy Poffin: pick up to 2 Basic Pokémon (70 HP or less) to Bench", { toBench: true })) {
         logEvent(state, player, "finds no Basic Pokémon (70 HP or less).");
       }
       return;
@@ -598,16 +720,35 @@ export function applyTrainerEffect(
       }
       return;
     case "searchAnyPokemon": {
-      // Ultra Ball cost: discard 2 cards. Precondition checked already.
-      for (let i = 0; i < 2; i++) {
-        const c = pl.hand.shift();
-        if (!c) break;
-        pl.discard.push(c);
-        logEvent(state, player, `discards ${c.name} for Ultra Ball.`);
+      // Ultra Ball — "discard 2 other cards from your hand" then search for
+      // any Pokémon. For humans, open the hand picker; for AI, auto-pick the
+      // first 2 cards.
+      if (pl.isAI || pl.hand.length <= 2) {
+        for (let i = 0; i < 2; i++) {
+          const c = pl.hand.shift();
+          if (!c) break;
+          pl.discard.push(c);
+          logEvent(state, player, `discards ${c.name} for Ultra Ball.`);
+        }
+        if (!setDeckSearchPick(state, player, isPokemonCard, 1, "Ultra Ball: pick 1 Pokémon")) {
+          logEvent(state, player, "finds no Pokémon.");
+        }
+        return;
       }
-      if (!setDeckSearchPick(state, player, isPokemonCard, 1, "Ultra Ball: pick 1 Pokémon")) {
-        logEvent(state, player, "finds no Pokémon.");
-      }
+      state.pendingHandReveal = {
+        player,
+        target: player,
+        label: "Ultra Ball: pick 2 cards from your hand to discard",
+        min: 2,
+        max: 2,
+        filter: "any",
+        action: "discard",
+        postAction: {
+          kind: "searchDeckAnyPokemon",
+          max: 1,
+          label: "Ultra Ball: pick 1 Pokémon",
+        },
+      };
       return;
     }
     case "searchBasicEnergy1":
@@ -664,13 +805,14 @@ export function applyTrainerEffect(
         logEvent(state, player, "has no Benched Pokémon to switch to.");
         return;
       }
-      // Use the first bench slot — no chooser UI yet.
-      const incoming = pl.bench.shift()!;
-      const outgoing = pl.active;
-      clearAllStatuses(outgoing);
-      pl.active = incoming;
-      pl.bench.push(outgoing);
-      logEvent(state, player, `switches ${outgoing.card.name} → ${incoming.card.name}.`);
+      // Human + multiple bench options → defer: set pendingSwitchTarget so the
+      // UI can prompt the player to click their preferred bench target.
+      if (!pl.isAI && pl.bench.length > 1) {
+        state.pendingSwitchTarget = player;
+        logEvent(state, player, `plays Switch — pick a Benched Pokémon to promote.`);
+        return;
+      }
+      performSwitch(state, player, 0);
       return;
     }
 
@@ -679,19 +821,30 @@ export function applyTrainerEffect(
       logEvent(state, "system", `Pokémon Catcher flip: ${heads ? "heads" : "tails"}.`);
       if (!heads) return;
       const opp = state.players[oppId];
+      if (!opp.active || opp.bench.length === 0) return;
       const targetId =
         target?.kind === "oppInPlay" ? target.instanceId :
         target?.kind === "inPlay" ? target.instanceId : null;
-      if (!opp.active || opp.bench.length === 0) return;
-      // Without a UI target, take the first benched Pokémon. With a target
-      // (e.g. AI supplied one or future UI flow), honor it.
-      const idx = targetId ? opp.bench.findIndex((p) => p.instanceId === targetId) : 0;
-      if (idx < 0) return;
-      const pulled = opp.bench.splice(idx, 1)[0];
-      const wasActive = opp.active;
-      opp.active = pulled;
-      opp.bench.push(wasActive);
-      logEvent(state, player, `gusts ${pulled.card.name} into the Active spot.`);
+      // AI supplied a target or only one option: resolve inline.
+      if (pl.isAI || targetId || opp.bench.length === 1) {
+        const idx = targetId ? opp.bench.findIndex((p) => p.instanceId === targetId) : 0;
+        if (idx < 0) return;
+        const pulled = opp.bench.splice(idx, 1)[0];
+        const wasActive = opp.active;
+        opp.active = pulled;
+        opp.bench.push(wasActive);
+        logEvent(state, player, `gusts ${pulled.card.name} into the Active spot.`);
+        return;
+      }
+      // Humans with multiple bench targets: ask via picker.
+      state.pendingInPlayTarget = {
+        player,
+        label: "Pokémon Catcher: pick an opposing Benched Pokémon to gust",
+        scope: "opp",
+        slot: "bench",
+        filter: "anyPokemon",
+        action: { kind: "pokemonCatcher" },
+      };
       return;
     }
 
@@ -751,43 +904,75 @@ export function applyTrainerEffect(
       const [e] = from.attachedEnergy.splice(eIdx, 1);
       to.attachedEnergy.push(e);
       logEvent(state, player, `moves ${e.name} from ${from.card.name} to ${to.card.name}.`);
+      enforceSpecialEnergyAttachRules(state);
       return;
     }
 
     case "toolScrapper": {
-      // Discard up to 2 Tools, preferring opponent's first (more impactful).
-      let discarded = 0;
-      const both: Array<[PlayerId, PokemonInPlay]> = [];
+      // Discard up to 2 Tools from any Pokémon (either side). AI auto-picks
+      // opponent's Tools first; human goes through the target picker.
+      const withTools: Array<[PlayerId, PokemonInPlay]> = [];
       for (const pid of [oppId, player] as PlayerId[]) {
         const p = state.players[pid];
-        if (p.active) both.push([pid, p.active]);
-        for (const b of p.bench) both.push([pid, b]);
+        if (p.active && p.active.tools.length > 0) withTools.push([pid, p.active]);
+        for (const b of p.bench) if (b.tools.length > 0) withTools.push([pid, b]);
       }
-      for (const [pid, p] of both) {
-        while (p.tools.length && discarded < 2) {
-          const [tool] = p.tools.splice(0, 1);
-          state.players[pid].discard.push(tool);
-          logEvent(state, player, `discards ${tool.name} from ${p.card.name}.`);
-          discarded++;
+      if (withTools.length === 0) {
+        logEvent(state, player, "finds no Tools in play.");
+        return;
+      }
+      if (pl.isAI || withTools.length === 1) {
+        let discarded = 0;
+        for (const [pid, p] of withTools) {
+          while (p.tools.length && discarded < 2) {
+            const [tool] = p.tools.splice(0, 1);
+            state.players[pid].discard.push(tool);
+            logEvent(state, player, `discards ${tool.name} from ${p.card.name}.`);
+            discarded++;
+          }
+          if (discarded >= 2) break;
         }
+        return;
       }
-      if (discarded === 0) logEvent(state, player, "finds no Tools in play.");
+      state.pendingInPlayTarget = {
+        player,
+        label: "Tool Scrapper: pick a Pokémon to discard a Tool from (up to 2)",
+        scope: "both",
+        slot: "anywhere",
+        filter: "hasTool",
+        action: { kind: "toolScrapper", remaining: 2 },
+      };
       return;
     }
 
     case "enhancedHammer": {
+      // Ask for an opposing Pokémon that has a Special Energy attached.
+      // AI paths just auto-pick; human plays open the target picker.
       const opp = state.players[oppId];
-      if (!opp.active) return;
-      const idx = opp.active.attachedEnergy.findIndex(
-        (e) => e.subtypes.includes("Special"),
+      const candidates = [opp.active, ...opp.bench].filter(
+        (p): p is PokemonInPlay =>
+          !!p && p.attachedEnergy.some((e) => e.subtypes.includes("Special")),
       );
-      if (idx < 0) {
-        logEvent(state, player, `finds no Special Energy on ${opp.name}'s Active.`);
+      if (candidates.length === 0) {
+        logEvent(state, player, `finds no Special Energy on ${opp.name}'s Pokémon.`);
         return;
       }
-      const [e] = opp.active.attachedEnergy.splice(idx, 1);
-      opp.discard.push(e);
-      logEvent(state, player, `discards ${e.name} from ${opp.active.card.name}.`);
+      if (pl.isAI || candidates.length === 1) {
+        const target = candidates[0];
+        const idx = target.attachedEnergy.findIndex((e) => e.subtypes.includes("Special"));
+        const [e] = target.attachedEnergy.splice(idx, 1);
+        opp.discard.push(e);
+        logEvent(state, player, `discards ${e.name} from ${target.card.name}.`);
+        return;
+      }
+      state.pendingInPlayTarget = {
+        player,
+        label: "Enhanced Hammer: pick an opposing Pokémon with a Special Energy",
+        scope: "opp",
+        slot: "anywhere",
+        filter: "hasSpecialEnergy",
+        action: { kind: "enhancedHammer" },
+      };
       return;
     }
 
@@ -796,10 +981,26 @@ export function applyTrainerEffect(
       logEvent(state, "system", `Crushing Hammer flip: ${heads ? "heads" : "tails"}.`);
       if (!heads) return;
       const opp = state.players[oppId];
-      if (!opp.active || opp.active.attachedEnergy.length === 0) return;
-      const [e] = opp.active.attachedEnergy.splice(0, 1);
-      opp.discard.push(e);
-      logEvent(state, player, `discards ${e.name} from ${opp.active.card.name}.`);
+      const candidates = [opp.active, ...opp.bench].filter(
+        (p): p is PokemonInPlay => !!p && p.attachedEnergy.length > 0,
+      );
+      if (candidates.length === 0) return;
+      if (pl.isAI || candidates.length === 1) {
+        // Prefer opp Active with the most Energy.
+        const target = candidates.sort((a, b) => b.attachedEnergy.length - a.attachedEnergy.length)[0];
+        const [e] = target.attachedEnergy.splice(0, 1);
+        opp.discard.push(e);
+        logEvent(state, player, `discards ${e.name} from ${target.card.name}.`);
+        return;
+      }
+      state.pendingInPlayTarget = {
+        player,
+        label: "Crushing Hammer: pick an opposing Pokémon to discard an Energy from",
+        scope: "opp",
+        slot: "anywhere",
+        filter: "hasAnyEnergy",
+        action: { kind: "crushingHammer" },
+      };
       return;
     }
 
@@ -895,15 +1096,27 @@ export function applyTrainerEffect(
       if (!targetId) return;
       const basic = findInPlay(state, player, targetId);
       if (!basic) return;
-      const found = findStage2InHand(pl.hand, basic.card.name);
-      if (!found) return;
-      const [stage2Card] = pl.hand.splice(found.idx, 1) as [PokemonCard];
-      basic.evolvedFrom.push(basic.card);
-      basic.card = stage2Card;
-      clearAllStatuses(basic);
-      basic.abilityUsedThisTurn = false;
-      basic.evolvedThisTurn = true;
-      logEvent(state, player, `uses Rare Candy to evolve into ${stage2Card.name}.`);
+      const options = findAllStage2InHand(pl.hand, basic.card.name);
+      if (options.length === 0) return;
+      // Single option → evolve inline. Multi: for AI pick first; for humans
+      // open the chooser.
+      if (options.length === 1 || pl.isAI) {
+        const chosen = options[0];
+        const [stage2Card] = pl.hand.splice(chosen.idx, 1) as [PokemonCard];
+        basic.evolvedFrom.push(basic.card);
+        basic.card = stage2Card;
+        clearAllStatuses(basic);
+        basic.abilityUsedThisTurn = false;
+        basic.evolvedThisTurn = true;
+        logEvent(state, player, `uses Rare Candy to evolve into ${stage2Card.name}.`);
+        return;
+      }
+      state.pendingRareCandyChoice = {
+        player,
+        targetInstanceId: basic.instanceId,
+        handIndexes: options.map((o) => o.idx),
+      };
+      logEvent(state, player, `Rare Candy: pick a Stage 2 to evolve ${basic.card.name} into.`);
       return;
     }
 
@@ -978,6 +1191,27 @@ export function applyTrainerEffect(
       return;
     }
 
+    case "naveenPreDiscardDraw5": {
+      // Naveen — you may discard any number from your hand, then draw to 5.
+      // AI auto-path: skip the discard step and just draw to 5 (reasonable
+      // default since the AI doesn't value hand-culling).
+      if (pl.isAI || pl.hand.length === 0) {
+        drawUpTo(state, player, Math.max(0, 5 - pl.hand.length));
+        return;
+      }
+      state.pendingHandReveal = {
+        player,
+        target: player,
+        label: "Naveen: discard any number from your hand, then draw to 5",
+        min: 0,
+        max: pl.hand.length,
+        filter: "any",
+        action: "discard",
+        postAction: { kind: "drawUntilHand", targetSize: 5 },
+      };
+      return;
+    }
+
     case "drawCoinFlip42": {
       const heads = flipCoinInline(state);
       logEvent(state, "system", `Picnicker flip: ${heads ? "heads" : "tails"}.`);
@@ -1039,22 +1273,25 @@ export function applyTrainerEffect(
     }
 
     case "eriDiscardOppItems": {
-      // Eri: discard up to 2 Item cards from opponent's hand (AI picks arbitrarily).
+      // Eri — your opponent reveals their hand; you discard up to 2 Item cards
+      // you find there.
       const opp = state.players[oppId];
-      const kept: Card[] = [];
-      const pulled: Card[] = [];
-      for (const c of opp.hand) {
-        if (pulled.length < 2 && c.supertype === "Trainer" && c.subtypes.includes("Item")) {
-          pulled.push(c);
-        } else {
-          kept.push(c);
-        }
+      const eligible = opp.hand.filter(
+        (c) => c.supertype === "Trainer" && c.subtypes.includes("Item"),
+      );
+      if (eligible.length === 0) {
+        logEvent(state, player, `${opp.name} has no Item cards in hand.`);
+        return;
       }
-      opp.hand = kept;
-      opp.discard.push(...pulled);
-      logEvent(state, player, pulled.length
-        ? `discards ${pulled.length} Item(s) from ${opp.name}'s hand: ${pulled.map((c) => c.name).join(", ")}.`
-        : `finds no Items in ${opp.name}'s hand.`);
+      state.pendingHandReveal = {
+        player,
+        target: oppId,
+        label: `Eri: discard up to 2 Items from ${opp.name}'s hand`,
+        min: 0,
+        max: 2,
+        filter: "item",
+        action: "discard",
+      };
       return;
     }
 
@@ -1318,16 +1555,28 @@ export function applyTrainerEffect(
     }
 
     case "discardOppItemsHand": {
-      // Xerosic's Machinations — opp discards until 3 cards remain.
+      // Xerosic's Machinations — your opponent reveals their hand; you
+      // discard 1 Item and 1 Pokémon Tool card you find there. We model it
+      // as a single "up to 2 Item-or-Tool" pick.
       const opp = state.players[oppId];
-      let discarded = 0;
-      while (opp.hand.length > 3) {
-        const c = opp.hand.shift();
-        if (!c) break;
-        opp.discard.push(c);
-        discarded++;
+      const eligible = opp.hand.filter((c) => {
+        if (c.supertype !== "Trainer") return false;
+        const subs = c.subtypes;
+        return subs.includes("Item") || subs.includes("Pokémon Tool") || subs.includes("Tool");
+      });
+      if (eligible.length === 0) {
+        logEvent(state, player, `${opp.name} has no Items or Tools in hand.`);
+        return;
       }
-      logEvent(state, player, `${opp.name} discards ${discarded} card(s).`);
+      state.pendingHandReveal = {
+        player,
+        target: oppId,
+        label: `Xerosic's Machinations: discard up to 2 Items/Tools from ${opp.name}'s hand`,
+        min: 0,
+        max: 2,
+        filter: "itemOrTool",
+        action: "discard",
+      };
       return;
     }
 
@@ -1361,24 +1610,78 @@ export function applyTrainerEffect(
     }
 
     case "moveBenchEnergyToActive": {
-      // N's Plan — move up to 2 Energy from Bench to Active.
+      // N's Plan — move up to 2 Energy from Benched N's Pokémon to Active.
       if (!pl.active) return;
-      let moved = 0;
-      for (const b of pl.bench) {
-        while (moved < 2 && b.attachedEnergy.length > 0) {
-          const [e] = b.attachedEnergy.splice(0, 1);
-          pl.active.attachedEnergy.push(e);
-          moved++;
-        }
-        if (moved >= 2) break;
+      const sources = pl.bench.filter((b) => b.attachedEnergy.length > 0);
+      if (sources.length === 0) {
+        logEvent(state, player, "no Energy on the bench to move.");
+        return;
       }
-      logEvent(state, player, `moves ${moved} Energy from bench to Active.`);
+      if (pl.isAI || sources.length === 1) {
+        let moved = 0;
+        for (const b of pl.bench) {
+          while (moved < 2 && b.attachedEnergy.length > 0) {
+            const [e] = b.attachedEnergy.splice(0, 1);
+            pl.active.attachedEnergy.push(e);
+            moved++;
+          }
+          if (moved >= 2) break;
+        }
+        logEvent(state, player, `moves ${moved} Energy from bench to Active.`);
+        enforceSpecialEnergyAttachRules(state);
+        return;
+      }
+      state.pendingInPlayTarget = {
+        player,
+        label: "N's Plan: pick a Benched Pokémon to move Energy from (up to 2)",
+        scope: "own",
+        slot: "bench",
+        filter: "hasAnyEnergy",
+        action: { kind: "nPlanEnergySource", remaining: 2 },
+      };
       return;
     }
 
     case "drawUntilHandSix":
       drawUpTo(state, player, Math.max(0, 6 - pl.hand.length));
       return;
+
+    case "kofuBottom2Draw4": {
+      // Kofu: put 2 cards from your hand on the bottom of your deck in any
+      // order, then draw 4. Precheck already verified the hand size.
+      // Auto-pick: put the leftmost 2 cards (non-Supporter-preferring to
+      // avoid dumping high-value plays, but scope is small — just take first).
+      for (let i = 0; i < 2; i++) {
+        const c = pl.hand.shift();
+        if (!c) break;
+        pl.deck.push(c);
+      }
+      logEvent(state, player, "Kofu: puts 2 cards on the bottom of the deck.");
+      drawUpTo(state, player, 4);
+      return;
+    }
+
+    case "hasselTop8Take3": {
+      // Hassel: look at the top 8 cards of your deck. Put up to 3 of them
+      // into your hand. Shuffle the rest back into your deck.
+      if (!setTopPeekPick(state, player, 8, () => true, 3, "Hassel: pick up to 3 cards from the top 8")) {
+        logEvent(state, player, "Hassel: deck is empty.");
+      }
+      return;
+    }
+
+    case "harlequinShuffleFlip": {
+      // Harlequin: each player shuffles their hand into their deck. Flip a
+      // coin; heads → you draw 5 and opp draws 3, tails → you draw 3 and
+      // opp draws 5.
+      shuffleHandIntoDeck(state, player);
+      shuffleHandIntoDeck(state, oppId);
+      const heads = flipCoinInline(state);
+      logEvent(state, "system", `Harlequin flip: ${heads ? "heads" : "tails"}.`);
+      drawUpTo(state, player, heads ? 5 : 3);
+      drawUpTo(state, oppId, heads ? 3 : 5);
+      return;
+    }
 
     case "drawPerOppBenched": {
       const count = state.players[oppId].bench.length;
@@ -1450,17 +1753,29 @@ export function applyTrainerEffect(
       // Lisia's Appeal — switch opp's Benched Basic to Active, new Active is Confused.
       const opp = state.players[oppId];
       if (!opp.active) return;
-      const idx = opp.bench.findIndex((p) => p.card.subtypes.includes("Basic"));
-      if (idx < 0) {
+      const basics = opp.bench.filter((p) => p.card.subtypes.includes("Basic"));
+      if (basics.length === 0) {
         logEvent(state, player, `${opp.name} has no Benched Basic.`);
         return;
       }
-      const pulled = opp.bench.splice(idx, 1)[0];
-      const wasActive = opp.active;
-      opp.active = pulled;
-      opp.bench.push(wasActive);
-      if (!pulled.statuses.includes("confused")) pulled.statuses.push("confused");
-      logEvent(state, player, `gusts ${pulled.card.name} to Active; it is now Confused.`);
+      if (pl.isAI || basics.length === 1) {
+        const idx = opp.bench.findIndex((p) => p.card.subtypes.includes("Basic"));
+        const pulled = opp.bench.splice(idx, 1)[0];
+        const wasActive = opp.active;
+        opp.active = pulled;
+        opp.bench.push(wasActive);
+        if (!pulled.statuses.includes("confused")) pulled.statuses.push("confused");
+        logEvent(state, player, `gusts ${pulled.card.name} to Active; it is now Confused.`);
+        return;
+      }
+      state.pendingInPlayTarget = {
+        player,
+        label: "Lisia's Appeal: pick an opposing Benched Basic to gust (becomes Confused)",
+        scope: "opp",
+        slot: "bench",
+        filter: "isBasic",
+        action: { kind: "lisiasAppeal" },
+      };
       return;
     }
 
@@ -1478,9 +1793,13 @@ export function applyTrainerEffect(
     }
 
     case "searchHopsBasics": {
+      if (pl.bench.length >= 5) {
+        logEvent(state, player, "bench is full — Hop's Bag has no effect.");
+        return;
+      }
       const pred = (c: Card) =>
         c.supertype === "Pokémon" && c.subtypes.includes("Basic") && c.name.startsWith("Hop's ");
-      if (!setDeckSearchPick(state, player, pred, 2, "Hop's Bag: pick up to 2 Basic Hop's Pokémon")) {
+      if (!setDeckSearchPick(state, player, pred, 2, "Hop's Bag: pick up to 2 Basic Hop's Pokémon to Bench", { toBench: true })) {
         logEvent(state, player, "finds no Basic Hop's Pokémon.");
       }
       return;
@@ -1689,19 +2008,28 @@ export function applyTrainerEffect(
     }
 
     case "scoopUpCyclone": {
-      // Pick up 1 of your Pokémon and all attached cards into your hand.
-      // Auto-target: prefer the most-damaged bench Pokémon.
-      const targets = pl.bench.slice().sort((a, b) => b.damage - a.damage);
-      if (targets.length === 0) {
+      // Pick up 1 of your Pokémon. Auto-pick for AI (most damaged); humans
+      // pick from their own bench.
+      if (pl.bench.length === 0) {
         logEvent(state, player, "no benched Pokémon to scoop.");
         return;
       }
-      const target = targets[0];
-      const idx = pl.bench.indexOf(target);
-      pl.bench.splice(idx, 1);
-      // Return cards to hand: the Pokémon card itself and attached Energy and tools.
-      pl.hand.push(target.card, ...target.evolvedFrom, ...target.attachedEnergy, ...target.tools);
-      logEvent(state, player, `returns ${target.card.name} and attached cards to hand.`);
+      if (pl.isAI || pl.bench.length === 1) {
+        const target = pl.bench.slice().sort((a, b) => b.damage - a.damage)[0];
+        const idx = pl.bench.indexOf(target);
+        pl.bench.splice(idx, 1);
+        pl.hand.push(target.card, ...target.evolvedFrom, ...target.attachedEnergy, ...target.tools);
+        logEvent(state, player, `returns ${target.card.name} and attached cards to hand.`);
+        return;
+      }
+      state.pendingInPlayTarget = {
+        player,
+        label: "Scoop Up Cyclone: pick one of your Benched Pokémon to return to hand",
+        scope: "own",
+        slot: "bench",
+        filter: "anyPokemon",
+        action: { kind: "scoopUpCyclone" },
+      };
       return;
     }
 
@@ -1717,6 +2045,7 @@ export function applyTrainerEffect(
       pl.active.attachedEnergy.push(...prev.attachedEnergy);
       prev.attachedEnergy = [];
       logEvent(state, player, `switches + transfers Energy to ${pl.active.card.name}.`);
+      enforceSpecialEnergyAttachRules(state);
       return;
     }
 
@@ -1783,4 +2112,300 @@ export function applyTrainerEffect(
     default:
       return;
   }
+}
+
+// -------- In-play target resolver ----------------------------------------
+
+// Called by the UI when the user clicks an in-play Pokémon while a
+// pendingInPlayTarget is active. Returns {ok:false, reason} if the click
+// doesn't match the pending prompt. Mutates state to apply the effect.
+export function resolveInPlayTarget(
+  state: GameState,
+  clicker: PlayerId,
+  targetOwner: PlayerId,
+  instanceId: string,
+): { ok: boolean; reason?: string } {
+  const pending = state.pendingInPlayTarget;
+  if (!pending || pending.player !== clicker) {
+    return { ok: false, reason: "No in-play target pending." };
+  }
+
+  const ownerPl = state.players[targetOwner];
+  const isOpp = targetOwner !== clicker;
+
+  // Scope check.
+  if (pending.scope === "own" && isOpp) return { ok: false, reason: "Pick your own Pokémon." };
+  if (pending.scope === "opp" && !isOpp) return { ok: false, reason: "Pick an opposing Pokémon." };
+
+  // Find the target.
+  let target: PokemonInPlay | null = null;
+  let fromActive = false;
+  if (ownerPl.active?.instanceId === instanceId) { target = ownerPl.active; fromActive = true; }
+  else target = ownerPl.bench.find((p) => p.instanceId === instanceId) ?? null;
+  if (!target) return { ok: false, reason: "Target not in play." };
+
+  // Slot check.
+  if (pending.slot === "active" && !fromActive) return { ok: false, reason: "Pick the Active Pokémon." };
+  if (pending.slot === "bench" && fromActive) return { ok: false, reason: "Pick a Benched Pokémon." };
+
+  // Filter check.
+  if (pending.filter === "hasTool" && target.tools.length === 0) {
+    return { ok: false, reason: "That Pokémon has no Tool." };
+  }
+  if (pending.filter === "hasSpecialEnergy" &&
+      !target.attachedEnergy.some((e) => e.subtypes.includes("Special"))) {
+    return { ok: false, reason: "That Pokémon has no Special Energy." };
+  }
+  if (pending.filter === "hasAnyEnergy" && target.attachedEnergy.length === 0) {
+    return { ok: false, reason: "That Pokémon has no Energy." };
+  }
+  if (pending.filter === "isBasic" && !target.card.subtypes.includes("Basic")) {
+    return { ok: false, reason: "Must pick a Basic Pokémon." };
+  }
+
+  const oppId: PlayerId = clicker === "p1" ? "p2" : "p1";
+  const clickerPl = state.players[clicker];
+
+  switch (pending.action.kind) {
+    case "enhancedHammer": {
+      const idx = target.attachedEnergy.findIndex((e) => e.subtypes.includes("Special"));
+      if (idx < 0) return { ok: false, reason: "No Special Energy on target." };
+      const [e] = target.attachedEnergy.splice(idx, 1);
+      state.players[oppId].discard.push(e);
+      logEvent(state, clicker, `discards ${e.name} from ${target.card.name}.`);
+      state.pendingInPlayTarget = null;
+      return { ok: true };
+    }
+    case "crushingHammer": {
+      if (target.attachedEnergy.length === 0) return { ok: false, reason: "No Energy on target." };
+      const [e] = target.attachedEnergy.splice(0, 1);
+      state.players[oppId].discard.push(e);
+      logEvent(state, clicker, `discards ${e.name} from ${target.card.name}.`);
+      state.pendingInPlayTarget = null;
+      return { ok: true };
+    }
+    case "pokemonCatcher": {
+      const opp = state.players[oppId];
+      if (!opp.active || fromActive) return { ok: false, reason: "Pick a Benched Pokémon." };
+      const idx = opp.bench.findIndex((p) => p.instanceId === instanceId);
+      if (idx < 0) return { ok: false, reason: "Target not in bench." };
+      const pulled = opp.bench.splice(idx, 1)[0];
+      const wasActive = opp.active;
+      opp.active = pulled;
+      opp.bench.push(wasActive);
+      logEvent(state, clicker, `gusts ${pulled.card.name} into the Active spot.`);
+      state.pendingInPlayTarget = null;
+      return { ok: true };
+    }
+    case "toolScrapper": {
+      if (target.tools.length === 0) return { ok: false, reason: "No Tool." };
+      const [tool] = target.tools.splice(0, 1);
+      state.players[targetOwner].discard.push(tool);
+      logEvent(state, clicker, `discards ${tool.name} from ${target.card.name}.`);
+      const remaining = pending.action.remaining - 1;
+      // Are there any Tools still in play?
+      const anyLeft = (["p1", "p2"] as PlayerId[]).some((pid) => {
+        const p = state.players[pid];
+        return (p.active?.tools.length ?? 0) > 0 || p.bench.some((b) => b.tools.length > 0);
+      });
+      if (remaining > 0 && anyLeft) {
+        state.pendingInPlayTarget = {
+          ...pending,
+          action: { kind: "toolScrapper", remaining },
+        };
+      } else {
+        state.pendingInPlayTarget = null;
+      }
+      return { ok: true };
+    }
+    case "heavyBaton": {
+      // Target is a benched ally to transfer Energy to.
+      // Find the KO'd Pokémon via source instanceId — but KO is already
+      // resolved, so source is gone. Heavy Baton is resolved inline in
+      // knockOut() now; this branch exists for parity when we add the pick.
+      state.pendingInPlayTarget = null;
+      return { ok: true };
+    }
+    case "scoopUpCyclone": {
+      const idx = clickerPl.bench.findIndex((p) => p.instanceId === instanceId);
+      if (idx < 0) return { ok: false, reason: "Pick from your bench." };
+      const [t] = clickerPl.bench.splice(idx, 1);
+      clickerPl.hand.push(t.card, ...t.evolvedFrom, ...t.attachedEnergy, ...t.tools);
+      logEvent(state, clicker, `returns ${t.card.name} and attached cards to hand.`);
+      state.pendingInPlayTarget = null;
+      return { ok: true };
+    }
+    case "lisiasAppeal": {
+      const opp = state.players[oppId];
+      if (!opp.active) return { ok: false, reason: "Opponent has no Active." };
+      if (fromActive) return { ok: false, reason: "Pick a Benched Pokémon." };
+      if (!target.card.subtypes.includes("Basic")) return { ok: false, reason: "Must be a Basic." };
+      const idx = opp.bench.findIndex((p) => p.instanceId === instanceId);
+      if (idx < 0) return { ok: false, reason: "Target not in bench." };
+      const pulled = opp.bench.splice(idx, 1)[0];
+      const wasActive = opp.active;
+      opp.active = pulled;
+      opp.bench.push(wasActive);
+      if (!pulled.statuses.includes("confused")) pulled.statuses.push("confused");
+      logEvent(state, clicker, `gusts ${pulled.card.name} to Active; it is now Confused.`);
+      state.pendingInPlayTarget = null;
+      return { ok: true };
+    }
+    case "nPlanEnergySource": {
+      if (!clickerPl.active) return { ok: false, reason: "No Active to move Energy to." };
+      if (isOpp || fromActive) return { ok: false, reason: "Pick a Benched Pokémon of yours." };
+      if (target.attachedEnergy.length === 0) return { ok: false, reason: "No Energy on target." };
+      const [e] = target.attachedEnergy.splice(0, 1);
+      clickerPl.active.attachedEnergy.push(e);
+      logEvent(state, clicker, `moves ${e.name} from ${target.card.name} to ${clickerPl.active.card.name}.`);
+      enforceSpecialEnergyAttachRules(state);
+      const remaining = pending.action.remaining - 1;
+      const anyLeft = clickerPl.bench.some((b) => b.attachedEnergy.length > 0);
+      if (remaining > 0 && anyLeft) {
+        state.pendingInPlayTarget = { ...pending, action: { kind: "nPlanEnergySource", remaining } };
+      } else {
+        state.pendingInPlayTarget = null;
+      }
+      return { ok: true };
+    }
+  }
+}
+
+// Cancel a pending in-play target (user backed out / the UI dismissed it).
+// We don't refund the trainer card — that's already been discarded — but we
+// clear the prompt so the game can continue. Some effects leave state partially
+// applied (e.g. Crushing Hammer's coin flip already happened); that's fine.
+export function cancelInPlayTarget(state: GameState): void {
+  state.pendingInPlayTarget = null;
+}
+
+// -------- Hand-reveal resolver -------------------------------------------
+
+function handCardMatches(c: Card, filter: "item" | "tool" | "itemOrTool" | "supporter" | "any"): boolean {
+  if (filter === "any") return true;
+  if (c.supertype !== "Trainer") return false;
+  const subs = c.subtypes ?? [];
+  switch (filter) {
+    case "item":
+      return subs.includes("Item");
+    case "tool":
+      return subs.includes("Pokémon Tool") || subs.includes("Tool");
+    case "itemOrTool":
+      return subs.includes("Item") || subs.includes("Pokémon Tool") || subs.includes("Tool");
+    case "supporter":
+      return subs.includes("Supporter");
+  }
+}
+
+// Called by the UI when the initiator confirms their selection from the
+// revealed hand. `indexes` are positions into `state.players[target].hand`.
+export function resolveHandReveal(
+  state: GameState,
+  clicker: PlayerId,
+  indexes: number[],
+): { ok: boolean; reason?: string } {
+  const pending = state.pendingHandReveal;
+  if (!pending || pending.player !== clicker) {
+    return { ok: false, reason: "No hand-reveal pending." };
+  }
+  const uniq = [...new Set(indexes)].sort((a, b) => a - b);
+  if (uniq.length > pending.max) return { ok: false, reason: `Pick at most ${pending.max}.` };
+  if (uniq.length < pending.min) return { ok: false, reason: `Pick at least ${pending.min}.` };
+  const targetPl = state.players[pending.target];
+  for (const i of uniq) {
+    if (i < 0 || i >= targetPl.hand.length) return { ok: false, reason: "Invalid index." };
+    if (!handCardMatches(targetPl.hand[i], pending.filter)) {
+      return { ok: false, reason: `Card at ${i} doesn't match filter.` };
+    }
+  }
+  // Pull cards out in descending order so index positions stay valid.
+  const picked: Card[] = [];
+  for (const i of uniq.slice().reverse()) picked.unshift(targetPl.hand.splice(i, 1)[0]);
+
+  if (pending.action === "discard") {
+    targetPl.discard.push(...picked);
+    logEvent(state, clicker, picked.length
+      ? `discards ${picked.map((c) => c.name).join(", ")} from ${targetPl.name}'s hand.`
+      : `finds nothing to discard in ${targetPl.name}'s hand.`);
+  } else {
+    // toBottomOfDeck
+    targetPl.deck.push(...picked);
+    logEvent(state, clicker, picked.length
+      ? `puts ${picked.map((c) => c.name).join(", ")} on the bottom of ${targetPl.name}'s deck.`
+      : `puts nothing from ${targetPl.name}'s hand on the bottom of their deck.`);
+  }
+  const postAction = pending.postAction;
+  state.pendingHandReveal = null;
+  if (postAction?.kind === "drawUntilHand") {
+    const clickerPl = state.players[clicker];
+    const toDraw = Math.max(0, postAction.targetSize - clickerPl.hand.length);
+    if (toDraw > 0) drawUpTo(state, clicker, toDraw);
+  } else if (postAction?.kind === "searchDeckAnyPokemon") {
+    if (!setDeckSearchPick(state, clicker, isPokemonCard, postAction.max, postAction.label)) {
+      logEvent(state, clicker, "finds no Pokémon.");
+    }
+  }
+  return { ok: true };
+}
+
+// AI initiator auto-resolves the reveal by taking the first `max` matches.
+export function resolveAiHandReveal(state: GameState): boolean {
+  const pending = state.pendingHandReveal;
+  if (!pending) return false;
+  const targetPl = state.players[pending.target];
+  const eligible: number[] = [];
+  targetPl.hand.forEach((c, i) => {
+    if (eligible.length < pending.max && handCardMatches(c, pending.filter)) eligible.push(i);
+  });
+  resolveHandReveal(state, pending.player, eligible);
+  return true;
+}
+
+export function cancelHandReveal(state: GameState): void {
+  state.pendingHandReveal = null;
+}
+
+// -------- Rare Candy chooser resolver ------------------------------------
+
+export function resolveRareCandyChoice(
+  state: GameState,
+  clicker: PlayerId,
+  handIndex: number,
+): { ok: boolean; reason?: string } {
+  const pending = state.pendingRareCandyChoice;
+  if (!pending || pending.player !== clicker) {
+    return { ok: false, reason: "No Rare Candy pending." };
+  }
+  const pl = state.players[clicker];
+  const card = pl.hand[handIndex];
+  if (!card || card.supertype !== "Pokémon" || !card.subtypes.includes("Stage 2") || !card.evolvesFrom) {
+    return { ok: false, reason: "Pick a Stage 2 Pokémon from your hand." };
+  }
+  const basic = (() => {
+    if (pl.active?.instanceId === pending.targetInstanceId) return pl.active;
+    return pl.bench.find((p) => p.instanceId === pending.targetInstanceId) ?? null;
+  })();
+  if (!basic) {
+    // Target left play — abort gracefully.
+    state.pendingRareCandyChoice = null;
+    return { ok: false, reason: "Target is no longer in play." };
+  }
+  // Check this Stage 2 actually evolves (via its Stage 1) from the Basic.
+  const stage1 = findByName(card.evolvesFrom);
+  if (!stage1 || stage1.supertype !== "Pokémon" || stage1.evolvesFrom !== basic.card.name) {
+    return { ok: false, reason: "That Stage 2 doesn't evolve from this Pokémon." };
+  }
+  pl.hand.splice(handIndex, 1);
+  basic.evolvedFrom.push(basic.card);
+  basic.card = card as PokemonCard;
+  clearAllStatuses(basic);
+  basic.abilityUsedThisTurn = false;
+  basic.evolvedThisTurn = true;
+  logEvent(state, clicker, `uses Rare Candy to evolve into ${card.name}.`);
+  state.pendingRareCandyChoice = null;
+  return { ok: true };
+}
+
+export function cancelRareCandyChoice(state: GameState): void {
+  state.pendingRareCandyChoice = null;
 }

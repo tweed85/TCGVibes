@@ -40,6 +40,7 @@ import {
   abilitiesActiveOn,
 } from "./ongoingEffects";
 import { resolvePendingPick } from "./pendingPick";
+import { resolveAiHandReveal } from "./trainerEffects";
 import { logEvent } from "./rules";
 import type {
   Attack,
@@ -933,6 +934,10 @@ export function takeAiTurn(state: GameState, player: PlayerId): void {
     }
     if (state.pendingPick && state.pendingPick.player === player) {
       resolveAiPendingPickSmart(state, player);
+      continue;
+    }
+    if (state.pendingHandReveal && state.pendingHandReveal.player === player) {
+      resolveAiHandReveal(state);
       continue;
     }
 
