@@ -12,7 +12,11 @@
 
 import { enforceSpecialEnergyAttachRules, logEvent, makePokemonInPlay } from "./rules";
 import { clearAllStatuses } from "./rules";
-import { fireTriggeredOnMoveToActive, fireTriggeredOnMoveToBench } from "./abilities";
+import {
+  fireTriggeredOnEvolve,
+  fireTriggeredOnMoveToActive,
+  fireTriggeredOnMoveToBench,
+} from "./abilities";
 import { findByName } from "../data/cards";
 import {
   setDeckSearchPick,
@@ -1110,6 +1114,9 @@ export function applyTrainerEffect(
         basic.abilityUsedThisTurn = false;
         basic.evolvedThisTurn = true;
         logEvent(state, player, `uses Rare Candy to evolve into ${stage2Card.name}.`);
+        // Fire any triggered-on-evolve ability the Stage 2 has (Alakazam's
+        // Psychic Draw, Noctowl's Jewel Seeker, Emergency Evolution, etc.).
+        fireTriggeredOnEvolve(state, player, basic);
         return;
       }
       state.pendingRareCandyChoice = {
@@ -2433,6 +2440,7 @@ export function resolveRareCandyChoice(
   basic.abilityUsedThisTurn = false;
   basic.evolvedThisTurn = true;
   logEvent(state, clicker, `uses Rare Candy to evolve into ${card.name}.`);
+  fireTriggeredOnEvolve(state, clicker, basic);
   state.pendingRareCandyChoice = null;
   return { ok: true };
 }

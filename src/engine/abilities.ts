@@ -1557,7 +1557,10 @@ const TRIGGERED_ON_EVOLVE: Record<string, TriggeredOnEvolveEffect> = {
     run: (state, player) => {
       const oppId: PlayerId = player === "p1" ? "p2" : "p1";
       const opp = state.players[oppId];
-      if (!opp.active || opp.bench.length === 0) return;
+      if (!opp.active || opp.bench.length === 0) {
+        logEvent(state, player, `Heave-Ho Catcher: nothing to gust — opponent has no Benched Pokémon.`);
+        return;
+      }
       // Auto-pick highest-HP bench target for strongest gust impact.
       const target = opp.bench.slice().sort((a, b) => b.card.hp - a.card.hp)[0];
       const idx = opp.bench.indexOf(target);

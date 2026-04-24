@@ -548,10 +548,24 @@ export function resolveAttackEffects(
       case "attachNFromDiscardToBench": {
         // Mega Lucario ex "Aura Jab" — up to N Basic <type> Energy from
         // discard to your Benched Pokémon in any way. Auto-pick: round-robin
-        // across benched allies.
+        // across benched allies. Always log so the player sees what
+        // happened, even if nothing could be attached.
         postHooks.push(() => {
           const pl = state.players[ctx.attackerOwner];
-          if (pl.bench.length === 0) return;
+          if (pl.bench.length === 0) {
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: no Benched Pokémon to attach Energy to.`);
+            return;
+          }
+          const available = pl.discard.filter(
+            (c) =>
+              c.supertype === "Energy" &&
+              c.subtypes.includes("Basic") &&
+              (c as import("./types").EnergyCard).provides.includes(e.energyType),
+          ).length;
+          if (available === 0) {
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: no basic ${e.energyType} Energy in discard to attach.`);
+            return;
+          }
           let attached = 0;
           for (let i = 0; i < e.max; i++) {
             const idx = pl.discard.findIndex(
@@ -565,13 +579,11 @@ export function resolveAttackEffects(
             pl.bench[attached % pl.bench.length].attachedEnergy.push(en);
             attached++;
           }
-          if (attached > 0) {
-            logEvent(
-              state,
-              ctx.attackerOwner,
-              `${ctx.move.name}: attaches ${attached} ${e.energyType} Energy from discard to Bench.`,
-            );
-          }
+          logEvent(
+            state,
+            ctx.attackerOwner,
+            `${ctx.move.name}: attaches ${attached} ${e.energyType} Energy from discard to Bench.`,
+          );
         });
         break;
       }
