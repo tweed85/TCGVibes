@@ -1590,32 +1590,45 @@ export function applyTrainerEffect(
     }
 
     case "dawnSearchBasicStage1Stage2": {
-      // Dawn — search for one Basic, one Stage 1, and one Stage 2 Pokémon.
-      // We pull the first of each from the deck and put them in hand, then
-      // shuffle. Auto-pick is fine: the deck typically only contains the
-      // intended evo line and one Basic card, so first-match is correct.
+      // Dawn — search your deck for one Basic, one Stage 1, and one Stage 2.
+      // AI auto-picks greedily (first of each); humans get three chained
+      // pickers so they can actually choose the specific evolution line
+      // they want to pull.
+      if (pl.isAI) {
+        const isBasic = (c: Card) =>
+          c.supertype === "Pokémon" && c.subtypes.includes("Basic");
+        const isStage1 = (c: Card) =>
+          c.supertype === "Pokémon" && c.subtypes.includes("Stage 1");
+        const isStage2 = (c: Card) =>
+          c.supertype === "Pokémon" && c.subtypes.includes("Stage 2");
+        const pulled: Card[] = [];
+        const keep: Card[] = [];
+        let gotBasic = false, gotS1 = false, gotS2 = false;
+        for (const c of pl.deck) {
+          if (!gotBasic && isBasic(c)) { pulled.push(c); gotBasic = true; continue; }
+          if (!gotS1 && isStage1(c)) { pulled.push(c); gotS1 = true; continue; }
+          if (!gotS2 && isStage2(c)) { pulled.push(c); gotS2 = true; continue; }
+          keep.push(c);
+        }
+        pl.deck = keep;
+        pl.hand.push(...pulled);
+        shuffleDeck(state, player);
+        logEvent(state, player, pulled.length
+          ? `Dawn: takes ${pulled.map((c) => c.name).join(", ")}.`
+          : "Dawn: finds nothing.");
+        return;
+      }
+      // Human path — open the first pick (Basic); chain into Stage 1, then
+      // Stage 2 via the pendingPick resolver's `postResolveChain` hook.
       const isBasic = (c: Card) =>
         c.supertype === "Pokémon" && c.subtypes.includes("Basic");
-      const isStage1 = (c: Card) =>
-        c.supertype === "Pokémon" && c.subtypes.includes("Stage 1");
-      const isStage2 = (c: Card) =>
-        c.supertype === "Pokémon" && c.subtypes.includes("Stage 2");
-      const pulled: Card[] = [];
-      const keep: Card[] = [];
-      let gotBasic = false, gotS1 = false, gotS2 = false;
-      for (const c of pl.deck) {
-        if (!gotBasic && isBasic(c)) { pulled.push(c); gotBasic = true; continue; }
-        if (!gotS1 && isStage1(c)) { pulled.push(c); gotS1 = true; continue; }
-        if (!gotS2 && isStage2(c)) { pulled.push(c); gotS2 = true; continue; }
-        keep.push(c);
+      if (
+        !setDeckSearchPick(state, player, isBasic, 1, "Dawn (1 of 3): pick 1 Basic Pokémon", {
+          postResolveChain: { kind: "dawn-stage1" },
+        })
+      ) {
+        logEvent(state, player, "Dawn: no Basic Pokémon in deck.");
       }
-      pl.deck = keep;
-      pl.hand.push(...pulled);
-      shuffleDeck(state, player);
-      const msg = pulled.length
-        ? `Dawn: takes ${pulled.map((c) => c.name).join(", ")}.`
-        : "Dawn: finds nothing.";
-      logEvent(state, player, msg);
       return;
     }
 

@@ -51,7 +51,7 @@ export function setDeckSearchPick(
   pred: (c: Card) => boolean,
   max: number,
   label: string,
-  options: { toBench?: boolean } = {},
+  options: { toBench?: boolean; postResolveChain?: import("./types").DeckSearchChainStep; min?: number } = {},
 ): boolean {
   const pl = state.players[player];
   const safeDeck = excludePrizes(pl, pl.deck);
@@ -64,6 +64,17 @@ export function setDeckSearchPick(
   if (pool.length === 0) {
     // Still shuffle to hide information from the player.
     shuffleDeck(state, player);
+    // If a chain step is queued, surface a Continue-style notice so the
+    // user is told this stage had no qualifying cards BEFORE the next stage
+    // opens. The notice's Continue button fires the chain.
+    if (options.postResolveChain) {
+      state.pendingSearchNotice = {
+        player,
+        message: stageSkipMessage(label),
+        nextChain: options.postResolveChain,
+      };
+      state.phase = "main";
+    }
     return false;
   }
   pl.deck = rest;
@@ -71,14 +82,67 @@ export function setDeckSearchPick(
     player,
     label,
     pool,
-    min: 0,
+    min: Math.max(0, options.min ?? 0),
     max: Math.min(max, pool.length),
     unpicked: "shuffleIntoDeck",
     source: "deck",
     toBench: options.toBench,
+    postResolveChain: options.postResolveChain,
   };
   state.phase = "pick";
   return true;
+}
+
+// Derive a friendly skip message from the pick's label. Labels follow the
+// "Dawn (X of 3): pick 1 <Subtype> Pokémon" convention; the subtype is the
+// part after "pick 1" or "pick a".
+function stageSkipMessage(label: string): string {
+  const m = label.match(/pick (?:1|a|an|up to \d+)\s+(.+?)(?:\s+to|\s+from|\s*$)/i);
+  const category = m?.[1]?.trim() ?? "card";
+  return `No ${category} in your deck. Continue to the next step.`;
+}
+
+// Resolve the "no qualifying cards" notice — clears it and fires the queued
+// chain step (if any).
+export function resolvePendingSearchNotice(
+  state: GameState,
+  clicker: PlayerId,
+): ActionResult {
+  const notice = state.pendingSearchNotice;
+  if (!notice || notice.player !== clicker) return fail("No search notice pending.");
+  const next = notice.nextChain;
+  state.pendingSearchNotice = null;
+  if (next) applyChainStep(state, clicker, next);
+  return ok;
+}
+
+// Opens the next stage of a multi-step deck search. Keyed by the chain step's
+// `kind` since each step has its own predicate + label.
+function applyChainStep(
+  state: GameState,
+  player: PlayerId,
+  step: import("./types").DeckSearchChainStep,
+): void {
+  switch (step.kind) {
+    case "dawn-stage1": {
+      const pred = (c: Card) =>
+        c.supertype === "Pokémon" && (c.subtypes ?? []).includes("Stage 1");
+      if (!setDeckSearchPick(state, player, pred, 1, "Dawn (2 of 3): pick 1 Stage 1 Pokémon", {
+        postResolveChain: { kind: "dawn-stage2" },
+      })) {
+        logEvent(state, player, "Dawn: no Stage 1 Pokémon in deck.");
+      }
+      break;
+    }
+    case "dawn-stage2": {
+      const pred = (c: Card) =>
+        c.supertype === "Pokémon" && (c.subtypes ?? []).includes("Stage 2");
+      if (!setDeckSearchPick(state, player, pred, 1, "Dawn (3 of 3): pick 1 Stage 2 Pokémon")) {
+        logEvent(state, player, "Dawn: no Stage 2 Pokémon in deck.");
+      }
+      break;
+    }
+  }
 }
 
 export function setTopPeekPick(
@@ -264,11 +328,16 @@ export function resolvePendingPick(
   }
 
   const shouldEndTurn = pick.endTurnOnResolve === true;
+  const chain = pick.postResolveChain;
   state.pendingPick = null;
   state.phase = "main";
   // Fire triggered-on-bench abilities *after* clearing pendingPick so any
   // ability that opens its own pendingPick (e.g. Last-Ditch Catch) takes hold.
   for (const p of benchedFromPick) fireTriggeredOnBench(state, player, p);
+  // Chained multi-stage search (Dawn Basic → Stage 1 → Stage 2). Runs after
+  // the current pool is returned/shuffled so the next stage's predicate
+  // searches the freshly-updated deck.
+  if (chain) applyChainStep(state, player, chain);
   if (shouldEndTurn) endTurnRule(state);
   return ok;
 }

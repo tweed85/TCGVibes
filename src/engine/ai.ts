@@ -39,7 +39,7 @@ import {
   turnDamageReduction,
   abilitiesActiveOn,
 } from "./ongoingEffects";
-import { resolvePendingPick } from "./pendingPick";
+import { resolvePendingPick, resolvePendingSearchNotice } from "./pendingPick";
 import { resolveAiHandReveal } from "./trainerEffects";
 import { logEvent } from "./rules";
 import type {
@@ -437,11 +437,24 @@ function scoreTrainerForNow(
     case "healDragon60":
     case "healAllIfLow30Hp":
     case "healAllMinor":
+    case "healMegaExAndEnergyToHand": {
+      // Threat-aware: if our Active would be OHKO'd next turn and we're
+      // damaged, heals spike in value — they can save a 2-prize attacker.
+      if (pl.active) {
+        const maxHp = pl.active.card.hp;
+        const ourHp = maxHp - pl.active.damage;
+        const threat = opponentMaxDamageNextTurn(state, player);
+        // Will die to the next attack AND we've taken some damage → top tier.
+        if (pl.active.damage > 0 && threat >= ourHp) return 95;
+        // In one-shot range (leaves us with <30) → high priority.
+        if (pl.active.damage > 0 && ourHp - threat <= 30) return 80;
+      }
       if (pl.active && pl.active.damage >= 60) return 70;
       if (pl.active && pl.active.damage >= 30) return 45;
       // If our active is healthy and no bench needs it, skip.
       const anyHurt = [pl.active, ...pl.bench].some((p) => p && p.damage > 0);
       return anyHurt ? 20 : 0;
+    }
 
     // --- Draw supporters --------------------------------------------------
     case "drawUntilSeven":
@@ -977,6 +990,10 @@ export function takeAiTurn(state: GameState, player: PlayerId): void {
       resolveAiHandReveal(state);
       continue;
     }
+    if (state.pendingSearchNotice && state.pendingSearchNotice.player === player) {
+      resolvePendingSearchNotice(state, player);
+      continue;
+    }
 
     if (tryStepAiTurn(state, player)) continue;
 
@@ -1068,7 +1085,13 @@ function tryStepAiTurn(state: GameState, player: PlayerId): boolean {
     }
   }
 
-  // Step 8: retreat if our Active can't attack but a benched one can.
+  // Step 8a: defensive retreat if our Active is about to be OHKO'd and a
+  // Bench option offers a safer continuation. Skipped when we have a lethal
+  // attack available from the current Active — taking the KO is always the
+  // right call over playing defense.
+  if (tryDefensiveRetreat(state, player)) return true;
+
+  // Step 8b: retreat if our Active can't attack but a benched one can.
   if (tryRetreat(state, player)) return true;
 
   return false;
@@ -1228,6 +1251,112 @@ function tryPlaySupporterWithTarget(state: GameState, player: PlayerId, handIdx:
   }
 
   return playTrainer(state, player, handIdx).ok;
+}
+
+// Estimate the opponent's peak damage to our Active on their next turn.
+// Factors in current attached energy plus one reasonable +1 attach of the
+// opponent's primary deck type (covers "they'll drop one more energy before
+// swinging"). Intentionally a ceiling, not an expectation — used to drive
+// defensive moves only when a very real threat exists.
+function opponentMaxDamageNextTurn(state: GameState, player: PlayerId): number {
+  const opp = state.players[opponentOf(player)];
+  const oppAct = opp.active;
+  const ourAct = state.players[player].active;
+  if (!oppAct || !ourAct) return 0;
+
+  const provided = energyProvidedBy(oppAct);
+  const primary = deckPrimaryEnergy(opp.deck.concat(opp.hand));
+  // One-extra-energy hypothetical: if the opp has that energy type available
+  // (deck or hand), assume they'll attach it.
+  const hasExtraAvailable =
+    !!primary &&
+    opp.hand
+      .concat(opp.deck)
+      .some(
+        (c) =>
+          c.supertype === "Energy" &&
+          c.subtypes.includes("Basic") &&
+          (c as EnergyCard).provides.includes(primary),
+      );
+  const providedNext = hasExtraAvailable && primary
+    ? [...provided, primary]
+    : provided;
+
+  let max = 0;
+  for (const move of oppAct.card.attacks) {
+    const cost = effectiveAttackCost(state, oppAct, move.cost);
+    if (!canPayCost(providedNext, cost)) continue;
+    const dmg = estimateDamage(state, opponentOf(player), oppAct, move, ourAct);
+    if (dmg > max) max = dmg;
+  }
+  return max;
+}
+
+// Does the AI have a lethal hit on the opponent's Active this turn? Used as
+// a short-circuit gate on defensive play — if we can KO now, take the KO.
+function hasLethalThisTurn(state: GameState, player: PlayerId): boolean {
+  const pl = state.players[player];
+  const atk = pl.active;
+  if (!atk) return false;
+  if (state.firstTurnNoAttack) return false;
+  if (atk.cantAttackUntilTurn !== undefined && state.turn <= atk.cantAttackUntilTurn) return false;
+  const defender = state.players[opponentOf(player)].active;
+  if (!defender) return false;
+  const provided = energyProvidedBy(atk);
+  const perAttackLock = (atk as typeof atk & { cantUseAttacksUntilTurn?: Record<string, number> }).cantUseAttacksUntilTurn;
+  for (const move of atk.card.attacks) {
+    if (!canPayCost(provided, effectiveAttackCost(state, atk, move.cost))) continue;
+    if (perAttackLock && perAttackLock[move.name] !== undefined && state.turn <= perAttackLock[move.name]) continue;
+    const dmg = estimateDamage(state, player, atk, move, defender);
+    if (defender.damage + dmg >= effectiveMaxHp(defender, state)) return true;
+  }
+  return false;
+}
+
+// Defensive retreat — if our Active will be OHKO'd next turn (per the
+// threat estimate) and a Bench option offers a better survival line, retreat
+// to the Bench. Gated on "no KO available from the current Active"; taking a
+// KO is always better than playing defense.
+function tryDefensiveRetreat(state: GameState, player: PlayerId): boolean {
+  const pl = state.players[player];
+  if (!pl.active || pl.retreatedThisTurn || pl.bench.length === 0) return false;
+  if (hasLethalThisTurn(state, player)) return false;
+
+  const ourAct = pl.active;
+  const ourHp = effectiveMaxHp(ourAct, state) - ourAct.damage;
+  const threat = opponentMaxDamageNextTurn(state, player);
+  // Only retreat defensively when the threat would actually KO us.
+  if (threat < ourHp) return false;
+
+  const cost = effectiveRetreatCost(ourAct, state).length;
+  const currentEnergy = energyProvidedBy(ourAct).length;
+  if (currentEnergy < cost) return false;
+
+  // Pick the bench option that (a) is likely to survive the threat AND
+  // (b) can plausibly attack next turn. Score both; only retreat if the
+  // best option scores clearly better than staying.
+  let bestIdx = -1;
+  let bestScore = -Infinity;
+  for (let i = 0; i < pl.bench.length; i++) {
+    const b = pl.bench[i];
+    const benchHp = effectiveMaxHp(b, state) - b.damage;
+    const canAtk = benchCanAttack(state, b);
+    let score = 0;
+    if (benchHp > threat) score += 100;            // survives the hit
+    else score -= 40;                               // also dies — bad swap
+    score += Math.min(benchHp, 200) / 10;           // tankier is better
+    if (canAtk) score += 40;                        // can counter-attack
+    if (b.card.subtypes.includes("ex") || b.card.subtypes.includes("EX")) {
+      score -= 30; // don't put an ex up to die if another option exists
+    }
+    if (score > bestScore) { bestScore = score; bestIdx = i; }
+  }
+  if (bestIdx < 0 || bestScore < 60) return false;
+  const ok = retreat(state, player, bestIdx).ok;
+  if (ok) {
+    logEvent(state, player, `[AI] retreats defensively — Active was at risk.`);
+  }
+  return ok;
 }
 
 // Retreat if the Active can't meaningfully attack and a benched Pokémon can.

@@ -379,6 +379,26 @@ export interface PendingPick {
   // If true, picked Pokémon go straight onto the Bench instead of the hand
   // (Nest Ball, Buddy-Buddy Poffin, Hop's Bag, Lumiose City).
   toBench?: boolean;
+  // If set, another deck search is opened immediately after this pick
+  // resolves. Used by multi-stage search supporters like Dawn (Basic → Stage
+  // 1 → Stage 2) where each stage has a different predicate.
+  postResolveChain?: DeckSearchChainStep;
+}
+
+// Next step in a chained deck search — keyed by a symbolic id so the
+// resolver knows which predicate + label to use for the next pick.
+export type DeckSearchChainStep =
+  | { kind: "dawn-stage1" } // Dawn: after picking the Basic, pick a Stage 1
+  | { kind: "dawn-stage2" }; // Dawn: after picking the Stage 1, pick a Stage 2
+
+// Short "hey, heads up" modal shown between chained deck searches when the
+// current stage has no qualifying cards. Lets the player acknowledge the
+// miss before the next stage's pick opens, so skipped stages aren't silent.
+export interface PendingSearchNotice {
+  player: PlayerId;
+  message: string;
+  // Optional follow-up: when the user clicks Continue, this chain step fires.
+  nextChain: DeckSearchChainStep | null;
 }
 
 export interface LogEntry {
@@ -430,6 +450,10 @@ export interface GameState {
   pendingInPlayTarget: PendingInPlayTarget | null;
   // If non-null, a hand-reveal pick is pending (Eri, Xerosic's Machinations).
   pendingHandReveal: PendingHandReveal | null;
+  // If non-null, an inter-stage search notice is pending (Dawn skipping an
+  // empty category, etc.) — a small modal waits for the user to click
+  // Continue before moving on to the next chained stage.
+  pendingSearchNotice: PendingSearchNotice | null;
   // If non-null, Rare Candy has been played on a Basic and the player must
   // pick which Stage 2 (from their hand) to use when multiple match.
   pendingRareCandyChoice: {

@@ -185,13 +185,21 @@ export function PokemonInPlayView({
   selected,
   onClick,
   maxHp,
+  legalTarget,
 }: {
   p: PokemonInPlay;
   selected?: boolean;
   onClick?: () => void;
   maxHp?: number;
+  /** When true, the Pokémon is a legal drop target for whatever is currently
+   *  selected in hand. Drives a highlight so the player can see at a glance
+   *  where the selected card can be played. */
+  legalTarget?: boolean;
 }) {
-  const cls = `card card-imaged in-play${selected ? " selected" : ""}`;
+  const cls =
+    `card card-imaged in-play` +
+    (selected ? " selected" : "") +
+    (legalTarget ? " legal-target" : "");
   const tip = cardTooltip(p.card);
 
   // Render each attached Energy as a colored pip showing its type initial.

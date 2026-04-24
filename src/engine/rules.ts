@@ -140,6 +140,7 @@ export function setupGame(
     pendingSwitchTarget: null,
     pendingInPlayTarget: null,
     pendingHandReveal: null,
+    pendingSearchNotice: null,
     pendingRareCandyChoice: null,
     snipeTargetOverride: null,
     coinFlip: { step: "pickGuess" },
