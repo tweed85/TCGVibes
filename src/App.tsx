@@ -745,6 +745,7 @@ export default function App() {
           onToggleOpenHands={setOpenHands}
           onChangeMode={setGameMode}
           onOpenImport={() => setImportOpen(true)}
+          onOpenBuild={() => setBuildOpen(true)}
           onStart={() => {
             onReset();
             setPreGameOpen(false);
@@ -2033,6 +2034,7 @@ function PreGameModal({
   onToggleOpenHands,
   onChangeMode,
   onOpenImport,
+  onOpenBuild,
   onStart,
 }: {
   deckSpecs: { id: string; name: string }[];
@@ -2046,6 +2048,7 @@ function PreGameModal({
   onToggleOpenHands: (v: boolean) => void;
   onChangeMode: (m: "vsCPU" | "local") => void;
   onOpenImport: () => void;
+  onOpenBuild: () => void;
   onStart: () => void;
 }) {
   const describe = (id: string): string | null => {
@@ -2083,8 +2086,9 @@ function PreGameModal({
           </label>
         </div>
         <p className="modal-hint">
-          Pick a preset for each side or bring your own via <b>Import Deck</b>.
-          You'll choose Active and Bench Pokémon in the next step.
+          Pick a preset for each side, <b>build a deck</b> from the card pool,
+          or bring your own via <b>Import Deck</b>. You'll choose Active and
+          Bench Pokémon in the next step.
         </p>
         <div className="pregame-grid">
           <div className="pregame-slot">
@@ -2125,6 +2129,7 @@ function PreGameModal({
               In local play, each player's hand is hidden from the other.
             </span>
           )}
+          <button onClick={onOpenBuild}>Build Deck…</button>
           <button onClick={onOpenImport}>Import Deck…</button>
         </div>
         <div className="modal-actions">
