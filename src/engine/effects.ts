@@ -11,6 +11,7 @@
 // plain `text` so the UI can display them even though they won't fire.
 
 import { addStatus, drawCards, flipCoin, logEvent } from "./rules";
+import { benchDamageBlocked } from "./ongoingEffects";
 import type {
   Attack,
   AttackEffect,
@@ -75,8 +76,65 @@ export function resolveAttackEffects(
         damage += bonus;
         break;
       }
+      case "perFriendlyBench": {
+        const count = state.players[ctx.attackerOwner].bench.length;
+        const bonus = e.perCount * count;
+        logEvent(state, "system", `${ctx.move.name} gets +${bonus} from ${count} Benched Pokémon.`);
+        damage += bonus;
+        break;
+      }
+      case "perOpponentBench": {
+        const count = state.players[ctx.defenderOwner].bench.length;
+        const bonus = e.perCount * count;
+        logEvent(state, "system", `${ctx.move.name} gets +${bonus} from opponent's ${count} Benched Pokémon.`);
+        damage += bonus;
+        break;
+      }
+      case "perBothBench": {
+        const count =
+          state.players[ctx.attackerOwner].bench.length +
+          state.players[ctx.defenderOwner].bench.length;
+        const bonus = e.perCount * count;
+        logEvent(state, "system", `${ctx.move.name} gets +${bonus} from ${count} total Benched Pokémon.`);
+        damage += bonus;
+        break;
+      }
+      case "perDamageCounterOnSelf": {
+        const counters = Math.floor(ctx.attacker.damage / 10);
+        const bonus = e.perCount * counters;
+        logEvent(state, "system", `${ctx.move.name} gets +${bonus} from ${counters} damage counter(s) on self.`);
+        damage += bonus;
+        break;
+      }
+      case "perDamageCounterOnDefender": {
+        const counters = ctx.defender ? Math.floor(ctx.defender.damage / 10) : 0;
+        const bonus = e.perCount * counters;
+        logEvent(state, "system", `${ctx.move.name} gets +${bonus} from ${counters} damage counter(s) on defender.`);
+        damage += bonus;
+        break;
+      }
+      case "perEnergyOnDefender": {
+        const count = ctx.defender?.attachedEnergy.length ?? 0;
+        const bonus = e.perCount * count;
+        logEvent(state, "system", `${ctx.move.name} gets +${bonus} from ${count} Energy on defender.`);
+        damage += bonus;
+        break;
+      }
+      case "perPrizeOppTaken": {
+        // Prizes "taken" = 6 − prizes remaining for the opponent.
+        const taken = 6 - state.players[ctx.defenderOwner].prizes.length;
+        const bonus = e.perCount * taken;
+        logEvent(state, "system", `${ctx.move.name} gets +${bonus} from ${taken} Prize(s) taken.`);
+        damage += bonus;
+        break;
+      }
       case "benchSnipe": {
         postHooks.push(() => {
+          // Battle Cage: prevents damage to Benched Pokémon from opp attacks.
+          if (benchDamageBlocked(state)) {
+            logEvent(state, "system", `Battle Cage blocks bench damage.`);
+            return;
+          }
           const targets: PokemonInPlay[] = [];
           if (e.target === "opponentBench" || e.target === "allBench" || e.target === "allOpponents") {
             targets.push(...state.players[ctx.defenderOwner].bench);
@@ -91,9 +149,6 @@ export function resolveAttackEffects(
               "system",
               `${t.card.name} takes ${e.damage} damage (bench snipe).`,
             );
-            // Benched KOs aren't resolved by the main knockOut flow; mark
-            // them by setting damage; if they're promoted later they're
-            // already KO-state. Full bench-KO resolution is on the roadmap.
           }
         });
         break;
@@ -187,6 +242,20 @@ export function describeEffects(effects: AttackEffect[] | undefined): string {
           return `flip→×2`;
         case "perAttachedEnergy":
           return `+${e.perEnergy} per ${e.energyType ?? "energy"}`;
+        case "perFriendlyBench":
+          return `+${e.perCount} per own bench`;
+        case "perOpponentBench":
+          return `+${e.perCount} per opp bench`;
+        case "perBothBench":
+          return `+${e.perCount} per bench (both)`;
+        case "perDamageCounterOnSelf":
+          return `+${e.perCount} per dmg counter (self)`;
+        case "perDamageCounterOnDefender":
+          return `+${e.perCount} per dmg counter (def)`;
+        case "perEnergyOnDefender":
+          return `+${e.perCount} per energy (def)`;
+        case "perPrizeOppTaken":
+          return `+${e.perCount} per prize taken`;
         case "benchSnipe":
           return `${e.damage} to bench`;
         case "selfDamage":

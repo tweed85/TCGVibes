@@ -10,8 +10,44 @@ import {
   playTrainer,
   promoteBenchToActive,
 } from "./actions";
-import { canPayCost, energyProvidedBy, isBasic, isPokemon } from "./rules";
-import type { GameState, PlayerId } from "./types";
+import { canPayCost, chooseFirstPlayer, completeSetup, energyProvidedBy, isBasic, isPokemon } from "./rules";
+import { effectiveMaxHp } from "./ongoingEffects";
+import { resolveAiPendingPick } from "./pendingPick";
+import type { GameState, PlayerId, PokemonCard } from "./types";
+
+// AI's coin-flip choice: if it's the winner, pick to go second (slight meta
+// advantage — second player can attack on their first turn).
+export function resolveAiCoinChoice(state: GameState): boolean {
+  if (state.phase !== "coinFlip" || !state.coinFlip || state.coinFlip.step !== "chooseFirst") return false;
+  if (state.coinFlip.winner !== "p2") return false;
+  chooseFirstPlayer(state, "p2", false); // go second
+  return true;
+}
+
+// Opening setup: promote the highest-HP Basic in hand to Active and bench
+// every other Basic in the hand.
+export function resolveAiSetup(state: GameState, player: PlayerId): boolean {
+  if (state.phase !== "setup") return false;
+  const pl = state.players[player];
+  if (pl.setupComplete) return false;
+  const basicIdxs = pl.hand
+    .map((c, i) => ({ c, i }))
+    .filter((x) => isPokemon(x.c) && isBasic(x.c));
+  if (basicIdxs.length === 0) return false;
+  // Highest-HP as Active.
+  let bestIdx = basicIdxs[0].i;
+  let bestHp = (basicIdxs[0].c as PokemonCard).hp;
+  for (const { c, i } of basicIdxs) {
+    const hp = (c as PokemonCard).hp;
+    if (hp > bestHp) { bestIdx = i; bestHp = hp; }
+  }
+  const benchIdxs = basicIdxs
+    .map((x) => x.i)
+    .filter((i) => i !== bestIdx)
+    .slice(0, 5);
+  completeSetup(state, player, bestIdx, benchIdxs);
+  return true;
+}
 
 // Called any time the AI might need to act — both for its own turn and for
 // resolving promotes during the human player's turn.
@@ -22,7 +58,7 @@ export function resolveAiPendingPromote(state: GameState, player: PlayerId): boo
   if (pl.bench.length === 0) return false;
   let best = 0;
   for (let i = 1; i < pl.bench.length; i++) {
-    if (pl.bench[i].card.hp > pl.bench[best].card.hp) best = i;
+    if (effectiveMaxHp(pl.bench[i], state) > effectiveMaxHp(pl.bench[best], state)) best = i;
   }
   promoteBenchToActive(state, player, best);
   return true;
@@ -37,6 +73,10 @@ export function takeAiTurn(state: GameState, player: PlayerId): void {
     if (state.phase === "gameOver" || state.activePlayer !== player) return;
     if (state.pendingPromote === player) {
       resolveAiPendingPromote(state, player);
+      continue;
+    }
+    if (state.pendingPick && state.pendingPick.player === player) {
+      resolveAiPendingPick(state, player);
       continue;
     }
     const pl = state.players[player];

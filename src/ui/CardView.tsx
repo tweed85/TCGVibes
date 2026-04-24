@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Card, PokemonCard, PokemonInPlay } from "../engine/types";
 
 interface Props {
@@ -56,13 +57,36 @@ function AbilitiesBlock({ card }: { card: PokemonCard }) {
   );
 }
 
-export function CardView({ card, selected, onClick }: Props) {
-  const cls = `card${selected ? " selected" : ""}`;
-  const tip = cardTooltip(card);
+// A card image with an automatic fallback to the text rendering if the image
+// fails to load. The text fallback is provided by the caller as children.
+function CardImage({
+  src,
+  alt,
+  children,
+}: {
+  src: string | undefined;
+  alt: string;
+  children: React.ReactNode;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) return <>{children}</>;
+  return (
+    <img
+      className="card-img"
+      src={src}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
+// Text-only card body (used as fallback when the CDN image is missing).
+function CardTextBody({ card }: { card: Card }) {
   if (card.supertype === "Pokémon") {
     return (
-      <div className={cls} onClick={onClick} title={tip}>
+      <>
         <div className="name">{card.name}</div>
         <div className="type">
           {card.subtypes.join(" · ")} · {card.types.join("/")}
@@ -79,23 +103,35 @@ export function CardView({ card, selected, onClick }: Props) {
             </div>
           ))}
         </div>
-      </div>
+      </>
     );
   }
   if (card.supertype === "Energy") {
     return (
-      <div className={cls} onClick={onClick} title={tip}>
+      <>
         <div className="name">{card.name}</div>
         <div className="type">{card.subtypes.join(" · ")} Energy</div>
         <div className="energy">⚡ {card.provides.join(", ")}</div>
-      </div>
+      </>
     );
   }
   return (
-    <div className={cls} onClick={onClick} title={tip}>
+    <>
       <div className="name">{card.name}</div>
       <div className="type">{card.subtypes.join(" · ")}</div>
       <div className="trainer-text">{card.text}</div>
+    </>
+  );
+}
+
+export function CardView({ card, selected, onClick }: Props) {
+  const cls = `card card-imaged${selected ? " selected" : ""}`;
+  const tip = cardTooltip(card);
+  return (
+    <div className={cls} onClick={onClick} title={tip}>
+      <CardImage src={card.imageLarge} alt={card.name}>
+        <CardTextBody card={card} />
+      </CardImage>
     </div>
   );
 }
@@ -112,12 +148,14 @@ export function PokemonInPlayView({
   p,
   selected,
   onClick,
+  maxHp,
 }: {
   p: PokemonInPlay;
   selected?: boolean;
   onClick?: () => void;
+  maxHp?: number;
 }) {
-  const cls = `card${selected ? " selected" : ""}`;
+  const cls = `card card-imaged in-play${selected ? " selected" : ""}`;
   const tip = cardTooltip(p.card);
 
   // Render energy as type initials (F, W, L, etc.)
@@ -125,43 +163,32 @@ export function PokemonInPlayView({
     .map((e) => (e.provides[0] ?? "C")[0])
     .join(" ");
 
+  const effMax = maxHp ?? p.card.hp;
+  const currentHp = Math.max(0, effMax - p.damage);
   return (
     <div className={cls} onClick={onClick} title={tip}>
-      <div className="name">{p.card.name}</div>
-      <div className="type">
-        {p.card.subtypes.join(" · ")} · {p.card.types.join("/")}
-      </div>
-      <div className="hp">
-        HP {Math.max(0, p.card.hp - p.damage)}/{p.card.hp}
-      </div>
-      {p.damage > 0 && <div className="dmg">-{p.damage}</div>}
-      {p.statuses.length > 0 && (
-        <div className="statuses">
-          {p.statuses.map((s) => (
-            <span key={s} className={`status status-${s}`} title={s}>
-              {STATUS_LABELS[s] ?? s}
-            </span>
-          ))}
+      <CardImage src={p.card.imageLarge} alt={p.card.name}>
+        <CardTextBody card={p.card} />
+      </CardImage>
+      <div className="in-play-overlay">
+        <div className="hp-badge" data-low={currentHp <= effMax * 0.3 ? "true" : undefined}>
+          {currentHp}/{effMax}
         </div>
-      )}
-      <div className="energy">{energyInitials || "—"}</div>
-      {p.tools.length > 0 && (
-        <div className="tools">
-          {p.tools.map((t, i) => (
-            <span key={i} className="tool" title={t.text}>🔧 {t.name}</span>
-          ))}
-        </div>
-      )}
-      <AbilitiesBlock card={p.card} />
-      <div className="atks">
-        {p.card.attacks.map((a, i) => (
-          <div className="atk" key={i} title={a.text}>
-            <span>
-              {a.cost.map((c) => c[0]).join("") || "—"} {a.name}
-            </span>
-            <span>{a.damageText ?? a.damage}</span>
+        {p.statuses.length > 0 && (
+          <div className="statuses">
+            {p.statuses.map((s) => (
+              <span key={s} className={`status status-${s}`} title={s}>
+                {STATUS_LABELS[s] ?? s}
+              </span>
+            ))}
           </div>
-        ))}
+        )}
+        {energyInitials && <div className="energy-badge">{energyInitials}</div>}
+        {p.tools.length > 0 && (
+          <div className="tool-badge" title={p.tools.map((t) => t.name).join(", ")}>
+            🔧{p.tools.length > 1 ? p.tools.length : ""}
+          </div>
+        )}
       </div>
     </div>
   );

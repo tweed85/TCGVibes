@@ -22,6 +22,7 @@ import type {
 import { extractEffects } from "./effectPatterns";
 import { detectTrainerEffect } from "../engine/trainerEffects";
 import { annotateAbilities } from "../engine/abilities";
+import { cardImageUrl } from "./cardImages";
 
 export interface ApiCard {
   id: string;
@@ -107,19 +108,23 @@ function mapWR(w: { type: string; value: string }): WeaknessResistance {
   return { type: asEnergyType(w.type), value: w.value };
 }
 
-// Basic energy cards are named "<Type> Energy". Special energies get the
-// Colorless fallback — their real effects aren't modeled yet.
+// Basic energy cards are named either "<Type> Energy" (older printings) or
+// "Basic <Type> Energy" (SVE and later). Strip the optional "Basic " prefix
+// before matching. Special energies fall back to Colorless until their
+// individual effects are modeled.
 function energyProvidesFromCard(c: ApiCard): EnergyType[] {
   const isBasic = (c.subtypes ?? []).includes("Basic");
   if (isBasic) {
+    const trimmed = c.name.replace(/^Basic\s+/i, "");
     for (const t of ENERGY_TYPES) {
-      if (c.name.startsWith(t)) return [t];
+      if (trimmed.startsWith(t)) return [t];
     }
   }
   return ["Colorless"];
 }
 
 export function mapCard(c: ApiCard): Card {
+  const img = cardImageUrl(c.set_code, c.number);
   const base = {
     id: c.id,
     name: c.name,
@@ -127,6 +132,8 @@ export function mapCard(c: ApiCard): Card {
     number: c.number,
     rarity: c.rarity,
     regulationMark: c.regulation_mark,
+    imageSmall: img,
+    imageLarge: img,
   };
 
   if (c.supertype === "Pokémon") {

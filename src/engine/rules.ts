@@ -9,6 +9,7 @@ import type {
   PokemonInPlay,
   StatusCondition,
 } from "./types";
+import { effectiveMaxHp, isStatusImmune, poisonExtraCounters, prizeReductionFromTools } from "./ongoingEffects";
 import type { Rng } from "./rng";
 
 let instanceCounter = 0;
@@ -77,6 +78,9 @@ export function createPlayer(
     supporterPlayedThisTurn: false,
     retreatedThisTurn: false,
     mulligans: 0,
+    setupComplete: false,
+    thisTurnAttackBonuses: [],
+    nextOpponentTurnDamageReductions: [],
     isAI,
   };
 }
@@ -93,8 +97,8 @@ export function drawCards(player: PlayerState, n: number): number {
   return drawn;
 }
 
-// Starts a game: shuffle, deal 7, mulligan if no basics, place 6 prizes,
-// both players must place an active basic before turn 1.
+// Starts a game: build decks (shuffled) and pause on the opening coin flip.
+// Hands and mulligans happen after the flip winner chooses first/second.
 export function setupGame(
   p1Deck: Card[],
   p2Deck: Card[],
@@ -109,64 +113,154 @@ export function setupGame(
     opts.p2IsAI ?? true,
   );
 
-  for (const pl of [p1, p2]) {
-    // Mulligan until opening hand has at least one Basic. Count mulligans so
-    // the opponent can draw that many extra cards (per Play! Pokémon rules).
-    let safety = 20;
-    while (safety-- > 0) {
-      pl.hand = [];
-      pl.deck = rng.shuffle([...pl.deck, ...pl.hand]);
-      drawCards(pl, 7);
-      if (pl.hand.some(isBasic)) break;
-      pl.mulligans++;
-    }
-    // Prizes: top 6.
-    pl.prizes = pl.deck.splice(0, 6);
-  }
-
-  // Mulligan penalty: each opponent draws N extra cards, where N is the
-  // mulligan count of the other player.
-  if (p1.mulligans > 0) {
-    drawCards(p2, p1.mulligans);
-  }
-  if (p2.mulligans > 0) {
-    drawCards(p1, p2.mulligans);
-  }
-
-  // Auto-place each player's first Basic as active (MVP — skip choose-starter UI).
-  for (const pl of [p1, p2]) {
-    const idx = pl.hand.findIndex(isBasic);
-    if (idx >= 0) {
-      const [card] = pl.hand.splice(idx, 1) as [PokemonCard];
-      pl.active = makePokemonInPlay(card);
-      pl.active.playedThisTurn = false;
-    }
-  }
-
   const state: GameState = {
     players: { p1, p2 },
     activePlayer: "p1",
     turn: 1,
-    phase: "draw",
+    phase: "coinFlip",
     winner: null,
     log: [],
     firstTurnNoAttack: true,
     stadium: null,
     pendingPromote: null,
     onPromoteResolved: null,
+    pendingSecondAttack: null,
+    pendingPick: null,
+    coinFlip: { step: "pickGuess" },
     rng,
   };
-  logEvent(state, "system", "Game start. P1 goes first.");
+  logEvent(state, "system", "Game start. Flip a coin — guess heads or tails.");
+  return state;
+}
+
+// Inline Fisher–Yates using state.rng.int, since GameRng doesn't expose shuffle.
+function shuffleInPlace<T>(state: GameState, arr: T[]): T[] {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = state.rng.int(i + 1);
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// Deal 7-card opening hands with mulligan penalties for both players. Called
+// once the coin flip and first-player choice are resolved.
+function dealOpeningHands(state: GameState): void {
+  const { p1, p2 } = state.players;
+  for (const pl of [p1, p2]) {
+    let safety = 20;
+    while (safety-- > 0) {
+      pl.deck = shuffleInPlace(state, [...pl.deck, ...pl.hand]);
+      pl.hand = [];
+      drawCards(pl, 7);
+      if (pl.hand.some(isBasic)) break;
+      pl.mulligans++;
+    }
+    pl.prizes = pl.deck.splice(0, 6);
+  }
+  // Mulligan penalty: each opponent draws N extra cards.
+  if (p1.mulligans > 0) drawCards(p2, p1.mulligans);
+  if (p2.mulligans > 0) drawCards(p1, p2.mulligans);
   if (p1.mulligans > 0) {
     logEvent(state, "system", `${p1.name} mulliganed ${p1.mulligans}×; ${p2.name} drew ${p1.mulligans} extra card(s).`);
   }
   if (p2.mulligans > 0) {
     logEvent(state, "system", `${p2.name} mulliganed ${p2.mulligans}×; ${p1.name} drew ${p2.mulligans} extra card(s).`);
   }
-  // P1 draws for turn 1.
-  drawCards(p1, 1);
-  state.phase = "main";
-  return state;
+  logEvent(state, "system", "Both players: choose your Active and bench Basic Pokémon.");
+}
+
+// Human (or AI) guesses heads/tails. Flips the coin, records the winner,
+// and advances to the first/second choice step.
+export function resolveCoinGuess(
+  state: GameState,
+  guess: "heads" | "tails",
+): void {
+  if (state.phase !== "coinFlip" || !state.coinFlip || state.coinFlip.step !== "pickGuess") return;
+  const heads = state.rng.next() < 0.5;
+  const result: "heads" | "tails" = heads ? "heads" : "tails";
+  const winner: PlayerId = guess === result ? "p1" : "p2";
+  state.coinFlip = { step: "chooseFirst", guess, result, winner };
+  logEvent(state, "system", `Coin flip: ${result}. ${state.players[winner].name} wins the toss and chooses.`);
+}
+
+// The coin-flip winner picks who goes first. Once set, deal hands and
+// transition to the opening-setup phase.
+export function chooseFirstPlayer(
+  state: GameState,
+  chooser: PlayerId,
+  goFirst: boolean,
+): string | null {
+  if (state.phase !== "coinFlip" || !state.coinFlip || state.coinFlip.step !== "chooseFirst")
+    return "Not in coin-flip choose phase.";
+  if (state.coinFlip.winner !== chooser) return "Not your choice.";
+  const firstPlayer: PlayerId = goFirst ? chooser : (chooser === "p1" ? "p2" : "p1");
+  state.activePlayer = firstPlayer;
+  state.coinFlip = null;
+  state.phase = "setup";
+  logEvent(
+    state,
+    "system",
+    `${state.players[chooser].name} chose to go ${goFirst ? "first" : "second"}. ${state.players[firstPlayer].name} goes first.`,
+  );
+  dealOpeningHands(state);
+  return null;
+}
+
+// Complete the opening setup for one player by promoting a hand card to the
+// Active spot and (optionally) putting additional Basics on the Bench. Returns
+// a list of validation errors, empty if successful.
+export function completeSetup(
+  state: GameState,
+  player: PlayerId,
+  activeHandIdx: number,
+  benchHandIdxs: number[],
+): string | null {
+  if (state.phase !== "setup") return "Not in setup phase.";
+  const pl = state.players[player];
+  if (pl.setupComplete) return "Setup already completed for this player.";
+  const activeCard = pl.hand[activeHandIdx];
+  if (!activeCard) return "Invalid Active selection.";
+  if (!isBasic(activeCard)) return "Active must be a Basic Pokémon.";
+  // Bench slots: must be distinct from Active and from each other, all Basics,
+  // and within 5 total.
+  const seen = new Set<number>([activeHandIdx]);
+  const bench: PokemonCard[] = [];
+  for (const i of benchHandIdxs) {
+    if (seen.has(i)) return "Duplicate card in bench selection.";
+    const c = pl.hand[i];
+    if (!c) return "Invalid bench selection.";
+    if (!isBasic(c)) return "Bench must contain only Basic Pokémon.";
+    seen.add(i);
+    bench.push(c);
+  }
+  if (bench.length > 5) return "Bench can hold at most 5 Pokémon.";
+
+  // Remove chosen cards from hand in descending order to preserve indexes.
+  const idxsDesc = [...seen].sort((a, b) => b - a);
+  for (const i of idxsDesc) pl.hand.splice(i, 1);
+  // Place Active and bench as zero-damage, not-played-this-turn instances.
+  pl.active = makePokemonInPlay(activeCard as PokemonCard);
+  pl.active.playedThisTurn = false;
+  for (const b of bench) {
+    const p = makePokemonInPlay(b);
+    p.playedThisTurn = false;
+    pl.bench.push(p);
+  }
+  pl.setupComplete = true;
+  logEvent(
+    state,
+    player,
+    `sets up — Active: ${pl.active.card.name}${bench.length ? `; Bench: ${bench.map((c) => c.name).join(", ")}` : ""}.`,
+  );
+
+  // Both done? Transition to turn 1.
+  if (state.players.p1.setupComplete && state.players.p2.setupComplete) {
+    state.phase = "main";
+    const first = state.activePlayer;
+    drawCards(state.players[first], 1);
+    logEvent(state, first, `draws for turn.`);
+  }
+  return null;
 }
 
 // --- Energy cost matching --------------------------------------------------
@@ -206,6 +300,12 @@ export function addStatus(
   p: PokemonInPlay,
   s: StatusCondition,
 ): void {
+  // Festival Grounds: Pokémon with Energy attached can't be affected by
+  // Special Conditions.
+  if (isStatusImmune(p, state)) {
+    logEvent(state, "system", `${p.card.name} is immune to ${s} (Festival Grounds).`);
+    return;
+  }
   if (EXCLUSIVE_STATUSES.includes(s)) {
     p.statuses = p.statuses.filter((x) => !EXCLUSIVE_STATUSES.includes(x));
   }
@@ -232,7 +332,7 @@ function damageFromStatus(
   if (!p || state.phase === "gameOver") return;
   p.damage += amount;
   logEvent(state, "system", `${p.card.name} takes ${amount} damage (${reason}).`);
-  if (p.damage >= p.card.hp) {
+  if (p.damage >= effectiveMaxHp(p, state)) {
     // KO handled by the caller's knockOut flow.
     knockOutIfNeeded(state, owner);
   }
@@ -240,7 +340,7 @@ function damageFromStatus(
 
 function knockOutIfNeeded(state: GameState, ownerId: PlayerId): void {
   const owner = state.players[ownerId];
-  if (owner.active && owner.active.damage >= owner.active.card.hp) {
+  if (owner.active && owner.active.damage >= effectiveMaxHp(owner.active, state)) {
     knockOut(state, ownerId);
   }
 }
@@ -254,6 +354,12 @@ export function pokemonCheckup(state: GameState): void {
     const pl = state.players[pid];
     const a = pl.active;
     if (!a) continue;
+    // Festival Grounds: status-immune Pokémon shed their conditions.
+    if (isStatusImmune(a, state) && a.statuses.length > 0) {
+      a.statuses = [];
+      logEvent(state, "system", `${a.card.name} shakes off all Conditions (Festival Grounds).`);
+      continue;
+    }
 
     if (hasStatus(a, "asleep")) {
       const woke = flipCoin(state, `${a.card.name} asleep flip`);
@@ -277,7 +383,8 @@ export function pokemonCheckup(state: GameState): void {
       }
     }
     if (hasStatus(a, "poisoned")) {
-      damageFromStatus(state, pid, a, 10, "poison");
+      const extra = poisonExtraCounters(state, a);
+      damageFromStatus(state, pid, a, 10 + extra, extra ? "poison (Perilous Jungle)" : "poison");
       if ((state.phase as string) === "gameOver") return;
     }
   }
@@ -300,7 +407,7 @@ export function applyDamage(
     "system",
     `${target.card.name} takes ${damage} damage (now ${target.damage}).`,
   );
-  if (target.damage >= target.card.hp) knockOut(state, defenderOwner);
+  if (target.damage >= effectiveMaxHp(target, state)) knockOut(state, defenderOwner);
 }
 
 // Prize-card value when KO'd. ex/V/Radiant give 2, VMAX/VSTAR give 3, others 1.
@@ -339,11 +446,15 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
   const owner = state.players[ownerId];
   if (!owner.active) return;
   const ko = owner.active;
-  const prizes = prizeValue(ko.card);
+  const basePrizes = prizeValue(ko.card);
+  const prizes = Math.max(0, basePrizes - prizeReductionFromTools(ko));
+  if (prizes !== basePrizes) {
+    logEvent(state, "system", `${ko.card.name} Knocked Out — prizes reduced (Lillie's Pearl).`);
+  }
   logEvent(
     state,
     "system",
-    `${ko.card.name} is Knocked Out! (${prizes} Prize${prizes > 1 ? "s" : ""})`,
+    `${ko.card.name} is Knocked Out! (${prizes} Prize${prizes !== 1 ? "s" : ""})`,
   );
   // Move active + evolution stack + attached energy + tools to discard.
   owner.discard.push(
@@ -390,7 +501,7 @@ export function resolveBenchKOs(state: GameState): boolean {
     const pl = state.players[pid];
     const survivors: typeof pl.bench = [];
     for (const p of pl.bench) {
-      if (p.damage >= p.card.hp) {
+      if (p.damage >= effectiveMaxHp(p, state)) {
         const prizes = prizeValue(p.card);
         logEvent(
           state,
@@ -431,7 +542,9 @@ export function startTurnDraw(state: GameState): void {
     state.winner = winner;
     state.phase = "gameOver";
     logEvent(state, "system", `${p.name} cannot draw. ${state.players[winner].name} wins.`);
+    return;
   }
+  logEvent(state, state.activePlayer, `draws for turn.`);
 }
 
 export function endTurn(state: GameState): void {
@@ -439,9 +552,32 @@ export function endTurn(state: GameState): void {
   if (state.pendingPromote) return;
 
   const prev = state.players[state.activePlayer];
+  // Powerglass end-of-turn attach: Active with this Tool gets a Basic Energy
+  // from discard attached to it.
+  if (prev.active) {
+    const hasPowerglass = prev.active.tools.some((t) => t.name === "Powerglass");
+    if (hasPowerglass) {
+      const idx = prev.discard.findIndex(
+        (c) => c.supertype === "Energy" && c.subtypes.includes("Basic"),
+      );
+      if (idx >= 0) {
+        const [e] = prev.discard.splice(idx, 1);
+        prev.active.attachedEnergy.push(e as import("./types").EnergyCard);
+        logEvent(state, prev.id, `Powerglass attaches ${e.name} to ${prev.active.card.name}.`);
+      }
+    }
+  }
   prev.energyAttachedThisTurn = false;
   prev.supporterPlayedThisTurn = false;
   prev.retreatedThisTurn = false;
+  // Turn-scoped attack bonuses (Black Belt's Training, Premium Power Pro,
+  // Kieran's boost branch) reset at end of the player's turn.
+  prev.thisTurnAttackBonuses = [];
+  // Reductions the *opponent* queued for "their next turn" (the one that just
+  // ended) clear now — the active player is the opponent from the setter's
+  // perspective.
+  const opp = state.players[opponentOf(state.activePlayer)];
+  opp.nextOpponentTurnDamageReductions = [];
   for (const p of [prev.active, ...prev.bench]) {
     if (p) {
       p.playedThisTurn = false;

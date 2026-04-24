@@ -100,11 +100,20 @@ src/
 ## Known gaps (intentional MVP scope)
 
 Displayed-but-not-evaluated effects the engine accepts in stride:
-- Ultra Ball "discard 2" precondition not enforced (searches anyway)
-- Buddy-Buddy Poffin "70 HP or less" filter not enforced
+- Ultra Ball enforces its "discard 2" cost but auto-picks the first 2 hand
+  cards (no chooser yet)
 - Rare Candy needs an interactive Stage-2 chooser UI
-- Stadium ongoing effects (heal/boost/energy acceleration) not evaluated
-- Tool ongoing effects not evaluated
+- Stadium ongoing effects: HP boosts wired (Lively +30 Basic, Gravity
+  Mountain -30 Stage 2). Not yet wired: once-per-turn Stadium activated
+  effects (Lumiose City search, Levincia energy recovery, etc.), damage
+  reduction (Full Metal Lab, Granite Cave), bench-size changes (Area Zero)
+- Tool ongoing effects: HP boosts (Hero's Cape +100, Cynthia's Power Weight
+  +70 for Cynthia's Pokémon, Ancient Booster +60 for Ancient) and retreat
+  reductions (Air Balloon -CC, Rescue Board -C, Future Booster for Future)
+  wired. Not yet wired: damage reduction Tools (Berries, Sacred Charm,
+  Thick Scale), KO-triggered Tools (Amulet of Hope, Lucky Helmet, Survival
+  Brace), damage-boost Tools (Maximum Belt, Brave Bangle, Light Ball, Hop's
+  Choice Band)
 - Passive abilities ("This Pokémon's attacks do +20") not evaluated
 - Conditional attack bonuses ("if Stadium in play, +50")
 - Bench-target picker for "1 of your opponent's Benched Pokémon" attacks

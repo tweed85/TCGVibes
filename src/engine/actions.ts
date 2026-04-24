@@ -26,6 +26,22 @@ import {
   resolveBenchKOs,
 } from "./rules";
 import { resolveAttackEffects } from "./effects";
+import {
+  applySurvivalBrace,
+  benchPlacementDamage,
+  canEvolveOnPlayTurn,
+  confusedPersistsOnEvolve,
+  effectiveAttackCost,
+  effectiveMaxHp,
+  effectiveRetreatCost,
+  maxBenchSize,
+  stadiumAttackBonus,
+  stadiumDamageReduction,
+  toolOnDamageActions,
+  triggeredBerryTools,
+  turnAttackBonus,
+  turnDamageReduction,
+} from "./ongoingEffects";
 
 export type ActionResult =
   | { ok: true }
@@ -33,8 +49,6 @@ export type ActionResult =
 
 const ok: ActionResult = { ok: true };
 const fail = (reason: string): ActionResult => ({ ok: false, reason });
-
-const BENCH_MAX = 5;
 
 // Guard: is it this player's main phase?
 function requireMain(state: GameState, player: PlayerId): ActionResult {
@@ -55,9 +69,17 @@ export function playBasicToBench(
   const card = pl.hand[handIndex];
   if (!card) return fail("No such card in hand.");
   if (!isPokemon(card) || !isBasic(card)) return fail("Must be a Basic Pokémon.");
-  if (pl.bench.length >= BENCH_MAX) return fail("Bench is full.");
+  const cap = maxBenchSize(state, pl.bench, pl.active);
+  if (pl.bench.length >= cap) return fail("Bench is full.");
   pl.hand.splice(handIndex, 1);
-  pl.bench.push(makePokemonInPlay(card));
+  const p = makePokemonInPlay(card);
+  // Risky Ruins: Basic non-Darkness takes 2 damage counters on bench play.
+  const benchDmg = benchPlacementDamage(state, card);
+  if (benchDmg > 0) {
+    p.damage += benchDmg;
+    logEvent(state, player, `${card.name} takes ${benchDmg} from Risky Ruins.`);
+  }
+  pl.bench.push(p);
   logEvent(state, player, `plays ${card.name} to the Bench.`);
   return ok;
 }
@@ -88,15 +110,23 @@ export function evolve(
   if (!target) return fail("Target not in play.");
   if (target.card.name !== card.evolvesFrom)
     return fail(`${card.name} evolves from ${card.evolvesFrom}, not ${target.card.name}.`);
-  if (target.playedThisTurn) return fail("Can't evolve a Pokémon played this turn.");
+  // Forest of Vitality lets Grass Pokémon evolve on their play turn (after turn 1).
+  if (target.playedThisTurn && !canEvolveOnPlayTurn(state, card))
+    return fail("Can't evolve a Pokémon played this turn.");
   if (target.evolvedThisTurn) return fail("Already evolved this turn.");
   if (state.turn === 1) return fail("No evolving on the first turn.");
 
   pl.hand.splice(handIndex, 1);
   target.evolvedFrom.push(target.card);
   target.card = card;
-  // damage persists; all Special Conditions are removed on evolution.
-  clearAllStatuses(target);
+  // Evolving clears Special Conditions — except Confused under Dizzying Valley.
+  if (confusedPersistsOnEvolve(state)) {
+    const wasConfused = target.statuses.includes("confused");
+    clearAllStatuses(target);
+    if (wasConfused) target.statuses.push("confused");
+  } else {
+    clearAllStatuses(target);
+  }
   // Tools carry over; abilities reset.
   target.abilityUsedThisTurn = false;
   target.evolvedThisTurn = true;
@@ -188,10 +218,16 @@ export function playTrainer(
     pl.hand.splice(handIndex, 1);
     state.stadium = { card: t, controller: player };
     logEvent(state, player, `plays Stadium ${t.name}.`);
+    // A new Stadium can shrink effective HP (e.g. Gravity Mountain -30 on
+    // Stage 2s) — sweep bench KOs so any Pokémon now past its cap is
+    // removed before further actions run.
+    resolveBenchKOs(state);
     return ok;
   }
 
-  // Item / Supporter: discard after effect applies.
+  // Item / Supporter: check resource preconditions before committing the play.
+  const block = precheckTrainerEffect(state, player, t);
+  if (block) return fail(block);
   pl.hand.splice(handIndex, 1);
   applyTrainerEffect(state, player, t, target);
   if (isSupporter) pl.supporterPlayedThisTurn = true;
@@ -207,7 +243,7 @@ export type TrainerTarget =
   | { kind: "handCard"; handIndex: number }
   | { kind: "discardCard"; discardIndex: number };
 
-import { applyTrainerEffect } from "./trainerEffects";
+import { applyTrainerEffect, precheckTrainerEffect } from "./trainerEffects";
 
 export function retreat(
   state: GameState,
@@ -223,7 +259,7 @@ export function retreat(
   if (hasStatus(pl.active, "paralyzed")) return fail("Paralyzed Pokémon can't retreat.");
   if (benchIndex < 0 || benchIndex >= pl.bench.length)
     return fail("Invalid bench slot.");
-  const cost = pl.active.card.retreatCost ?? [];
+  const cost = effectiveRetreatCost(pl.active);
   const provided = energyProvidedBy(pl.active);
   if (!canPayCost(provided, cost))
     return fail("Not enough Energy to retreat.");
@@ -269,7 +305,143 @@ export function promoteBenchToActive(
   state.onPromoteResolved = null;
   if (cont === "endTurn") endTurnRule(state);
   else if (cont === "passTurn") passTurn(state);
+  else if (cont === "secondAttack") resumeSecondAttack(state);
   return ok;
+}
+
+// Festival Lead + Festival Grounds lets the attacker hit twice. Helper here
+// checks the conditions at a given moment.
+function hasFestivalLeadTwin(state: GameState, attacker: import("./types").PokemonInPlay): boolean {
+  if (state.stadium?.card.name !== "Festival Grounds") return false;
+  return (attacker.card.abilities ?? []).some((a) => a.name === "Festival Lead");
+}
+
+// Run the damage / effects portion of an attack (one hit). Does not handle
+// status checks, cost payment, or turn-ending — callers handle those.
+function executeAttackHit(
+  state: GameState,
+  player: PlayerId,
+  attackIndex: number,
+): void {
+  const pl = state.players[player];
+  const atk = pl.active;
+  if (!atk) return;
+  const move = atk.card.attacks[attackIndex];
+  if (!move) return;
+  const defOwner = opponentOf(player);
+  const def = state.players[defOwner].active;
+  let damage = move.damage;
+  damage += stadiumAttackBonus(state, atk, def);
+  damage += turnAttackBonus(state, player, atk, def);
+  if (def) {
+    const atkType = atk.card.types[0];
+    const weak = def.card.weaknesses?.find((w) => w.type === atkType);
+    const res = def.card.resistances?.find((w) => w.type === atkType);
+    if (weak && weak.value.startsWith("×")) {
+      damage *= parseInt(weak.value.slice(1), 10) || 2;
+    }
+    if (res && res.value.startsWith("-")) {
+      damage = Math.max(0, damage - (parseInt(res.value.slice(1), 10) || 30));
+    }
+    const reduction = stadiumDamageReduction(state, atk, def);
+    const turnRed = turnDamageReduction(state, defOwner, def);
+    const total = reduction + turnRed;
+    if (total > 0) damage = Math.max(0, damage - total);
+  }
+  const result = resolveAttackEffects(state, {
+    attacker: atk,
+    attackerOwner: player,
+    defender: def,
+    defenderOwner: defOwner,
+    move,
+    damage,
+  });
+  damage = result.damage;
+  // Survival Brace: cap damage so full-HP defender survives with 10 HP.
+  if (def && damage > 0) {
+    damage = applySurvivalBrace(state, def, damage);
+  }
+  logEvent(state, player, `attacks with ${move.name} for ${damage}.`);
+  if (damage > 0) applyDamage(state, defOwner, damage);
+  // Tool "on damage" triggers (Lucky Helmet draw, Punk Helmet counter).
+  if (def && damage > 0) {
+    for (const act of toolOnDamageActions(state, def, true)) {
+      if (act.kind === "drawCards") {
+        const d = state.players[defOwner];
+        let drawn = 0;
+        for (let i = 0; i < act.count; i++) {
+          const c = d.deck.shift();
+          if (!c) break;
+          d.hand.push(c);
+          drawn++;
+        }
+        if (drawn > 0) logEvent(state, defOwner, `draws ${drawn} card(s) from Lucky Helmet.`);
+      } else if (act.kind === "counterDamage") {
+        atk.damage += act.damage;
+        logEvent(state, "system", `${atk.card.name} takes ${act.damage} counter damage (Punk Helmet).`);
+      }
+    }
+  }
+  // Discard any Berry Tools on the defender that just triggered.
+  if (def && damage > 0) {
+    const triggered = triggeredBerryTools(state, atk, def);
+    if (triggered.length > 0) {
+      for (const name of triggered) {
+        const i = def.tools.findIndex((t) => t.name === name);
+        if (i >= 0) {
+          const [tool] = def.tools.splice(i, 1);
+          state.players[defOwner].discard.push(tool);
+          logEvent(state, defOwner, `discards ${tool.name} (berry triggered).`);
+        }
+      }
+    }
+  }
+  if ((state.phase as string) !== "gameOver") {
+    result.postDamage?.();
+  }
+  if ((state.phase as string) !== "gameOver") {
+    resolveBenchKOs(state);
+  }
+  if ((state.phase as string) !== "gameOver" && pl.active && pl.active.damage >= effectiveMaxHp(pl.active, state)) {
+    knockOut(state, player);
+  }
+}
+
+// Shared post-hit branching — used by both the first hit (in attack) and the
+// second hit (resumed by promoteBenchToActive after a KO). Returns true if
+// the attack sequence is fully resolved (endTurn already called), false if
+// we're paused on a pendingPromote or gameOver.
+function finishHit(
+  state: GameState,
+  player: PlayerId,
+  attackIndex: number,
+  wasSecond: boolean,
+): void {
+  // Did the first hit trigger a second-hit eligibility?
+  if (!wasSecond) {
+    const atk = state.players[player].active;
+    if (atk && hasFestivalLeadTwin(state, atk)) {
+      state.pendingSecondAttack = { player, attackIndex };
+      logEvent(state, "system", "Festival Lead: attack continues for a second hit.");
+      if (state.pendingPromote) {
+        // Defender KO'd → wait for promote, then run the second hit.
+        state.onPromoteResolved = "secondAttack";
+        return;
+      }
+      // No promote pause → run the second hit inline.
+      state.pendingSecondAttack = null;
+      executeAttackHit(state, player, attackIndex);
+      finishHit(state, player, attackIndex, true);
+      return;
+    }
+  }
+  // End of sequence.
+  if (state.pendingPromote) {
+    state.onPromoteResolved = "endTurn";
+    return;
+  }
+  const phaseAfter: string = state.phase;
+  if (phaseAfter !== "gameOver") endTurnRule(state);
 }
 
 export function attack(
@@ -289,7 +461,8 @@ export function attack(
   const move = atk.card.attacks[attackIndex];
   if (!move) return fail("No such attack.");
   const provided = energyProvidedBy(atk);
-  if (!canPayCost(provided, move.cost))
+  const effectiveCost = effectiveAttackCost(state, atk, move.cost);
+  if (!canPayCost(provided, effectiveCost))
     return fail("Not enough Energy for that attack.");
 
   // Confusion: flip on attack; on tails, attack fails and 30 damage to self.
@@ -298,7 +471,7 @@ export function attack(
     if (!heads) {
       atk.damage += 30;
       logEvent(state, "system", `${atk.card.name} hurts itself in confusion (30 damage).`);
-      if (atk.damage >= atk.card.hp) knockOut(state, player);
+      if (atk.damage >= effectiveMaxHp(atk, state)) knockOut(state, player);
       if (state.pendingPromote) {
         state.onPromoteResolved = "endTurn";
         return ok;
@@ -309,59 +482,21 @@ export function attack(
     }
   }
 
-  const defOwner = opponentOf(player);
-  const def = state.players[defOwner].active;
-  let damage = move.damage;
-  if (def) {
-    const atkType = atk.card.types[0];
-    const weak = def.card.weaknesses?.find((w) => w.type === atkType);
-    const res = def.card.resistances?.find((w) => w.type === atkType);
-    if (weak && weak.value.startsWith("×")) {
-      damage *= parseInt(weak.value.slice(1), 10) || 2;
-    }
-    if (res && res.value.startsWith("-")) {
-      damage = Math.max(0, damage - (parseInt(res.value.slice(1), 10) || 30));
-    }
-  }
-
-  // Resolve structured attack effects (coin flips, per-energy bonuses, bench
-  // snipes, status infliction, etc.). Effects can modify `damage` and/or
-  // trigger their own side-effects; `aborted` means the attack did nothing.
-  const result = resolveAttackEffects(state, {
-    attacker: atk,
-    attackerOwner: player,
-    defender: def,
-    defenderOwner: defOwner,
-    move,
-    damage,
-  });
-  damage = result.damage;
-
-  logEvent(state, player, `attacks with ${move.name} for ${damage}.`);
-  if (damage > 0) applyDamage(state, defOwner, damage);
-  // Post-damage effects (self-damage, status applications, bench snipe) run
-  // after the main hit so e.g. KOs land before side effects apply.
-  if ((state.phase as string) !== "gameOver") {
-    result.postDamage?.();
-  }
-  // Bench snipes / recoil / confusion damage can KO benched Pokémon — resolve
-  // those now so opponents get prizes for them before the turn ends.
-  if ((state.phase as string) !== "gameOver") {
-    resolveBenchKOs(state);
-  }
-  // Self-KO from recoil / confusion — trigger the KO flow explicitly.
-  if ((state.phase as string) !== "gameOver" && pl.active && pl.active.damage >= pl.active.card.hp) {
-    knockOut(state, player);
-  }
-  // If an active was KO'd, we're now paused on pendingPromote — queue
-  // end-of-turn to run once the promote resolves.
-  if (state.pendingPromote) {
-    state.onPromoteResolved = "endTurn";
-    return ok;
-  }
-  const phaseAfter: string = state.phase;
-  if (phaseAfter !== "gameOver") endTurnRule(state);
+  executeAttackHit(state, player, attackIndex);
+  finishHit(state, player, attackIndex, false);
   return ok;
+}
+
+// Resume a queued Festival Lead second hit after the opponent has promoted a
+// new Active. Called by promoteBenchToActive when onPromoteResolved is
+// "secondAttack".
+export function resumeSecondAttack(state: GameState): void {
+  const queued = state.pendingSecondAttack;
+  if (!queued) return;
+  const { player, attackIndex } = queued;
+  state.pendingSecondAttack = null;
+  executeAttackHit(state, player, attackIndex);
+  finishHit(state, player, attackIndex, true);
 }
 
 export function endTurn(state: GameState, player: PlayerId): ActionResult {

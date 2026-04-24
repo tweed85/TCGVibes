@@ -47,20 +47,43 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
     return { effects };
   }
 
-  // ---- "N×" damage for each Energy attached --------------------------------
+  // ---- "N×" damage for each <thing> ---------------------------------------
   // Example: damage="30×", text="This attack does 30 damage for each Energy
-  // attached to this Pokémon."
+  // attached to this Pokémon." The multiplier-X pattern zeros out the base
+  // damage (the "×" suffix means "no damage without the multiplier").
   if (damageText.endsWith("×")) {
     const base = parseInt(damageText, 10);
     if (!isNaN(base)) {
-      // Try to find the energy-type qualifier in the text.
       const perEnergyMatch = text.match(
         /for each ([A-Za-z]+ )?Energy attached/i,
       );
       const multEachHeads = text.match(
         /flip (\d+|a) coins?\. This attack does \d+ damage (times|for each) (the |times )?(number of heads|heads)/i,
       );
-      if (perEnergyMatch) {
+      // Detection order matters: check the more-specific per-X patterns
+      // before generic "for each Energy" since some text contains both.
+      if (/for each of your opponent'?s\s+benched pok[eé]mon/i.test(text)) {
+        effects.push({ kind: "perOpponentBench", perCount: base });
+        baseDamageOverride = 0;
+      } else if (/for each benched pok[eé]mon\s*\(both yours and your opponent'?s\)/i.test(text)) {
+        effects.push({ kind: "perBothBench", perCount: base });
+        baseDamageOverride = 0;
+      } else if (/for each of your\s+benched pok[eé]mon/i.test(text)) {
+        effects.push({ kind: "perFriendlyBench", perCount: base });
+        baseDamageOverride = 0;
+      } else if (/for each damage counter on this pok[eé]mon/i.test(text)) {
+        effects.push({ kind: "perDamageCounterOnSelf", perCount: base });
+        baseDamageOverride = 0;
+      } else if (/for each damage counter on your opponent'?s active pok[eé]mon/i.test(text)) {
+        effects.push({ kind: "perDamageCounterOnDefender", perCount: base });
+        baseDamageOverride = 0;
+      } else if (/for each Energy attached to your opponent'?s active pok[eé]mon/i.test(text)) {
+        effects.push({ kind: "perEnergyOnDefender", perCount: base });
+        baseDamageOverride = 0;
+      } else if (/for each Prize card your opponent has taken/i.test(text)) {
+        effects.push({ kind: "perPrizeOppTaken", perCount: base });
+        baseDamageOverride = 0;
+      } else if (perEnergyMatch) {
         const qualifier = (perEnergyMatch[1] ?? "").trim();
         const energyType = matchEnergyType(qualifier);
         effects.push({ kind: "perAttachedEnergy", perEnergy: base, energyType });
@@ -93,6 +116,38 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
       const energyType = matchEnergyType(qualifier);
       effects.push({ kind: "perAttachedEnergy", perEnergy, energyType });
     }
+  }
+
+  // ---- Additive "+N more damage for each <thing>" patterns ----------------
+  // These run when the base damage has a "+" suffix (e.g. "60+"), so the
+  // base damage stays and this adds count × perCount on top.
+  if (!effects.some((e) => e.kind === "perFriendlyBench")) {
+    const m = text.match(/(\d+) more damage for each of your\s+benched pok[eé]mon/i);
+    if (m) effects.push({ kind: "perFriendlyBench", perCount: parseInt(m[1], 10) });
+  }
+  if (!effects.some((e) => e.kind === "perOpponentBench")) {
+    const m = text.match(/(\d+) more damage for each of your opponent'?s\s+benched pok[eé]mon/i);
+    if (m) effects.push({ kind: "perOpponentBench", perCount: parseInt(m[1], 10) });
+  }
+  if (!effects.some((e) => e.kind === "perBothBench")) {
+    const m = text.match(/(\d+) more damage for each benched pok[eé]mon\s*\(both yours and your opponent'?s\)/i);
+    if (m) effects.push({ kind: "perBothBench", perCount: parseInt(m[1], 10) });
+  }
+  if (!effects.some((e) => e.kind === "perDamageCounterOnSelf")) {
+    const m = text.match(/(\d+) more damage for each damage counter on this pok[eé]mon/i);
+    if (m) effects.push({ kind: "perDamageCounterOnSelf", perCount: parseInt(m[1], 10) });
+  }
+  if (!effects.some((e) => e.kind === "perDamageCounterOnDefender")) {
+    const m = text.match(/(\d+) more damage for each damage counter on your opponent'?s active pok[eé]mon/i);
+    if (m) effects.push({ kind: "perDamageCounterOnDefender", perCount: parseInt(m[1], 10) });
+  }
+  if (!effects.some((e) => e.kind === "perEnergyOnDefender")) {
+    const m = text.match(/(\d+) more damage for each Energy attached to your opponent'?s active pok[eé]mon/i);
+    if (m) effects.push({ kind: "perEnergyOnDefender", perCount: parseInt(m[1], 10) });
+  }
+  if (!effects.some((e) => e.kind === "perPrizeOppTaken")) {
+    const m = text.match(/(\d+) more damage for each Prize card your opponent has taken/i);
+    if (m) effects.push({ kind: "perPrizeOppTaken", perCount: parseInt(m[1], 10) });
   }
 
   // ---- "Flip a coin. If tails, this attack does nothing." ------------------
