@@ -353,7 +353,8 @@ export interface PendingInPlayTarget {
     | { kind: "heavyBaton"; count: number; source: string } // source = KO'd Pokémon instanceId (already gone; source fed via state)
     | { kind: "scoopUpCyclone" }
     | { kind: "lisiasAppeal" }
-    | { kind: "nPlanEnergySource"; remaining: number };
+    | { kind: "nPlanEnergySource"; remaining: number }
+    | { kind: "wallysCompassion" };
 }
 
 export interface PendingPick {

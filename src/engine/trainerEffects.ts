@@ -623,6 +623,18 @@ export function precheckTrainerEffect(
   if (id === "scoopUpCyclone" && pl.bench.length === 0) {
     return "No Benched Pokémon to scoop.";
   }
+  if (id === "healMegaExAndEnergyToHand") {
+    const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+    const damagedMegaEx = allies.find(
+      (p) =>
+        p.damage > 0 &&
+        (p.card.subtypes ?? []).some((s) => /^MEGA$/i.test(s) || /^Mega /.test(s)) &&
+        (p.card.subtypes ?? []).includes("ex"),
+    );
+    if (!damagedMegaEx) {
+      return "No damaged Mega Evolution Pokémon ex to heal.";
+    }
+  }
   if (id === "gustConfuseOppBasic") {
     const opp = state.players[player === "p1" ? "p2" : "p1"];
     if (!opp.bench.some((p) => p.card.subtypes.includes("Basic"))) {
@@ -644,6 +656,146 @@ export function precheckTrainerEffect(
       return "No Stage 2 in hand that evolves from this Pokémon.";
     }
   }
+
+  // -------- Supporter "can't do anything" prechecks -----------------------
+  // A Supporter is a once-per-turn resource. Reject the play outright when
+  // the effect can't accomplish anything, matching the "you can only play it
+  // if it does something" intent across the format.
+
+  const oppId: PlayerId = player === "p1" ? "p2" : "p1";
+  const opp = state.players[oppId];
+  const allies: PokemonInPlay[] = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+
+  // Kieran — switch your Active with a Benched Pokémon.
+  if (id === "switchActive" && (!pl.active || pl.bench.length === 0)) {
+    return "No Benched Pokémon to switch with.";
+  }
+
+  // Eri — needs at least one Item in the opponent's hand to discard.
+  if (id === "eriDiscardOppItems") {
+    const hasItem = opp.hand.some(
+      (c) => c.supertype === "Trainer" && c.subtypes.includes("Item"),
+    );
+    if (!hasItem) return `${opp.name} has no Items to discard.`;
+  }
+
+  // Xerosic's Machinations — needs at least one Item or Pokémon Tool in
+  // the opp's hand.
+  if (id === "discardOppItemsHand") {
+    const hasItemOrTool = opp.hand.some((c) => {
+      if (c.supertype !== "Trainer") return false;
+      return (
+        c.subtypes.includes("Item") ||
+        c.subtypes.includes("Pokémon Tool") ||
+        c.subtypes.includes("Tool")
+      );
+    });
+    if (!hasItemOrTool) return `${opp.name} has no Items or Tools to discard.`;
+  }
+
+  // Heal-Active Supporters — need an Active with damage.
+  if (
+    id === "heal70Active" ||
+    id === "heal60ActiveAndCure"
+  ) {
+    if (!pl.active) return "No Active Pokémon.";
+    if (pl.active.damage === 0 && id === "heal70Active") {
+      return "Your Active Pokémon has no damage to heal.";
+    }
+    // heal60ActiveAndCure also cures statuses — allow if damage or status.
+    if (id === "heal60ActiveAndCure" && pl.active.damage === 0 && pl.active.statuses.length === 0) {
+      return "Your Active has no damage and no Special Conditions.";
+    }
+  }
+
+  // Cook — heal 70 from Active (damage-only).
+  // (Already covered by heal70Active above.)
+
+  // Fennel "healEach40" — heal across your own side; needs at least one
+  // damaged ally.
+  if (id === "healEach40") {
+    if (!allies.some((p) => p.damage > 0)) return "None of your Pokémon are damaged.";
+  }
+
+  // Jacinthe "heal150Psychic" — needs a damaged Psychic Pokémon.
+  if (id === "heal150Psychic") {
+    const hit = allies.some((p) => p.card.types.includes("Psychic") && p.damage > 0);
+    if (!hit) return "No damaged Psychic Pokémon to heal.";
+  }
+
+  // Clemont's Quick Wit "heal60EachLightning" — needs a damaged Lightning.
+  if (id === "heal60EachLightning") {
+    const hit = allies.some((p) => p.card.types.includes("Lightning") && p.damage > 0);
+    if (!hit) return "No damaged Lightning Pokémon to heal.";
+  }
+
+  // Bianca's Devotion "healAllIfLow30Hp" — needs an ally whose remaining HP
+  // is ≤30 and is currently damaged.
+  if (id === "healAllIfLow30Hp") {
+    const hit = allies.some((p) => p.damage > 0 && p.card.hp - p.damage <= 30);
+    if (!hit) return "No Pokémon with 30 HP or less remaining to heal.";
+  }
+
+  // Waitress "searchTopBasicEnergyAttach" — needs an Active to attach to.
+  if (id === "searchTopBasicEnergyAttach" && !pl.active) {
+    return "No Active Pokémon to attach Energy to.";
+  }
+
+  // Lana's Aid — needs at least one eligible card in your discard.
+  if (id === "recoverFromDiscardLana") {
+    const isEligible = (c: Card): boolean =>
+      (c.supertype === "Pokémon" && !(c.subtypes ?? []).some((s) => RULE_BOX_MARKERS.includes(s))) ||
+      (c.supertype === "Energy" && c.subtypes.includes("Basic"));
+    if (!pl.discard.some(isEligible)) {
+      return "No non-Rule-Box Pokémon or Basic Energy in your discard.";
+    }
+  }
+
+  // Tarragon — needs a Fighting Pokémon or Basic Fighting Energy in discard.
+  if (id === "recoverFromDiscardTarragon") {
+    const isEligible = (c: Card): boolean =>
+      (c.supertype === "Pokémon" && c.types.includes("Fighting")) ||
+      (c.supertype === "Energy" &&
+        c.subtypes.includes("Basic") &&
+        (c as EnergyCard).provides.includes("Fighting"));
+    if (!pl.discard.some(isEligible)) {
+      return "No Fighting Pokémon or basic Fighting Energy in your discard.";
+    }
+  }
+
+  // Ruffian — needs an opposing Pokémon with a Tool OR a Special Energy.
+  if (id === "discardOppToolAndSpecialEnergy") {
+    const anyTarget = [opp.active, ...opp.bench].some(
+      (p) =>
+        !!p &&
+        (p.tools.length > 0 || p.attachedEnergy.some((e) => e.subtypes.includes("Special"))),
+    );
+    if (!anyTarget) return "No Tools or Special Energy on opponent's Pokémon.";
+  }
+
+  // N's Plan — needs energy on bench AND an Active to move it to.
+  if (id === "moveBenchEnergyToActive") {
+    if (!pl.active) return "No Active Pokémon to move Energy to.";
+    if (!pl.bench.some((b) => b.attachedEnergy.length > 0)) {
+      return "No Energy on your Bench to move.";
+    }
+  }
+
+  // Morty's Conviction — "discard a card from your hand, then draw a card for
+  // each of your opponent's Benched Pokémon". Needs hand >= 2 (discard + the
+  // card itself) AND at least one opp bench to yield a draw.
+  if (id === "drawPerOppBenched") {
+    if (pl.hand.length < 2) return "Need an extra card in hand to discard.";
+    if (opp.bench.length === 0) return "Opponent has no Benched Pokémon — nothing to draw for.";
+  }
+
+  // Grimsley's Move — first-turn block (already handled in handler, but raise
+  // it to precheck so the Supporter slot isn't wasted); also needs bench room.
+  if (id === "darkBasicPokemonTopPeek") {
+    if (state.turn === 1) return "Can't use Grimsley's Move on the first turn.";
+    if (pl.bench.length >= 5) return "Your Bench is full.";
+  }
+
   return null;
 }
 
@@ -1440,21 +1592,41 @@ export function applyTrainerEffect(
     }
 
     case "healMegaExAndEnergyToHand": {
-      if (!pl.active) return;
-      const c = pl.active.card;
-      const isMegaEx =
-        (c.subtypes ?? []).some((s) => /^Mega/i.test(s)) &&
+      // Wally's Compassion — "Heal all damage from 1 of your Mega Evolution
+      // Pokémon ex. If you healed any damage in this way, put all Energy
+      // attached to that Pokémon into your hand."
+      //
+      // Precheck already confirmed there's ≥1 damaged Mega ex in play. AI
+      // auto-picks the most-damaged one; humans get the in-play target picker
+      // gated to damaged Mega exes only.
+      const isMegaEx = (c: PokemonCard) =>
+        (c.subtypes ?? []).some((s) => /^MEGA$/i.test(s) || /^Mega /.test(s)) &&
         (c.subtypes ?? []).includes("ex");
-      if (!isMegaEx) {
-        logEvent(state, player, "needs an Active Mega Evolution Pokémon ex.");
+      const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+      const damagedMegas = allies.filter((p) => p.damage > 0 && isMegaEx(p.card));
+      if (pl.isAI || damagedMegas.length === 1) {
+        const target = damagedMegas.slice().sort((a, b) => b.damage - a.damage)[0];
+        const before = target.damage;
+        target.damage = 0;
+        if (target.attachedEnergy.length > 0) {
+          pl.hand.push(...target.attachedEnergy);
+          target.attachedEnergy = [];
+        }
+        logEvent(
+          state,
+          player,
+          `Wally's Compassion: heals ${before} from ${target.card.name} and returns its Energy to hand.`,
+        );
         return;
       }
-      pl.active.damage = 0;
-      if (pl.active.attachedEnergy.length > 0) {
-        pl.hand.push(...pl.active.attachedEnergy);
-        pl.active.attachedEnergy = [];
-      }
-      logEvent(state, player, `fully heals ${c.name} and returns its Energy to hand.`);
+      state.pendingInPlayTarget = {
+        player,
+        label: "Wally's Compassion: pick a damaged Mega Evolution Pokémon ex to fully heal",
+        scope: "own",
+        slot: "anywhere",
+        filter: "anyPokemon", // validated more strictly in the resolver
+        action: { kind: "wallysCompassion" },
+      };
       return;
     }
 
@@ -2304,6 +2476,29 @@ export function resolveInPlayTarget(
       } else {
         state.pendingInPlayTarget = null;
       }
+      return { ok: true };
+    }
+    case "wallysCompassion": {
+      // Must target one of YOUR damaged Mega Evolution Pokémon ex.
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      const subs = target.card.subtypes ?? [];
+      const isMegaEx =
+        subs.some((s) => /^MEGA$/i.test(s) || /^Mega /.test(s)) &&
+        subs.includes("ex");
+      if (!isMegaEx) return { ok: false, reason: "Must be a Mega Evolution Pokémon ex." };
+      if (target.damage === 0) return { ok: false, reason: "That Pokémon has no damage to heal." };
+      const before = target.damage;
+      target.damage = 0;
+      if (target.attachedEnergy.length > 0) {
+        clickerPl.hand.push(...target.attachedEnergy);
+        target.attachedEnergy = [];
+      }
+      logEvent(
+        state,
+        clicker,
+        `Wally's Compassion: heals ${before} from ${target.card.name} and returns its Energy to hand.`,
+      );
+      state.pendingInPlayTarget = null;
       return { ok: true };
     }
   }

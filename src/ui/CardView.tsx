@@ -10,6 +10,12 @@ export function setCardZoomHandler(fn: ((card: Card) => void) | null): void {
   zoomHandler = fn;
 }
 
+// Imperatively trigger the zoom modal (used by wrapper components that want
+// their own right-click / keyboard handlers to open the zoom overlay).
+export function triggerCardZoom(card: Card): void {
+  zoomHandler?.(card);
+}
+
 function maybeZoom(card: Card, ev: MouseEvent): boolean {
   if (!zoomHandler) return false;
   if (ev.shiftKey || ev.metaKey || ev.button === 2) {

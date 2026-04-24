@@ -44,7 +44,7 @@ import {
   importDecklist,
   type DeckListEntry,
 } from "./data/decklistParser";
-import { CardView, FaceDownCard, PokemonInPlayView, setCardZoomHandler } from "./ui/CardView";
+import { CardView, FaceDownCard, PokemonInPlayView, setCardZoomHandler, triggerCardZoom } from "./ui/CardView";
 
 type Selection =
   | { kind: "hand"; index: number }
@@ -1930,7 +1930,8 @@ function DeckBuilderModal({ existingNames, onClose, onSave }: DeckBuilderModalPr
         <div className="builder-body">
           <div className="builder-results">
             <div className="builder-results-meta">
-              Showing {displayCards.length} of {filteredCards.length} matching
+              Showing {displayCards.length} of {filteredCards.length} matching ·
+              <span style={{ marginLeft: 6, opacity: 0.7 }}>click to add · right-click to zoom</span>
             </div>
             <div className="builder-grid">
               {displayCards.map((c) => {
@@ -1943,11 +1944,21 @@ function DeckBuilderModal({ existingNames, onClose, onSave }: DeckBuilderModalPr
                   <div
                     key={c.id}
                     className={`builder-card${count > 0 ? " picked" : ""}${atFourCap && count === 0 ? " capped" : ""}`}
-                    onClick={() => {
+                    onClick={(ev) => {
+                      // Shift / Cmd / middle-click route to zoom instead of add.
+                      if (ev.shiftKey || ev.metaKey) {
+                        triggerCardZoom(c);
+                        return;
+                      }
                       if (atFourCap) return;
                       changeCount(c.id, 1);
                     }}
-                    title={atFourCap ? `Already 4× ${c.name}` : `Add ${c.name}`}
+                    onContextMenu={(ev) => {
+                      // Right-click: zoom the card, don't show the browser menu.
+                      ev.preventDefault();
+                      triggerCardZoom(c);
+                    }}
+                    title={atFourCap ? `Already 4× ${c.name} · right-click to zoom` : `Add ${c.name} · right-click to zoom`}
                   >
                     <CardView card={c} />
                     {count > 0 && <span className="builder-count">×{count}</span>}

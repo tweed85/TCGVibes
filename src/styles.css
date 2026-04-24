@@ -1584,9 +1584,11 @@ button.secondary:hover:not(:disabled) {
 }
 
 /* Zoom: big card image floating over a dim backdrop. Click anywhere outside
-   the card to close. */
+   the card to close. Z-index is pumped above the other modal layer so the
+   zoom shows over the deck-builder / pre-game / import / pick modals. */
 .card-zoom-backdrop {
   cursor: zoom-out;
+  z-index: 100;
 }
 .card-zoom {
   position: relative;
