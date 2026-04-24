@@ -20,6 +20,7 @@ import type {
   EnergyType,
   GameState,
   PlayerId,
+  PokemonCard,
   PokemonInPlay,
 } from "./types";
 
@@ -303,4 +304,165 @@ export function activateAbility(
 
   holder.abilityUsedThisTurn = true;
   return { ok: true };
+}
+
+// ---- Triggered-on-evolve abilities ---------------------------------------
+//
+// A separate path from activated abilities: these fire automatically when a
+// Pokémon is played from hand as an evolution, optionally gated by a board
+// condition. They're declared by ability name because the text pattern is
+// too specific per card.
+
+interface TriggeredOnEvolveEffect {
+  // A short description used in the log.
+  label: string;
+  // Optional pre-check against the current state. Returns true if the effect
+  // can fire.
+  condition?: (state: GameState, player: PlayerId) => boolean;
+  // Runs the effect. May open a pendingPick. The evolved Pokémon instance is
+  // provided for effects that need "this Pokémon" context.
+  run: (state: GameState, player: PlayerId, self: PokemonInPlay) => void;
+}
+
+// Gate: player has any Tera Pokémon in play.
+const hasTeraInPlay = (state: GameState, player: PlayerId): boolean => {
+  const pl = state.players[player];
+  const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+  return allies.some((p) => p.card.subtypes.includes("Tera"));
+};
+
+
+const TRIGGERED_ON_EVOLVE: Record<string, TriggeredOnEvolveEffect> = {
+  // Noctowl — if Tera in play, search for up to 2 Trainer cards.
+  "Jewel Seeker": {
+    label: "Jewel Seeker: search for up to 2 Trainer cards",
+    condition: hasTeraInPlay,
+    run: (state, player) => {
+      const isTrainer = (c: Card) => c.supertype === "Trainer";
+      if (!setDeckSearchPick(state, player, isTrainer, 2, "Jewel Seeker: pick up to 2 Trainer cards")) {
+        logEvent(state, player, "Jewel Seeker: no Trainers in deck.");
+      }
+    },
+  },
+  // Alakazam — draw 3 cards.
+  "Psychic Draw": {
+    label: "Psychic Draw: draw 3",
+    run: (state, player) => {
+      const pl = state.players[player];
+      let drawn = 0;
+      for (let i = 0; i < 3; i++) {
+        const c = pl.deck.shift();
+        if (!c) break;
+        pl.hand.push(c);
+        drawn++;
+      }
+      logEvent(state, player, `Psychic Draw: draws ${drawn}.`);
+    },
+  },
+  // Hariyama — switch one of opp's Benched Pokémon to Active (gust).
+  "Heave-Ho Catcher": {
+    label: "Heave-Ho Catcher: gust opponent's Benched",
+    run: (state, player) => {
+      const oppId: PlayerId = player === "p1" ? "p2" : "p1";
+      const opp = state.players[oppId];
+      if (!opp.active || opp.bench.length === 0) return;
+      // Auto-pick highest-HP bench target for strongest gust impact.
+      const target = opp.bench.slice().sort((a, b) => b.card.hp - a.card.hp)[0];
+      const idx = opp.bench.indexOf(target);
+      const pulled = opp.bench.splice(idx, 1)[0];
+      const wasActive = opp.active;
+      opp.active = pulled;
+      opp.bench.push(wasActive);
+      logEvent(state, player, `Heave-Ho Catcher gusts ${pulled.card.name} to Active.`);
+    },
+  },
+  // Brambleghast — make opp's Active Pokémon Asleep.
+  "Prison Panic": {
+    label: "Prison Panic: opp's Active is now Asleep",
+    run: (state, player) => {
+      const oppId: PlayerId = player === "p1" ? "p2" : "p1";
+      const opp = state.players[oppId];
+      if (!opp.active) return;
+      if (!opp.active.statuses.includes("asleep")) opp.active.statuses.push("asleep");
+      logEvent(state, "system", `${opp.active.card.name} is now Asleep.`);
+    },
+  },
+  // Grumpig — look at top 4, attach any Basic Energy found.
+  "Energized Steps": {
+    label: "Energized Steps: top 4 for Basic Energy",
+    run: (state, player, self) => {
+      const pl = state.players[player];
+      const top = pl.deck.splice(0, 4);
+      const rest: Card[] = [];
+      for (const c of top) {
+        if (c.supertype === "Energy" && c.subtypes.includes("Basic")) {
+          self.attachedEnergy.push(c as EnergyCard);
+          logEvent(state, player, `Energized Steps attaches ${c.name} to ${self.card.name}.`);
+        } else {
+          rest.push(c);
+        }
+      }
+      pl.deck.push(...rest);
+      // Rulebook mandates shuffling after looking; simple Fisher-Yates inline.
+      const arr = pl.deck;
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = state.rng.int(i + 1);
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    },
+  },
+  // Ninjask — search for a Shedinja and put it on the Bench.
+  "Cast-Off Shell": {
+    label: "Cast-Off Shell: search for Shedinja",
+    run: (state, player) => {
+      const pl = state.players[player];
+      const idx = pl.deck.findIndex(
+        (c) => c.supertype === "Pokémon" && c.name === "Shedinja",
+      );
+      if (idx < 0 || pl.bench.length >= 5) return;
+      const [got] = pl.deck.splice(idx, 1);
+      pl.bench.push({
+        instanceId: `shedinja-${Date.now()}-${Math.random()}`,
+        card: got as PokemonCard,
+        damage: 0,
+        attachedEnergy: [],
+        evolvedFrom: [],
+        tools: [],
+        playedThisTurn: true,
+        evolvedThisTurn: false,
+        statuses: [],
+        abilityUsedThisTurn: false,
+      });
+      const arr = pl.deck;
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = state.rng.int(i + 1);
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      logEvent(state, player, `Cast-Off Shell benches Shedinja.`);
+    },
+  },
+};
+
+// Called from `evolve()` immediately after the Pokémon's card swap. Fires any
+// triggered-on-evolve ability the evolved card has, respecting its condition
+// gate and the current Stadium ability-disable rule.
+export function fireTriggeredOnEvolve(
+  state: GameState,
+  player: PlayerId,
+  evolved: PokemonInPlay,
+): void {
+  const abilities = evolved.card.abilities ?? [];
+  for (const ab of abilities) {
+    const trig = TRIGGERED_ON_EVOLVE[ab.name];
+    if (!trig) continue;
+    if (!abilitiesActiveOn(state, evolved.card)) {
+      logEvent(state, "system", `${ab.name} suppressed by current Stadium.`);
+      continue;
+    }
+    if (trig.condition && !trig.condition(state, player)) {
+      continue;
+    }
+    trig.run(state, player, evolved);
+    evolved.abilityUsedThisTurn = true;
+  }
 }

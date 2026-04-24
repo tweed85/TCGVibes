@@ -45,7 +45,20 @@ export type AttackEffect =
   | { kind: "applyStatus"; status: StatusCondition; target: "defender" | "self" }
   | { kind: "heal"; amount: number; target: "self" | "active" }
   | { kind: "discardOwnEnergy"; count: number } // "Discard N Energy from this Pokémon."
-  | { kind: "drawCards"; count: number };
+  | { kind: "drawCards"; count: number }
+  | { kind: "blockOppItemsNextTurn" } // Budew Itchy Pollen — opp can't play Items next turn.
+  | { kind: "flipMultiCoinsPerHeads"; coins: number; perHeads: number } // "Flip N coins. N damage per heads."
+  | { kind: "selfCantAttackNextTurn" } // During your next turn, this Pokémon can't attack.
+  | { kind: "defenderCantRetreatNextTurn" } // During opp's next turn, Defending can't retreat.
+  | { kind: "selfDamageReductionNextTurn"; amount: number } // "takes N less damage next turn"
+  | { kind: "snipeOne"; damage: number } // "This attack also does N damage to 1 of opp's Benched"
+  | { kind: "switchOutOpponent" } // Opp promotes new Active from bench
+  | { kind: "selfSwitch" } // Switch attacker with a benched Pokémon
+  | { kind: "discardOppEnergy"; count: number } // Discard N Energy from opp's Active
+  | { kind: "flipHeadsDiscardOppEnergy" } // Flip — heads: discard one Energy from opp's Active
+  | { kind: "healEachOwnPokemon"; amount: number } // Heal N from each of your Pokémon
+  | { kind: "discardTopOfOppDeck"; count: number } // Mill the opp deck by N
+  | { kind: "discardOppTools" }; // "Before doing damage, discard all Tools from opp's Active"
 
 export type StatusCondition = "asleep" | "burned" | "confused" | "paralyzed" | "poisoned";
 
@@ -134,6 +147,10 @@ export interface PokemonInPlay {
   evolvedThisTurn: boolean;
   statuses: StatusCondition[]; // asleep/paralyzed/confused are mutually exclusive with each other; poisoned/burned can coexist
   abilityUsedThisTurn: boolean; // tracks "once during your turn" abilities
+  // Turn-locked restrictions applied by attacks with "during your/opponent's
+  // next turn, this/Defending Pokémon can't …" text. Inclusive turn number.
+  cantAttackUntilTurn?: number;
+  cantRetreatUntilTurn?: number;
 }
 
 export type PlayerId = "p1" | "p2";
@@ -160,6 +177,9 @@ export interface PlayerState {
   // Supporters like Jasmine's Gaze or Items like Iron Defender, cleared when
   // that turn ends).
   nextOpponentTurnDamageReductions: TurnDamageReduction[];
+  // Budew's Itchy Pollen and similar attacks set this on the opponent so they
+  // can't play Item cards during their next turn. Cleared when that turn ends.
+  itemsBlockedNextTurn: boolean;
   isAI: boolean;
 }
 
@@ -218,6 +238,9 @@ export interface PendingPick {
   eligibleIndexes?: number[];
   // What to do with unpicked cards once the pick resolves.
   unpicked: PendingPickFallback;
+  // Where the pool came from — surfaced in the UI so the user knows Prize
+  // cards are never involved in a deck search.
+  source: "deck" | "deckTop" | "deckBottom" | "discard";
 }
 
 export interface LogEntry {

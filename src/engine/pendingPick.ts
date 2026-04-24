@@ -35,6 +35,15 @@ function shuffleDeck(state: GameState, pl: PlayerId): void {
 // log a "no eligible cards" message and move on).
 // ---------------------------------------------------------------------------
 
+// Prize cards are their own face-down pile — they must NEVER appear in a
+// deck / discard search pool. We defensively filter by identity: if a prize
+// Card reference somehow shows up in `pl.deck`, drop it on the floor.
+function excludePrizes(pl: { prizes: Card[] }, cards: Card[]): Card[] {
+  if (pl.prizes.length === 0) return cards;
+  const prizeSet = new Set(pl.prizes);
+  return cards.filter((c) => !prizeSet.has(c));
+}
+
 export function setDeckSearchPick(
   state: GameState,
   player: PlayerId,
@@ -43,9 +52,10 @@ export function setDeckSearchPick(
   label: string,
 ): boolean {
   const pl = state.players[player];
+  const safeDeck = excludePrizes(pl, pl.deck);
   const pool: Card[] = [];
   const rest: Card[] = [];
-  for (const c of pl.deck) {
+  for (const c of safeDeck) {
     if (pred(c)) pool.push(c);
     else rest.push(c);
   }
@@ -62,6 +72,7 @@ export function setDeckSearchPick(
     min: 0,
     max: Math.min(max, pool.length),
     unpicked: "shuffleIntoDeck",
+    source: "deck",
   };
   state.phase = "pick";
   return true;
@@ -76,6 +87,8 @@ export function setTopPeekPick(
   label: string,
 ): boolean {
   const pl = state.players[player];
+  // Defensively ensure the deck has no prize references before we peek.
+  pl.deck = excludePrizes(pl, pl.deck);
   const pool = pl.deck.splice(0, slice);
   if (pool.length === 0) return false;
   const eligibleIndexes: number[] = [];
@@ -88,6 +101,7 @@ export function setTopPeekPick(
     max: Math.min(max, eligibleIndexes.length),
     eligibleIndexes,
     unpicked: "shuffleIntoDeck",
+    source: "deckTop",
   };
   state.phase = "pick";
   return true;
@@ -102,6 +116,7 @@ export function setBottomPeekPick(
   label: string,
 ): boolean {
   const pl = state.players[player];
+  pl.deck = excludePrizes(pl, pl.deck);
   const start = Math.max(0, pl.deck.length - slice);
   const pool = pl.deck.splice(start, slice);
   if (pool.length === 0) return false;
@@ -115,6 +130,7 @@ export function setBottomPeekPick(
     max: Math.min(max, eligibleIndexes.length),
     eligibleIndexes,
     unpicked: "shuffleIntoDeck",
+    source: "deckBottom",
   };
   state.phase = "pick";
   return true;
@@ -143,6 +159,7 @@ export function setDiscardRecoveryPick(
     min: 0,
     max: Math.min(max, pool.length),
     unpicked: "returnToDiscard",
+    source: "discard",
   };
   state.phase = "pick";
   return true;

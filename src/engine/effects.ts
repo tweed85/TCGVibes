@@ -211,6 +211,168 @@ export function resolveAttackEffects(
         });
         break;
       }
+      case "blockOppItemsNextTurn": {
+        postHooks.push(() => {
+          state.players[ctx.defenderOwner].itemsBlockedNextTurn = true;
+          logEvent(state, "system", `${state.players[ctx.defenderOwner].name} can't play Item cards next turn.`);
+        });
+        break;
+      }
+
+      case "flipMultiCoinsPerHeads": {
+        let heads = 0;
+        for (let i = 0; i < e.coins; i++) {
+          if (flipCoin(state, `${ctx.move.name} coin ${i + 1}`)) heads++;
+        }
+        damage += e.perHeads * heads;
+        logEvent(state, "system", `${ctx.move.name}: ${heads}/${e.coins} heads → +${e.perHeads * heads}.`);
+        break;
+      }
+
+      case "selfCantAttackNextTurn": {
+        postHooks.push(() => {
+          // Next-next turn = current turn + 2 for the attacker (opp's turn is in between).
+          ctx.attacker.cantAttackUntilTurn = state.turn + 2;
+          logEvent(state, "system", `${ctx.attacker.card.name} can't attack next turn.`);
+        });
+        break;
+      }
+
+      case "defenderCantRetreatNextTurn": {
+        postHooks.push(() => {
+          if (!ctx.defender) return;
+          ctx.defender.cantRetreatUntilTurn = state.turn + 1;
+          logEvent(state, "system", `${ctx.defender.card.name} can't retreat next turn.`);
+        });
+        break;
+      }
+
+      case "selfDamageReductionNextTurn": {
+        postHooks.push(() => {
+          state.players[ctx.attackerOwner].nextOpponentTurnDamageReductions.push({
+            amount: e.amount,
+          });
+          logEvent(state, "system", `${ctx.attacker.card.name} will take ${e.amount} less damage next turn.`);
+        });
+        break;
+      }
+
+      case "snipeOne": {
+        postHooks.push(() => {
+          const opp = state.players[ctx.defenderOwner];
+          if (opp.bench.length === 0) return;
+          // AI heuristic: pick the highest-damage-counter-on-KO target.
+          // For a player attack, a target picker modal would be ideal; auto-pick
+          // the most-damaged bench Pokémon so the snipe is maximally impactful.
+          const target = opp.bench
+            .slice()
+            .sort((a, b) => b.damage - a.damage)[0];
+          target.damage += e.damage;
+          logEvent(state, "system", `${target.card.name} takes ${e.damage} damage (snipe).`);
+        });
+        break;
+      }
+
+      case "switchOutOpponent": {
+        postHooks.push(() => {
+          const opp = state.players[ctx.defenderOwner];
+          if (!opp.active || opp.bench.length === 0) return;
+          // Force opp to choose a new Active — re-use promote flow.
+          const oldActive = opp.active;
+          opp.bench.push(oldActive);
+          opp.active = null;
+          state.pendingPromote = ctx.defenderOwner;
+          state.phase = "promoteActive";
+          logEvent(state, "system", `${oldActive.card.name} is switched out — opponent picks new Active.`);
+        });
+        break;
+      }
+
+      case "selfSwitch": {
+        postHooks.push(() => {
+          const atkPl = state.players[ctx.attackerOwner];
+          if (!atkPl.active || atkPl.bench.length === 0) return;
+          const incoming = atkPl.bench.shift()!;
+          const outgoing = atkPl.active;
+          // Clear statuses on the retreating Pokémon per the "switch" rule.
+          outgoing.statuses = [];
+          atkPl.active = incoming;
+          atkPl.bench.push(outgoing);
+          logEvent(state, ctx.attackerOwner, `switches ${outgoing.card.name} → ${incoming.card.name}.`);
+        });
+        break;
+      }
+
+      case "discardOppEnergy": {
+        postHooks.push(() => {
+          const opp = state.players[ctx.defenderOwner];
+          if (!opp.active) return;
+          for (let i = 0; i < e.count; i++) {
+            const energy = opp.active.attachedEnergy.shift();
+            if (!energy) break;
+            opp.discard.push(energy);
+            logEvent(state, "system", `${energy.name} discarded from ${opp.active.card.name}.`);
+          }
+        });
+        break;
+      }
+
+      case "flipHeadsDiscardOppEnergy": {
+        postHooks.push(() => {
+          const heads = flipCoin(state, `${ctx.move.name} discard flip`);
+          if (!heads) return;
+          const opp = state.players[ctx.defenderOwner];
+          if (!opp.active) return;
+          const energy = opp.active.attachedEnergy.shift();
+          if (!energy) return;
+          opp.discard.push(energy);
+          logEvent(state, "system", `${energy.name} discarded from ${opp.active.card.name}.`);
+        });
+        break;
+      }
+
+      case "healEachOwnPokemon": {
+        postHooks.push(() => {
+          const allies = [
+            state.players[ctx.attackerOwner].active,
+            ...state.players[ctx.attackerOwner].bench,
+          ].filter((p): p is PokemonInPlay => !!p);
+          let total = 0;
+          for (const p of allies) {
+            const before = p.damage;
+            p.damage = Math.max(0, p.damage - e.amount);
+            total += before - p.damage;
+          }
+          if (total > 0) logEvent(state, ctx.attackerOwner, `heals ${total} across their Pokémon.`);
+        });
+        break;
+      }
+
+      case "discardTopOfOppDeck": {
+        postHooks.push(() => {
+          const opp = state.players[ctx.defenderOwner];
+          for (let i = 0; i < e.count; i++) {
+            const c = opp.deck.shift();
+            if (!c) break;
+            opp.discard.push(c);
+            logEvent(state, "system", `Top of ${opp.name}'s deck (${c.name}) discarded.`);
+          }
+        });
+        break;
+      }
+
+      case "discardOppTools": {
+        postHooks.push(() => {
+          const opp = state.players[ctx.defenderOwner];
+          if (!opp.active) return;
+          const tools = opp.active.tools.splice(0);
+          opp.discard.push(...tools);
+          if (tools.length > 0) {
+            logEvent(state, "system", `${tools.length} Tool(s) discarded from ${opp.active.card.name}.`);
+          }
+        });
+        break;
+      }
       default: {
         // Exhaustiveness guard — unknown effect kinds are preserved on the
         // Attack.text for display and skipped here.
@@ -268,6 +430,32 @@ export function describeEffects(effects: AttackEffect[] | undefined): string {
           return `discard ${e.count} energy`;
         case "drawCards":
           return `draw ${e.count}`;
+        case "blockOppItemsNextTurn":
+          return "locks opp items next turn";
+        case "flipMultiCoinsPerHeads":
+          return `${e.coins} flips × ${e.perHeads}`;
+        case "selfCantAttackNextTurn":
+          return "self-lock next turn";
+        case "defenderCantRetreatNextTurn":
+          return "defender no retreat next turn";
+        case "selfDamageReductionNextTurn":
+          return `self -${e.amount} next turn`;
+        case "snipeOne":
+          return `snipe ${e.damage}`;
+        case "switchOutOpponent":
+          return "force opp promote";
+        case "selfSwitch":
+          return "switch to bench";
+        case "discardOppEnergy":
+          return `discard ${e.count} opp energy`;
+        case "flipHeadsDiscardOppEnergy":
+          return "flip → discard opp energy";
+        case "healEachOwnPokemon":
+          return `heal ${e.amount} each own`;
+        case "discardTopOfOppDeck":
+          return `mill opp ${e.count}`;
+        case "discardOppTools":
+          return "discard opp tools";
       }
     })
     .join(", ");

@@ -1048,6 +1048,20 @@ button.primary {
 
 /* Pick modal — chooser for search / peek effects. */
 .pick-modal { max-width: 90vw; width: min(1000px, 100%); }
+.discard-viewer { max-width: 95vw; width: min(1100px, 100%); }
+.zone-stack.discard[role="button"]:hover {
+  filter: brightness(1.15);
+  transition: filter 0.1s ease;
+}
+.pick-modal .pick-source-note {
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--panel-2);
+  padding: 6px 8px;
+  border-radius: 4px;
+  margin: 2px 0 6px;
+  border-left: 3px solid var(--accent);
+}
 .pick-modal .pick-counter {
   font-size: 11px;
   color: var(--muted);
@@ -1118,6 +1132,63 @@ button.primary {
 .setup-modal { max-width: 95vw; width: min(1100px, 100%); }
 
 .pregame-modal { max-width: 560px; width: 100%; }
+
+.pregame-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.pregame-mode .mode-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--panel-3);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--muted);
+}
+.pregame-mode .mode-option b {
+  color: var(--text);
+  font-size: 13px;
+}
+.pregame-mode .mode-option.active {
+  border-color: var(--accent);
+  background: rgba(245, 158, 11, 0.12);
+}
+.pregame-mode .mode-option input { display: none; }
+
+/* Hotseat pass-the-device interstitial. Fully opaque so neither player can
+   glimpse the other's hand during handoff. */
+.handoff-backdrop {
+  background: rgba(15, 23, 42, 0.98);
+  backdrop-filter: blur(8px);
+}
+.handoff-modal {
+  max-width: 440px;
+  width: 100%;
+  text-align: center;
+  padding: 28px 24px;
+}
+.handoff-modal .handoff-icon {
+  font-size: 54px;
+  color: var(--accent);
+  line-height: 1;
+}
+.handoff-modal h2 {
+  margin: 14px 0 6px;
+  color: var(--accent);
+}
+.handoff-modal .handoff-text {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0 0 16px;
+}
+.handoff-modal .modal-actions { justify-content: center; }
 .coin-modal { max-width: 420px; width: 100%; }
 .coin-modal .modal-actions { justify-content: center; gap: 12px; }
 .pregame-grid {

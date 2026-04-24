@@ -75,8 +75,14 @@ function asEnergyType(s: string | undefined): EnergyType {
   return "Colorless";
 }
 
+// Some newer cards use the token "Free" in the cost array to indicate a
+// zero-Energy attack (e.g. Budew sv8pt5's Itchy Pollen). Strip those out so
+// the attack correctly shows as free. Retreat cost can also be "Free" for
+// abilities like Air Balloon-style 0 retreat; same filter applies.
 function asEnergyTypes(arr: string[] | undefined): EnergyType[] {
-  return (arr ?? []).map(asEnergyType);
+  return (arr ?? [])
+    .filter((s) => s && s.toLowerCase() !== "free")
+    .map(asEnergyType);
 }
 
 function parseDamage(raw: string | undefined): { damage: number; text?: string } {

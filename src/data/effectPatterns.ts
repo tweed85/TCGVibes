@@ -259,6 +259,83 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
     if (m) effects.push({ kind: "drawCards", count: parseInt(m[1], 10) });
   }
 
+  // ---- Opponent can't play Item cards next turn -----------------------------
+  // Budew's Itchy Pollen and similar disruption attacks.
+  if (/they can't play any item cards from their hand/i.test(text)) {
+    effects.push({ kind: "blockOppItemsNextTurn" });
+  }
+
+  // ---- "Flip N coins. This attack does N damage for each heads." ------------
+  {
+    const m = text.match(/flip (\d+) coins?\. this attack does (\d+) damage for each heads/i);
+    if (m) {
+      const coins = parseInt(m[1], 10);
+      const perHeads = parseInt(m[2], 10);
+      effects.push({ kind: "flipMultiCoinsPerHeads", coins, perHeads });
+      baseDamageOverride = 0;
+    }
+  }
+
+  // ---- Self-lock next turn --------------------------------------------------
+  if (/during your next turn, this pok[eé]mon can'?t (?:use )?attack/i.test(text)) {
+    effects.push({ kind: "selfCantAttackNextTurn" });
+  }
+
+  // ---- Defender can't retreat next turn -------------------------------------
+  if (/during your opponent'?s next turn, the defending pok[eé]mon can'?t retreat/i.test(text)) {
+    effects.push({ kind: "defenderCantRetreatNextTurn" });
+  }
+
+  // ---- Self-damage reduction next turn --------------------------------------
+  {
+    const m = text.match(/during your opponent'?s next turn, this pok[eé]mon takes (\d+) less damage/i);
+    if (m) effects.push({ kind: "selfDamageReductionNextTurn", amount: parseInt(m[1], 10) });
+  }
+
+  // ---- Snipe one benched Pokémon --------------------------------------------
+  {
+    const m = text.match(/(\d+) damage to 1 of your opponent'?s (?:benched )?pok[eé]mon/i);
+    if (m && !/each of/i.test(text)) {
+      effects.push({ kind: "snipeOne", damage: parseInt(m[1], 10) });
+    }
+  }
+
+  // ---- Switch out opponent's Active -----------------------------------------
+  if (/switch out your opponent'?s active pok[eé]mon to the bench/i.test(text)) {
+    effects.push({ kind: "switchOutOpponent" });
+  }
+
+  // ---- Self switch to bench -------------------------------------------------
+  if (/switch this pok[eé]mon with 1 of your benched pok[eé]mon/i.test(text)) {
+    effects.push({ kind: "selfSwitch" });
+  }
+
+  // ---- Discard Energy from opp Active ---------------------------------------
+  if (/flip a coin\. if heads, discard an energy from your opponent'?s active pok[eé]mon/i.test(text)) {
+    effects.push({ kind: "flipHeadsDiscardOppEnergy" });
+  } else if (/discard an energy from your opponent'?s active pok[eé]mon/i.test(text)) {
+    effects.push({ kind: "discardOppEnergy", count: 1 });
+  } else {
+    const m = text.match(/discard (\d+) energy from your opponent'?s active pok[eé]mon/i);
+    if (m) effects.push({ kind: "discardOppEnergy", count: parseInt(m[1], 10) });
+  }
+
+  // ---- Heal each of your Pokémon --------------------------------------------
+  {
+    const m = text.match(/heal (\d+) damage from each of your pok[eé]mon/i);
+    if (m) effects.push({ kind: "healEachOwnPokemon", amount: parseInt(m[1], 10) });
+  }
+
+  // ---- Mill opp deck --------------------------------------------------------
+  if (/discard the top card of your opponent'?s deck/i.test(text)) {
+    effects.push({ kind: "discardTopOfOppDeck", count: 1 });
+  }
+
+  // ---- Discard opp's Tools --------------------------------------------------
+  if (/discard all pok[eé]mon tools from your opponent'?s active pok[eé]mon/i.test(text)) {
+    effects.push({ kind: "discardOppTools" });
+  }
+
   return { effects, baseDamageOverride };
 }
 

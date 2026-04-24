@@ -26,6 +26,7 @@ import {
   resolveBenchKOs,
 } from "./rules";
 import { resolveAttackEffects } from "./effects";
+import { fireTriggeredOnEvolve } from "./abilities";
 import {
   applySurvivalBrace,
   benchPlacementDamage,
@@ -132,6 +133,12 @@ export function evolve(
   target.evolvedThisTurn = true;
   logEvent(state, player, `evolves into ${card.name}.`);
 
+  // Fire any triggered-on-evolve ability the evolved card has (e.g.
+  // Noctowl's Jewel Seeker, Alakazam's Psychic Draw, Hariyama's Heave-Ho
+  // Catcher). Happens before the Mega Evolution end-of-turn check so the
+  // triggered effect can still resolve (and open a pendingPick if needed).
+  fireTriggeredOnEvolve(state, player, target);
+
   // Mega Evolution rule: evolving into a Mega Pokémon ends your turn.
   // Detected via the "Mega Evolution rule" text on the card's rule box.
   const rules = card.rules ?? [];
@@ -193,6 +200,11 @@ export function playTrainer(
     // player's first turn — regardless of whether that's p1 or p2.
     if (state.firstTurnNoAttack)
       return fail("First player can't play a Supporter on the first turn.");
+  }
+
+  // Budew's Itchy Pollen (and similar) locks the opponent out of Items this turn.
+  if (t.subtypes.includes("Item") && pl.itemsBlockedNextTurn) {
+    return fail("Can't play Item cards this turn (Itchy Pollen).");
   }
 
   // Tool: must be attached to a Pokémon in play with no Tool already.
@@ -264,6 +276,12 @@ export function retreat(
   if (!pl.active) return fail("No Active Pokémon.");
   if (hasStatus(pl.active, "asleep")) return fail("Asleep Pokémon can't retreat.");
   if (hasStatus(pl.active, "paralyzed")) return fail("Paralyzed Pokémon can't retreat.");
+  if (
+    pl.active.cantRetreatUntilTurn !== undefined &&
+    state.turn <= pl.active.cantRetreatUntilTurn
+  ) {
+    return fail("This Pokémon can't retreat this turn.");
+  }
   if (benchIndex < 0 || benchIndex >= pl.bench.length)
     return fail("Invalid bench slot.");
   const cost = effectiveRetreatCost(pl.active);
@@ -465,6 +483,9 @@ export function attack(
   if (!atk) return fail("No Active Pokémon.");
   if (hasStatus(atk, "asleep")) return fail("Asleep Pokémon can't attack.");
   if (hasStatus(atk, "paralyzed")) return fail("Paralyzed Pokémon can't attack.");
+  if (atk.cantAttackUntilTurn !== undefined && state.turn <= atk.cantAttackUntilTurn) {
+    return fail("This Pokémon can't attack this turn.");
+  }
   const move = atk.card.attacks[attackIndex];
   if (!move) return fail("No such attack.");
   const provided = energyProvidedBy(atk);

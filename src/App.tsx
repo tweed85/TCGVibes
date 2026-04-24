@@ -26,7 +26,7 @@ import {
 } from "./engine/rules";
 import { effectiveMaxHp } from "./engine/ongoingEffects";
 import type { ActionResult } from "./engine/actions";
-import type { Ability, Card, GameState, PokemonInPlay } from "./engine/types";
+import type { Ability, Card, GameState, PlayerId, PokemonInPlay } from "./engine/types";
 import { buildDeck, validatedDeckSpecs } from "./data/decks";
 import { datasetAsOf, datasetFormat } from "./data/cards";
 import {
@@ -132,49 +132,104 @@ export default function App() {
   // Gate the game behind a pre-game deck selection step. Nothing runs (AI
   // setup, turn-1 draw, opening modal) until the player clicks Start.
   const [preGameOpen, setPreGameOpen] = useState(true);
+  const [discardViewer, setDiscardViewer] = useState<PlayerId | null>(null);
+  // Game mode: "vsCPU" leaves p2 as AI; "local" makes both sides human and
+  // enables hotseat device-handoff between turns.
+  const [gameMode, setGameMode] = useState<"vsCPU" | "local">("vsCPU");
+  // Who's currently holding the device. Determines which side shows as "me"
+  // at the bottom of the playmat. Always "p1" in vs-CPU mode.
+  const [viewingPlayer, setViewingPlayer] = useState<PlayerId>("p1");
+  // When set, the UI hides the board and shows a "pass the device" interstitial
+  // until the incoming player clicks to start their turn.
+  const [pendingHandoff, setPendingHandoff] = useState<PlayerId | null>(null);
 
   const state = stateRef.current;
-  const me = state.players.p1;
-  const opp = state.players.p2;
-  const myTurn = state.activePlayer === "p1" && state.phase === "main";
+  const isLocal = gameMode === "local";
+  const me = state.players[viewingPlayer];
+  const opp = state.players[viewingPlayer === "p1" ? "p2" : "p1"];
+  const myTurn = state.activePlayer === viewingPlayer && state.phase === "main";
 
   // Persist imported decks across reloads.
   useEffect(() => {
     savePersistedImports(imports);
   }, [imports]);
 
+  // In local mode, detect when the "current actor" flips and trigger a
+  // pass-the-device interstitial so the incoming player can't see the
+  // outgoing player's hand. The current actor is: whichever human still
+  // needs to set up during opening setup, otherwise the coin-flip winner
+  // when picking first/second, otherwise the active player.
+  useEffect(() => {
+    if (!isLocal) return;
+    if (preGameOpen) return;
+    if (pendingHandoff) return;
+    if (state.winner !== null) return;
+
+    let actor: PlayerId | null = null;
+    if (state.phase === "coinFlip" && state.coinFlip?.step === "chooseFirst") {
+      actor = state.coinFlip.winner ?? null;
+    } else if (state.phase === "setup") {
+      for (const pid of ["p1", "p2"] as PlayerId[]) {
+        if (!state.players[pid].setupComplete && !state.players[pid].isAI) {
+          actor = pid;
+          break;
+        }
+      }
+    } else if (state.phase === "main" || state.phase === "pick" || state.phase === "promoteActive") {
+      // pendingPick / promote can transfer to the OTHER player mid-attack
+      // (e.g. Budew → opp needs to respond). Prefer the actor expected by
+      // the engine.
+      if (state.pendingPick) actor = state.pendingPick.player;
+      else if (state.pendingPromote) actor = state.pendingPromote;
+      else actor = state.activePlayer;
+    }
+    if (actor && actor !== viewingPlayer && !state.players[actor].isAI) {
+      setPendingHandoff(actor);
+    }
+  });
+
   // Let the AI take its turn automatically; also resolve its pending promote
   // if it was KO'd on the human's turn.
   useEffect(() => {
     if (preGameOpen) return;
     if (state.winner !== null) return;
+    if (pendingHandoff) return; // freeze AI while waiting on hotseat handoff
     // AI-won coin toss: auto-pick first/second after a short delay.
-    if (state.phase === "coinFlip" && state.coinFlip?.step === "chooseFirst" && state.coinFlip.winner === "p2") {
+    if (
+      state.phase === "coinFlip" &&
+      state.coinFlip?.step === "chooseFirst" &&
+      state.coinFlip.winner &&
+      state.players[state.coinFlip.winner].isAI
+    ) {
       const t = setTimeout(() => {
         resolveAiCoinChoice(state);
         rerender();
       }, 700);
       return () => clearTimeout(t);
     }
-    // Opening setup for the AI: resolve as soon as the human finishes their
-    // own setup (or immediately if they already have).
-    if (state.phase === "setup" && !state.players.p2.setupComplete) {
+    // Opening setup: AI resolves its own side automatically.
+    for (const pid of ["p1", "p2"] as PlayerId[]) {
+      const pl = state.players[pid];
+      if (state.phase === "setup" && !pl.setupComplete && pl.isAI) {
+        const t = setTimeout(() => {
+          resolveAiSetup(state, pid);
+          rerender();
+        }, 400);
+        return () => clearTimeout(t);
+      }
+    }
+    if (state.pendingPromote && state.players[state.pendingPromote].isAI) {
+      const target = state.pendingPromote;
       const t = setTimeout(() => {
-        resolveAiSetup(state, "p2");
+        resolveAiPendingPromote(state, target);
         rerender();
       }, 400);
       return () => clearTimeout(t);
     }
-    if (state.pendingPromote === "p2") {
+    if (state.phase === "main" && state.players[state.activePlayer].isAI) {
+      const target = state.activePlayer;
       const t = setTimeout(() => {
-        resolveAiPendingPromote(state, "p2");
-        rerender();
-      }, 400);
-      return () => clearTimeout(t);
-    }
-    if (state.phase === "main" && state.activePlayer === "p2") {
-      const t = setTimeout(() => {
-        takeAiTurn(state, "p2");
+        takeAiTurn(state, target);
         rerender();
       }, 500);
       return () => clearTimeout(t);
@@ -188,7 +243,7 @@ export default function App() {
     rerender();
   };
 
-  const promoteOpen = state.pendingPromote === "p1";
+  const promoteOpen = state.pendingPromote === viewingPlayer;
 
   const onHandClick = (i: number) => {
     if (promoteOpen) {
@@ -205,7 +260,7 @@ export default function App() {
     }
 
     if (isPokemon(card) && isBasic(card)) {
-      handle(playBasicToBench(state, "p1", i), `Played ${card.name} to bench.`);
+      handle(playBasicToBench(state, viewingPlayer, i), `Played ${card.name} to bench.`);
       return;
     }
     if (card.supertype === "Trainer") {
@@ -227,7 +282,7 @@ export default function App() {
         );
         return;
       }
-      handle(playTrainer(state, "p1", i), `Played ${card.name}.`);
+      handle(playTrainer(state, viewingPlayer, i), `Played ${card.name}.`);
       return;
     }
     setSelected({ kind: "hand", index: i });
@@ -243,7 +298,7 @@ export default function App() {
       const benchIdx = me.bench.findIndex((b) => b.instanceId === p.instanceId);
       if (benchIdx >= 0) {
         handle(
-          promoteBenchToActive(state, "p1", benchIdx),
+          promoteBenchToActive(state, viewingPlayer, benchIdx),
           `Promoted ${p.card.name}.`,
         );
       }
@@ -254,11 +309,11 @@ export default function App() {
       const card = me.hand[selected.index];
       if (!card) return;
       if (card.supertype === "Energy" && side === "me") {
-        handle(attachEnergy(state, "p1", selected.index, p.instanceId), `Attached ${card.name}.`);
+        handle(attachEnergy(state, viewingPlayer, selected.index, p.instanceId), `Attached ${card.name}.`);
         return;
       }
       if (card.supertype === "Pokémon" && card.evolvesFrom && side === "me") {
-        handle(evolve(state, "p1", selected.index, p.instanceId), `Evolved into ${card.name}.`);
+        handle(evolve(state, viewingPlayer, selected.index, p.instanceId), `Evolved into ${card.name}.`);
         return;
       }
       if (card.supertype === "Trainer") {
@@ -267,7 +322,7 @@ export default function App() {
         if (isTool && side === "me") {
           const target: TrainerTarget = { kind: "inPlay", instanceId: p.instanceId };
           handle(
-            playTrainer(state, "p1", selected.index, target),
+            playTrainer(state, viewingPlayer, selected.index, target),
             `Attached ${card.name} to ${p.card.name}.`,
           );
           return;
@@ -275,7 +330,7 @@ export default function App() {
         if (card.effectId === "gustOppBenched" && side === "opp") {
           const target: TrainerTarget = { kind: "oppInPlay", instanceId: p.instanceId };
           handle(
-            playTrainer(state, "p1", selected.index, target),
+            playTrainer(state, viewingPlayer, selected.index, target),
             `Played ${card.name}.`,
           );
           return;
@@ -283,7 +338,7 @@ export default function App() {
         if (card.effectId === "rareCandyEvolve" && side === "me") {
           const target: TrainerTarget = { kind: "inPlay", instanceId: p.instanceId };
           handle(
-            playTrainer(state, "p1", selected.index, target),
+            playTrainer(state, viewingPlayer, selected.index, target),
             `Used Rare Candy on ${p.card.name}.`,
           );
           return;
@@ -295,7 +350,7 @@ export default function App() {
 
   const onActivateAbility = (p: PokemonInPlay, abilityIndex: number) => {
     if (!myTurn) return;
-    const r = activateAbility(state, "p1", p.instanceId, abilityIndex);
+    const r = activateAbility(state, viewingPlayer, p.instanceId, abilityIndex);
     handle(
       r.ok ? { ok: true } : { ok: false, reason: r.reason ?? "Cannot activate." },
       r.ok ? `Activated ${p.card.abilities![abilityIndex].name}.` : undefined,
@@ -304,17 +359,17 @@ export default function App() {
 
   const onAttack = (atkIndex: number) => {
     if (!myTurn) return;
-    handle(attack(state, "p1", atkIndex));
+    handle(attack(state, viewingPlayer, atkIndex));
   };
 
   const onRetreat = (benchIdx: number) => {
     if (!myTurn) return;
-    handle(retreat(state, "p1", benchIdx), "Retreated.");
+    handle(retreat(state, viewingPlayer, benchIdx), "Retreated.");
   };
 
   const onEndTurn = () => {
     if (!myTurn) return;
-    handle(endTurn(state, "p1"), "Turn ended.");
+    handle(endTurn(state, viewingPlayer), "Turn ended.");
   };
 
   const onReset = () => {
@@ -323,9 +378,13 @@ export default function App() {
     const myDeck = deckForId(myDeckId, fallback);
     const oppDeck = deckForId(oppDeckId, fallback);
     stateRef.current = setupGame(myDeck, oppDeck, rngRef.current, {
-      p1Name: "You",
-      p2Name: "CPU",
+      p1Name: gameMode === "local" ? "Player 1" : "You",
+      p2Name: gameMode === "local" ? "Player 2" : "CPU",
+      p2IsAI: gameMode !== "local",
     });
+    // Reset hotseat state: p1 holds the device first; no handoff pending.
+    setViewingPlayer("p1");
+    setPendingHandoff(null);
     setSelected(null);
     setStatusMsg("");
     rerender();
@@ -405,13 +464,27 @@ export default function App() {
           myDeckId={myDeckId}
           oppDeckId={oppDeckId}
           openHands={openHands}
+          gameMode={gameMode}
           onChangeMyDeck={setMyDeckId}
           onChangeOppDeck={setOppDeckId}
           onToggleOpenHands={setOpenHands}
+          onChangeMode={setGameMode}
           onOpenImport={() => setImportOpen(true)}
           onStart={() => {
             onReset();
             setPreGameOpen(false);
+          }}
+        />
+      )}
+
+      {pendingHandoff && (
+        <HandoffModal
+          incomingPlayerName={state.players[pendingHandoff].name}
+          onStart={() => {
+            setViewingPlayer(pendingHandoff);
+            setPendingHandoff(null);
+            setSelected(null);
+            setStatusMsg("");
           }}
         />
       )}
@@ -425,41 +498,61 @@ export default function App() {
         />
       )}
 
-      {!preGameOpen && state.phase === "coinFlip" && state.coinFlip?.step === "chooseFirst" && state.coinFlip.winner === "p1" && (
-        <ChooseFirstModal
-          result={state.coinFlip.result!}
-          guess={state.coinFlip.guess!}
-          onChoose={(first) => {
-            chooseFirstPlayer(state, "p1", first);
-            rerender();
-          }}
-        />
-      )}
+      {!preGameOpen &&
+        state.phase === "coinFlip" &&
+        state.coinFlip?.step === "chooseFirst" &&
+        state.coinFlip.winner === viewingPlayer &&
+        !state.players[state.coinFlip.winner].isAI &&
+        !pendingHandoff && (
+          <ChooseFirstModal
+            result={state.coinFlip.result!}
+            guess={state.coinFlip.guess!}
+            winnerName={state.players[state.coinFlip.winner].name}
+            onChoose={(first) => {
+              chooseFirstPlayer(state, viewingPlayer, first);
+              rerender();
+            }}
+          />
+        )}
 
-      {!preGameOpen && state.phase === "coinFlip" && state.coinFlip?.step === "chooseFirst" && state.coinFlip.winner === "p2" && (
-        <CoinResultBanner
-          result={state.coinFlip.result!}
-          guess={state.coinFlip.guess!}
-        />
-      )}
+      {/* Only show the "CPU will choose" banner when an AI actually won.
+          In local 2P, the other human wins and their own ChooseFirstModal
+          comes up after the hand-off. */}
+      {!preGameOpen &&
+        state.phase === "coinFlip" &&
+        state.coinFlip?.step === "chooseFirst" &&
+        state.coinFlip.winner &&
+        state.players[state.coinFlip.winner].isAI && (
+          <CoinResultBanner
+            result={state.coinFlip.result!}
+            guess={state.coinFlip.guess!}
+          />
+        )}
 
-      {!preGameOpen && state.phase === "setup" && !state.players.p1.setupComplete && (
+      {!preGameOpen && state.phase === "setup" && !state.players[viewingPlayer].setupComplete && !state.players[viewingPlayer].isAI && !pendingHandoff && (
         <SetupModal
-          hand={state.players.p1.hand}
-          mulligans={state.players.p1.mulligans}
+          hand={state.players[viewingPlayer].hand}
+          mulligans={state.players[viewingPlayer].mulligans}
           onConfirm={(activeIdx, benchIdxs) => {
-            const err = completeSetup(state, "p1", activeIdx, benchIdxs);
+            const err = completeSetup(state, viewingPlayer, activeIdx, benchIdxs);
             if (err) setStatusMsg(err);
             rerender();
           }}
         />
       )}
 
-      {state.pendingPick && state.pendingPick.player === "p1" && (
+      {discardViewer && (
+        <DiscardViewerModal
+          player={state.players[discardViewer]}
+          onClose={() => setDiscardViewer(null)}
+        />
+      )}
+
+      {state.pendingPick && state.pendingPick.player === viewingPlayer && (
         <PickModal
           pick={state.pendingPick}
           onResolve={(idx) => {
-            const r = resolvePendingPick(state, "p1", idx);
+            const r = resolvePendingPick(state, viewingPlayer, idx);
             if (!r.ok) setStatusMsg(r.reason);
             rerender();
           }}
@@ -524,6 +617,7 @@ export default function App() {
           isMe={false}
           selected={selected}
           onInPlayClick={(p) => onInPlayClick(p, "opp")}
+          onViewDiscard={(pid) => setDiscardViewer(pid)}
         />
         <div className="stadium-slot" aria-label="Stadium zone">
           {state.stadium ? (
@@ -544,6 +638,7 @@ export default function App() {
           isMe
           selected={selected}
           onInPlayClick={(p) => onInPlayClick(p, "me")}
+          onViewDiscard={(pid) => setDiscardViewer(pid)}
         />
       </div>
 
@@ -619,6 +714,7 @@ interface SideProps {
   isMe: boolean;
   selected: Selection;
   onInPlayClick?: (p: PokemonInPlay) => void;
+  onViewDiscard?: (player: PlayerId) => void;
 }
 
 function PlayerSide({
@@ -628,6 +724,7 @@ function PlayerSide({
   isMe,
   selected,
   onInPlayClick,
+  onViewDiscard,
 }: SideProps) {
   // The Active row appears closest to the shared Stadium slot — for the
   // player that's "top" of their strip, for the opponent that's "bottom".
@@ -695,7 +792,7 @@ function PlayerSide({
 
         <div className="library-zone" aria-label={`${label} deck and discard`}>
           <FaceDownStack count={player.deck.length} label="Deck" variant="deck" />
-          <DiscardStack player={player} />
+          <DiscardStack player={player} onView={() => onViewDiscard?.(player.id)} />
         </div>
       </div>
 
@@ -738,21 +835,38 @@ function FaceDownStack({
 }
 
 // Discard is face-up in real play: show the top card if we have one, otherwise
-// fall back to an empty stack. Keeping a count chip on top matches the face-down
-// stacks so the library row reads consistently.
-function DiscardStack({ player }: { player: GameState["players"]["p1"] }) {
+// fall back to an empty stack. Clicking opens a modal showing the whole pile
+// (both your own and the opponent's — discards are public information).
+function DiscardStack({
+  player,
+  onView,
+}: {
+  player: GameState["players"]["p1"];
+  onView: () => void;
+}) {
   const top = player.discard[player.discard.length - 1];
   const count = player.discard.length;
   if (!top) {
-    return <FaceDownStack count={0} label="Discard" variant="discard" />;
+    return (
+      <div onClick={onView} style={{ cursor: "pointer" }} title="View discard pile">
+        <FaceDownStack count={0} label="Discard" variant="discard" />
+      </div>
+    );
   }
   return (
-    <div className="zone-stack discard" title={`Discard: ${count} · top: ${top.name}`}>
+    <div
+      className="zone-stack discard"
+      onClick={onView}
+      role="button"
+      tabIndex={0}
+      style={{ cursor: "pointer" }}
+      title={`Discard: ${count} · top: ${top.name} · click to view all`}
+    >
       <div className="stack-slot discard-top">
         <CardView card={top} />
         <div className="stack-count">{count}</div>
       </div>
-      <div className="zone-label">Discard</div>
+      <div className="zone-label">Discard · click to view</div>
     </div>
   );
 }
@@ -1107,24 +1221,26 @@ function CoinFlipModal({ onGuess }: { onGuess: (g: "heads" | "tails") => void })
 function ChooseFirstModal({
   result,
   guess,
+  winnerName,
   onChoose,
 }: {
   result: "heads" | "tails";
   guess: "heads" | "tails";
+  winnerName: string;
   onChoose: (first: boolean) => void;
 }) {
   return (
     <div className="modal-backdrop">
       <div className="modal coin-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>You won the flip!</h2>
+          <h2>{winnerName} won the flip!</h2>
         </div>
         <p className="modal-hint">
-          You called <b>{guess}</b>, the coin landed <b>{result}</b>. Choose who goes first.
+          Called <b>{guess}</b>, coin landed <b>{result}</b>. Choose who goes first.
         </p>
         <div className="modal-actions">
-          <button className="primary" onClick={() => onChoose(true)}>I'll go first</button>
-          <button onClick={() => onChoose(false)}>CPU goes first</button>
+          <button className="primary" onClick={() => onChoose(true)}>Go first</button>
+          <button onClick={() => onChoose(false)}>Go second</button>
         </div>
       </div>
     </div>
@@ -1162,9 +1278,11 @@ function PreGameModal({
   myDeckId,
   oppDeckId,
   openHands,
+  gameMode,
   onChangeMyDeck,
   onChangeOppDeck,
   onToggleOpenHands,
+  onChangeMode,
   onOpenImport,
   onStart,
 }: {
@@ -1173,9 +1291,11 @@ function PreGameModal({
   myDeckId: string;
   oppDeckId: string;
   openHands: boolean;
+  gameMode: "vsCPU" | "local";
   onChangeMyDeck: (id: string) => void;
   onChangeOppDeck: (id: string) => void;
   onToggleOpenHands: (v: boolean) => void;
+  onChangeMode: (m: "vsCPU" | "local") => void;
   onOpenImport: () => void;
   onStart: () => void;
 }) {
@@ -1184,19 +1304,42 @@ function PreGameModal({
     if (imp) return `Imported · ${imp.cards.length} cards`;
     return null;
   };
+  const opponentLabel = gameMode === "local" ? "Player 2" : "CPU";
   return (
     <div className="modal-backdrop">
       <div className="modal pregame-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>TCGVibes — Choose your decks</h2>
+          <h2>TCGVibes — Start a game</h2>
+        </div>
+        <div className="pregame-mode">
+          <label className={`mode-option${gameMode === "vsCPU" ? " active" : ""}`}>
+            <input
+              type="radio"
+              name="gameMode"
+              checked={gameMode === "vsCPU"}
+              onChange={() => onChangeMode("vsCPU")}
+            />
+            <b>vs CPU</b>
+            <span>Play against a computer opponent.</span>
+          </label>
+          <label className={`mode-option${gameMode === "local" ? " active" : ""}`}>
+            <input
+              type="radio"
+              name="gameMode"
+              checked={gameMode === "local"}
+              onChange={() => onChangeMode("local")}
+            />
+            <b>Local 2-player</b>
+            <span>Hotseat. Pass the device between turns.</span>
+          </label>
         </div>
         <p className="modal-hint">
-          Pick a preset or bring your own via <b>Import Deck</b>. You'll choose
-          your Active and Bench Pokémon in the next step.
+          Pick a preset for each side or bring your own via <b>Import Deck</b>.
+          You'll choose Active and Bench Pokémon in the next step.
         </p>
         <div className="pregame-grid">
           <div className="pregame-slot">
-            <div className="pregame-slot-label">You</div>
+            <div className="pregame-slot-label">{gameMode === "local" ? "Player 1" : "You"}</div>
             <DeckSelect
               value={myDeckId}
               onChange={onChangeMyDeck}
@@ -1207,7 +1350,7 @@ function PreGameModal({
           </div>
           <div className="pregame-vs">vs</div>
           <div className="pregame-slot">
-            <div className="pregame-slot-label">CPU</div>
+            <div className="pregame-slot-label">{opponentLabel}</div>
             <DeckSelect
               value={oppDeckId}
               onChange={onChangeOppDeck}
@@ -1218,18 +1361,55 @@ function PreGameModal({
           </div>
         </div>
         <div className="pregame-options">
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={openHands}
-              onChange={(e) => onToggleOpenHands(e.target.checked)}
-            />
-            Open hands (reveal CPU cards)
-          </label>
+          {gameMode === "vsCPU" && (
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={openHands}
+                onChange={(e) => onToggleOpenHands(e.target.checked)}
+              />
+              Open hands (reveal CPU cards)
+            </label>
+          )}
+          {gameMode === "local" && (
+            <span className="muted" style={{ fontSize: 11 }}>
+              In local play, each player's hand is hidden from the other.
+            </span>
+          )}
           <button onClick={onOpenImport}>Import Deck…</button>
         </div>
         <div className="modal-actions">
           <button className="primary" onClick={onStart}>Start Game</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+//  Handoff interstitial — hotseat pass-the-device between turns.
+// ---------------------------------------------------------------------------
+
+function HandoffModal({
+  incomingPlayerName,
+  onStart,
+}: {
+  incomingPlayerName: string;
+  onStart: () => void;
+}) {
+  return (
+    <div className="modal-backdrop handoff-backdrop">
+      <div className="modal handoff-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="handoff-icon">⇄</div>
+        <h2>Pass the device</h2>
+        <p className="handoff-text">
+          It's <b>{incomingPlayerName}</b>'s turn. Hand the device over before
+          clicking below — the other player's hand is hidden until you start.
+        </p>
+        <div className="modal-actions">
+          <button className="primary" onClick={onStart}>
+            I'm {incomingPlayerName} — Start my turn
+          </button>
         </div>
       </div>
     </div>
@@ -1325,6 +1505,50 @@ function SetupModal({
 }
 
 // ---------------------------------------------------------------------------
+//  Discard viewer — discard piles are public info in real play. This modal
+//  lets the player click either discard pile and browse every card in it.
+// ---------------------------------------------------------------------------
+
+function DiscardViewerModal({
+  player,
+  onClose,
+}: {
+  player: GameState["players"]["p1"];
+  onClose: () => void;
+}) {
+  const cards = player.discard;
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal discard-viewer" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>{player.name}'s Discard Pile</h2>
+          <span className="pick-counter">{cards.length} card{cards.length === 1 ? "" : "s"}</span>
+        </div>
+        <p className="modal-hint">
+          Oldest discards are on the left, most recent on the right.
+        </p>
+        {cards.length === 0 ? (
+          <div className="muted" style={{ padding: 20, textAlign: "center" }}>
+            The discard pile is empty.
+          </div>
+        ) : (
+          <div className="pick-pool">
+            {cards.map((c, i) => (
+              <div key={i} className="pick-card" style={{ cursor: "default" }}>
+                <CardView card={c} />
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="modal-actions">
+          <button className="primary" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 //  Pick modal — interactive chooser for search / peek / discard-recovery
 // ---------------------------------------------------------------------------
 
@@ -1361,6 +1585,12 @@ function PickModal({
           <span className="pick-counter">
             {selected.length} / {pick.max} picked
           </span>
+        </div>
+        <div className="pick-source-note">
+          {pick.source === "deck" && `Searching your Deck — ${pick.pool.length} eligible card${pick.pool.length === 1 ? "" : "s"}. Prize cards are locked and not part of this search.`}
+          {pick.source === "deckTop" && `Top ${pick.pool.length} cards of your Deck. Prize cards are not shown.`}
+          {pick.source === "deckBottom" && `Bottom ${pick.pool.length} cards of your Deck. Prize cards are not shown.`}
+          {pick.source === "discard" && `Searching your Discard pile — ${pick.pool.length} eligible card${pick.pool.length === 1 ? "" : "s"}.`}
         </div>
         <div className="pick-pool">
           {pick.pool.map((c, i) => {

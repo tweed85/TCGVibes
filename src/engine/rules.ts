@@ -80,6 +80,7 @@ export function createPlayer(
     setupComplete: false,
     thisTurnAttackBonuses: [],
     nextOpponentTurnDamageReductions: [],
+    itemsBlockedNextTurn: false,
     isAI,
   };
 }
@@ -603,6 +604,9 @@ export function endTurn(state: GameState): void {
   // Turn-scoped attack bonuses (Black Belt's Training, Premium Power Pro,
   // Kieran's boost branch) reset at end of the player's turn.
   prev.thisTurnAttackBonuses = [];
+  // The item-block flag on the player whose turn just ended clears now —
+  // the block only applied to *their* turn (set by opp's previous Budew attack).
+  prev.itemsBlockedNextTurn = false;
   // Reductions the *opponent* queued for "their next turn" (the one that just
   // ended) clear now — the active player is the opponent from the setter's
   // perspective.
