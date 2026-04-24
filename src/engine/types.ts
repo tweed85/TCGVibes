@@ -354,7 +354,9 @@ export interface PendingInPlayTarget {
     | { kind: "scoopUpCyclone" }
     | { kind: "lisiasAppeal" }
     | { kind: "nPlanEnergySource"; remaining: number }
-    | { kind: "wallysCompassion" };
+    | { kind: "wallysCompassion" }
+    | { kind: "energySwitchSource" } // first step: user picks the source Pokémon
+    | { kind: "energySwitchDest"; sourceInstanceId: string }; // second step: user picks destination
 }
 
 export interface PendingPick {

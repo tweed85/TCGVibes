@@ -623,6 +623,14 @@ export function precheckTrainerEffect(
   if (id === "scoopUpCyclone" && pl.bench.length === 0) {
     return "No Benched Pokémon to scoop.";
   }
+  if (id === "energySwitchOwn") {
+    const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+    if (allies.length < 2) return "Need at least two of your Pokémon in play.";
+    const anyBasicEnergy = allies.some((p) =>
+      p.attachedEnergy.some((e) => e.subtypes.includes("Basic")),
+    );
+    if (!anyBasicEnergy) return "No basic Energy attached to any of your Pokémon.";
+  }
   if (id === "healMegaExAndEnergyToHand") {
     const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
     const damagedMegaEx = allies.find(
@@ -1050,18 +1058,38 @@ export function applyTrainerEffect(
     }
 
     case "energySwitchOwn": {
-      // Move one basic energy: from active to first bench, or vice versa.
+      // Energy Switch — "Move a Basic Energy from 1 of your Pokémon to
+      // another of your Pokémon." Precheck confirmed ≥2 allies with ≥1
+      // basic energy. AI auto-picks; humans get a two-step in-play picker.
       const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
-      const fromIdx = allies.findIndex((p) => p.attachedEnergy.some(isBasicEnergy));
-      if (fromIdx < 0 || allies.length < 2) return;
-      const from = allies[fromIdx];
-      const to = allies[(fromIdx + 1) % allies.length];
-      const eIdx = from.attachedEnergy.findIndex(isBasicEnergy);
-      if (eIdx < 0) return;
-      const [e] = from.attachedEnergy.splice(eIdx, 1);
-      to.attachedEnergy.push(e);
-      logEvent(state, player, `moves ${e.name} from ${from.card.name} to ${to.card.name}.`);
-      enforceSpecialEnergyAttachRules(state);
+      if (pl.isAI) {
+        // AI path: prefer moving from a fully-loaded bench ally to the Active
+        // (common ramp pattern). Fall back to first-with-energy → first-other.
+        const source =
+          allies.find(
+            (p) =>
+              p !== pl.active &&
+              p.attachedEnergy.some((e) => e.subtypes.includes("Basic")),
+          ) ??
+          allies.find((p) => p.attachedEnergy.some((e) => e.subtypes.includes("Basic")))!;
+        const dest = (pl.active && pl.active !== source) ? pl.active : allies.find((p) => p !== source)!;
+        const eIdx = source.attachedEnergy.findIndex((e) => e.subtypes.includes("Basic"));
+        const [en] = source.attachedEnergy.splice(eIdx, 1);
+        dest.attachedEnergy.push(en);
+        logEvent(state, player, `Energy Switch: moves ${en.name} from ${source.card.name} to ${dest.card.name}.`);
+        enforceSpecialEnergyAttachRules(state);
+        return;
+      }
+      // Human path — open the source picker. Filter to allies with basic
+      // Energy attached.
+      state.pendingInPlayTarget = {
+        player,
+        label: "Energy Switch: pick the Pokémon to move a Basic Energy FROM",
+        scope: "own",
+        slot: "anywhere",
+        filter: "hasBasicEnergy",
+        action: { kind: "energySwitchSource" },
+      };
       return;
     }
 
@@ -2369,6 +2397,12 @@ export function resolveInPlayTarget(
   if (pending.filter === "hasAnyEnergy" && target.attachedEnergy.length === 0) {
     return { ok: false, reason: "That Pokémon has no Energy." };
   }
+  if (
+    pending.filter === "hasBasicEnergy" &&
+    !target.attachedEnergy.some((e) => e.subtypes.includes("Basic"))
+  ) {
+    return { ok: false, reason: "That Pokémon has no basic Energy." };
+  }
   if (pending.filter === "isBasic" && !target.card.subtypes.includes("Basic")) {
     return { ok: false, reason: "Must pick a Basic Pokémon." };
   }
@@ -2476,6 +2510,52 @@ export function resolveInPlayTarget(
       } else {
         state.pendingInPlayTarget = null;
       }
+      return { ok: true };
+    }
+    case "energySwitchSource": {
+      // First step — user picked the SOURCE ally. Validate and move to the
+      // destination-picker step, storing the source instance id.
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      if (!target.attachedEnergy.some((e) => e.subtypes.includes("Basic"))) {
+        return { ok: false, reason: "That Pokémon has no basic Energy to move." };
+      }
+      state.pendingInPlayTarget = {
+        player: clicker,
+        label: `Energy Switch: pick the Pokémon to move a Basic Energy TO (from ${target.card.name})`,
+        scope: "own",
+        slot: "anywhere",
+        filter: "anyPokemon",
+        action: { kind: "energySwitchDest", sourceInstanceId: target.instanceId },
+      };
+      return { ok: true };
+    }
+    case "energySwitchDest": {
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      const srcId = pending.action.sourceInstanceId;
+      if (instanceId === srcId) {
+        return { ok: false, reason: "Pick a different Pokémon than the source." };
+      }
+      const source = clickerPl.active?.instanceId === srcId
+        ? clickerPl.active
+        : clickerPl.bench.find((p) => p.instanceId === srcId);
+      if (!source) {
+        state.pendingInPlayTarget = null;
+        return { ok: false, reason: "Source Pokémon is no longer in play." };
+      }
+      const eIdx = source.attachedEnergy.findIndex((e) => e.subtypes.includes("Basic"));
+      if (eIdx < 0) {
+        state.pendingInPlayTarget = null;
+        return { ok: false, reason: "Source has no basic Energy to move." };
+      }
+      const [en] = source.attachedEnergy.splice(eIdx, 1);
+      target.attachedEnergy.push(en);
+      logEvent(
+        state,
+        clicker,
+        `Energy Switch: moves ${en.name} from ${source.card.name} to ${target.card.name}.`,
+      );
+      enforceSpecialEnergyAttachRules(state);
+      state.pendingInPlayTarget = null;
       return { ok: true };
     }
     case "wallysCompassion": {
