@@ -145,7 +145,6 @@ export interface PlayerState {
   hand: Card[];
   discard: Card[];
   prizes: Card[];
-  lostZone: Card[]; // for Lost Zone cards (e.g., Comfey mechanic); small but present
   bench: PokemonInPlay[]; // up to 5
   active: PokemonInPlay | null;
   energyAttachedThisTurn: boolean;

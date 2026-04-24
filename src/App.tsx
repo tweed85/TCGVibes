@@ -211,13 +211,17 @@ export default function App() {
     if (card.supertype === "Trainer") {
       const isTool =
         card.subtypes.includes("Pokémon Tool") || card.subtypes.includes("Tool");
+      const isRareCandy = card.effectId === "rareCandyEvolve";
       const needsTarget =
         isTool ||
-        card.effectId === "gustOppBenched";
+        card.effectId === "gustOppBenched" ||
+        isRareCandy;
       if (needsTarget) {
         setSelected({ kind: "hand", index: i });
         setStatusMsg(
-          isTool
+          isRareCandy
+          ? "Select a Basic Pokémon in play to evolve with Rare Candy."
+          : isTool
             ? "Select one of your Pokémon to attach the Tool."
             : `Select target for ${card.name}.`,
         );
@@ -273,6 +277,14 @@ export default function App() {
           handle(
             playTrainer(state, "p1", selected.index, target),
             `Played ${card.name}.`,
+          );
+          return;
+        }
+        if (card.effectId === "rareCandyEvolve" && side === "me") {
+          const target: TrainerTarget = { kind: "inPlay", instanceId: p.instanceId };
+          handle(
+            playTrainer(state, "p1", selected.index, target),
+            `Used Rare Candy on ${p.card.name}.`,
           );
           return;
         }
@@ -491,6 +503,19 @@ export default function App() {
       </div>
 
       {/* ------------------------- Board -------------------------- */}
+      {/* Playmat layout (player's perspective, top-down):
+           [opp back row: prizes | spacer | deck/discard/lz]
+           [opp bench row]
+           [opp active  ]
+           [central stadium slot — shared]
+           [my active   ]
+           [my bench row]
+           [my back row: prizes | spacer | deck/discard/lz]
+         Prizes sit on the viewer's LEFT for both sides; deck/discard on
+         the RIGHT. Bulbapedia and the official playmat place Prizes left
+         of the play area and Deck/Discard on the opposite side. We keep
+         both sides aligned visually (rather than rotating the opponent)
+         so clicking and reading feel natural on a screen. */}
       <div className="board">
         <PlayerSide
           state={state}
@@ -500,6 +525,18 @@ export default function App() {
           selected={selected}
           onInPlayClick={(p) => onInPlayClick(p, "opp")}
         />
+        <div className="stadium-slot" aria-label="Stadium zone">
+          {state.stadium ? (
+            <div className="stadium-card-wrap" title={state.stadium.card.text ?? ""}>
+              <CardView card={state.stadium.card} />
+              <div className="stadium-caption">
+                Stadium · {state.players[state.stadium.controller].name}
+              </div>
+            </div>
+          ) : (
+            <div className="stadium-empty">Stadium</div>
+          )}
+        </div>
         <PlayerSide
           state={state}
           label={me.name}
@@ -529,14 +566,6 @@ export default function App() {
           ))}
           {me.hand.length === 0 && <span className="muted">—</span>}
         </div>
-        {state.stadium && (
-          <div className="stadium-banner">
-            <span>Stadium: <b>{state.stadium.card.name}</b></span>
-            <span className="text">
-              ({state.players[state.stadium.controller].name}) {state.stadium.card.text}
-            </span>
-          </div>
-        )}
         <details className="log-details">
           <summary>Log ({state.log.length})</summary>
           <div className="log-content">
@@ -600,51 +629,130 @@ function PlayerSide({
   selected,
   onInPlayClick,
 }: SideProps) {
-  return (
-    <div className={`side ${isMe ? "me" : "opponent"}`}>
-      <div className="side-stats">
-        <h3>{label}</h3>
-        <div className="prizes">
-          {player.prizes.map((_, i) => <div className="prize" key={i} />)}
-        </div>
-        <div className="stat">Deck <span>{player.deck.length}</span></div>
-        <div className="stat">Disc <span>{player.discard.length}</span></div>
-        {player.mulligans > 0 && (
-          <div className="stat">Mull <span>{player.mulligans}</span></div>
-        )}
-      </div>
+  // The Active row appears closest to the shared Stadium slot — for the
+  // player that's "top" of their strip, for the opponent that's "bottom".
+  // We render the rows in a fixed DOM order and swap visually with CSS
+  // (grid row numbers on .side.opponent) so the opponent's bench sits
+  // between their active and their deck/prizes, mirroring a real table.
+  const activeSlot = (
+    <div className="active-slot">
+      {player.active ? (
+        <PokemonInPlayView
+          p={player.active}
+          maxHp={effectiveMaxHp(player.active, state)}
+          selected={
+            selected?.kind === "inPlay" &&
+            selected.instanceId === player.active.instanceId
+          }
+          onClick={() => onInPlayClick?.(player.active!)}
+        />
+      ) : (
+        <div className="card empty-slot">No Active</div>
+      )}
+    </div>
+  );
 
-      <div className="play-area">
-        <div className="active-slot">
-          {player.active ? (
-            <PokemonInPlayView
-              p={player.active}
-              maxHp={effectiveMaxHp(player.active, state)}
-              selected={
-                selected?.kind === "inPlay" &&
-                selected.instanceId === player.active.instanceId
-              }
-              onClick={() => onInPlayClick?.(player.active!)}
-            />
-          ) : (
-            <div className="card empty-slot">No Active</div>
+  const benchRow = (
+    <div className="bench-row">
+      {player.bench.map((p) => (
+        <PokemonInPlayView
+          key={p.instanceId}
+          p={p}
+          maxHp={effectiveMaxHp(p, state)}
+          selected={selected?.kind === "inPlay" && selected.instanceId === p.instanceId}
+          onClick={() => onInPlayClick?.(p)}
+        />
+      ))}
+      {Array.from({ length: 5 - player.bench.length }).map((_, i) => (
+        <div key={`empty-${i}`} className="card empty-slot">Empty</div>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className={`side ${isMe ? "me" : "opponent"}`} aria-label={label}>
+      {/* Back row — prizes on viewer's left, deck/discard on the right.
+          Matches the official playmat rule that deck/discard sit opposite prizes. */}
+      <div className="back-row">
+        <div className="prize-zone" aria-label={`${label} prizes`}>
+          <div className="zone-label">Prizes · {player.prizes.length}</div>
+          <div className="prize-grid">
+            {player.prizes.map((_, i) => (
+              <div className="prize-card" key={i} />
+            ))}
+            {Array.from({ length: 6 - player.prizes.length }).map((_, i) => (
+              <div className="prize-card empty" key={`e-${i}`} />
+            ))}
+          </div>
+        </div>
+
+        <div className="back-row-meta">
+          <div className="player-name">{label}</div>
+          {player.mulligans > 0 && (
+            <div className="meta-chip">Mulligans · {player.mulligans}</div>
           )}
         </div>
-        <div className="bench-slot">
-          {player.bench.map((p) => (
-            <PokemonInPlayView
-              key={p.instanceId}
-              p={p}
-              maxHp={effectiveMaxHp(p, state)}
-              selected={selected?.kind === "inPlay" && selected.instanceId === p.instanceId}
-              onClick={() => onInPlayClick?.(p)}
-            />
-          ))}
-          {Array.from({ length: 5 - player.bench.length }).map((_, i) => (
-            <div key={`empty-${i}`} className="card empty-slot">Empty</div>
-          ))}
+
+        <div className="library-zone" aria-label={`${label} deck and discard`}>
+          <FaceDownStack count={player.deck.length} label="Deck" variant="deck" />
+          <DiscardStack player={player} />
         </div>
       </div>
+
+      {/* Bench row sits between the back row and the Active spot, matching a
+          real playmat where the bench is "directly in front of the player". */}
+      <div className="bench-slot">{benchRow}</div>
+
+      {/* Active row sits adjacent to the shared Stadium in the center. */}
+      <div className="active-row">{activeSlot}</div>
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Deck / Discard — small face-down stacks with a count chip. These live in
+// the "library" corner of each side (opposite the prizes).
+// -----------------------------------------------------------------------------
+
+function FaceDownStack({
+  count,
+  label,
+  variant,
+}: {
+  count: number;
+  label: string;
+  variant: "deck" | "discard";
+}) {
+  const empty = count === 0;
+  return (
+    <div className={`zone-stack ${variant}${empty ? " empty" : ""}`} title={`${label}: ${count}`}>
+      <div className="stack-slot">
+        {!empty && <div className="stack-back" aria-hidden="true" />}
+        {!empty && count > 1 && <div className="stack-back stack-back-2" aria-hidden="true" />}
+        {!empty && count > 5 && <div className="stack-back stack-back-3" aria-hidden="true" />}
+        <div className="stack-count">{count}</div>
+      </div>
+      <div className="zone-label">{label}</div>
+    </div>
+  );
+}
+
+// Discard is face-up in real play: show the top card if we have one, otherwise
+// fall back to an empty stack. Keeping a count chip on top matches the face-down
+// stacks so the library row reads consistently.
+function DiscardStack({ player }: { player: GameState["players"]["p1"] }) {
+  const top = player.discard[player.discard.length - 1];
+  const count = player.discard.length;
+  if (!top) {
+    return <FaceDownStack count={0} label="Discard" variant="discard" />;
+  }
+  return (
+    <div className="zone-stack discard" title={`Discard: ${count} · top: ${top.name}`}>
+      <div className="stack-slot discard-top">
+        <CardView card={top} />
+        <div className="stack-count">{count}</div>
+      </div>
+      <div className="zone-label">Discard</div>
     </div>
   );
 }
@@ -845,7 +953,8 @@ function ImportDeckModal({
     !!parsed &&
     parsed.deck.length === 60 &&
     parsed.unmatched.length === 0 &&
-    parsed.parseErrors.length === 0;
+    parsed.parseErrors.length === 0 &&
+    parsed.ruleViolations.length === 0;
 
   const validate = () => {
     const r = importDecklist(text);
@@ -946,6 +1055,14 @@ function ImportDeckModal({
                   {parsed.unmatched.map((e, i) => (
                     <li key={i}>{e.count} {e.name} {e.limitlessSet} {e.number}</li>
                   ))}
+                </ul>
+              </details>
+            )}
+            {parsed.ruleViolations.length > 0 && (
+              <details open>
+                <summary className="error">{parsed.ruleViolations.length} deck-rule violation(s)</summary>
+                <ul>
+                  {parsed.ruleViolations.map((v, i) => <li key={i}>{v}</li>)}
                 </ul>
               </details>
             )}

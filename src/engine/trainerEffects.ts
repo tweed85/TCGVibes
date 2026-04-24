@@ -12,6 +12,7 @@
 
 import { logEvent, makePokemonInPlay } from "./rules";
 import { clearAllStatuses } from "./rules";
+import { findByName } from "../data/cards";
 import {
   setDeckSearchPick,
   setDiscardRecoveryPick,
@@ -509,6 +510,7 @@ export function precheckTrainerEffect(
   state: GameState,
   player: PlayerId,
   t: TrainerCard,
+  target?: TrainerTarget,
 ): string | null {
   const pl = state.players[player];
   const id = t.effectId as TrainerEffectId | undefined;
@@ -517,6 +519,50 @@ export function precheckTrainerEffect(
   }
   if (id === "drawUntil6Discard" && pl.hand.length < 2) {
     return "Need an extra card to discard for this Supporter.";
+  }
+  if (id === "rareCandyEvolve") {
+    // Can't use Rare Candy on turn 1 (rulebook).
+    if (state.turn === 1) return "Can't use Rare Candy on the first turn.";
+    const targetId =
+      target?.kind === "inPlay" ? target.instanceId : null;
+    if (!targetId) return "Pick the Basic Pokémon to evolve.";
+    const basic = findInPlay(state, player, targetId);
+    if (!basic) return "Target not in play.";
+    if (!basic.card.subtypes.includes("Basic"))
+      return "Rare Candy only works on Basic Pokémon.";
+    if (basic.playedThisTurn) return "Can't evolve a Pokémon played this turn.";
+    if (!findStage2InHand(pl.hand, basic.card.name)) {
+      return "No Stage 2 in hand that evolves from this Pokémon.";
+    }
+  }
+  return null;
+}
+
+function findInPlay(state: GameState, player: PlayerId, id: string): PokemonInPlay | null {
+  const pl = state.players[player];
+  if (pl.active?.instanceId === id) return pl.active;
+  return pl.bench.find((p) => p.instanceId === id) ?? null;
+}
+
+// Stage 2 whose matching Stage 1 (by name) evolves from the given Basic name.
+// Returns both the hand index and the resolved card so the caller can consume it.
+function findStage2InHand(
+  hand: Card[],
+  basicName: string,
+): { idx: number; stage2: PokemonCard } | null {
+  for (let i = 0; i < hand.length; i++) {
+    const c = hand[i];
+    if (c.supertype !== "Pokémon") continue;
+    if (!c.subtypes.includes("Stage 2")) continue;
+    if (!c.evolvesFrom) continue;
+    const stage1 = findByName(c.evolvesFrom);
+    if (
+      stage1 &&
+      stage1.supertype === "Pokémon" &&
+      stage1.evolvesFrom === basicName
+    ) {
+      return { idx: i, stage2: c as PokemonCard };
+    }
   }
   return null;
 }
@@ -842,9 +888,24 @@ export function applyTrainerEffect(
       // Skip for now; card still discards.
       return;
 
-    case "rareCandyEvolve":
-      logEvent(state, player, "plays Rare Candy (effect not yet interactive).");
+    case "rareCandyEvolve": {
+      // Precondition (turn>1, target is a valid Basic, Stage 2 available)
+      // already enforced in precheckTrainerEffect.
+      const targetId = target?.kind === "inPlay" ? target.instanceId : null;
+      if (!targetId) return;
+      const basic = findInPlay(state, player, targetId);
+      if (!basic) return;
+      const found = findStage2InHand(pl.hand, basic.card.name);
+      if (!found) return;
+      const [stage2Card] = pl.hand.splice(found.idx, 1) as [PokemonCard];
+      basic.evolvedFrom.push(basic.card);
+      basic.card = stage2Card;
+      clearAllStatuses(basic);
+      basic.abilityUsedThisTurn = false;
+      basic.evolvedThisTurn = true;
+      logEvent(state, player, `uses Rare Candy to evolve into ${stage2Card.name}.`);
       return;
+    }
 
     // ---------- Supporters — draw / hand-refresh ---------------------------
 

@@ -71,7 +71,6 @@ export function createPlayer(
     hand: [],
     discard: [],
     prizes: [],
-    lostZone: [],
     bench: [],
     active: null,
     energyAttachedThisTurn: false,
@@ -143,7 +142,9 @@ function shuffleInPlace<T>(state: GameState, arr: T[]): T[] {
 }
 
 // Deal 7-card opening hands with mulligan penalties for both players. Called
-// once the coin flip and first-player choice are resolved.
+// once the coin flip and first-player choice are resolved. The rulebook
+// requires a mulliganing player to reveal the no-Basic hand; we log the hand
+// contents so the opponent (and the log viewer) can see what was revealed.
 function dealOpeningHands(state: GameState): void {
   const { p1, p2 } = state.players;
   for (const pl of [p1, p2]) {
@@ -153,6 +154,12 @@ function dealOpeningHands(state: GameState): void {
       pl.hand = [];
       drawCards(pl, 7);
       if (pl.hand.some(isBasic)) break;
+      // Rulebook: reveal the no-Basic hand to the opponent before reshuffling.
+      logEvent(
+        state,
+        pl.id,
+        `reveals mulligan hand: ${pl.hand.map((c) => c.name).join(", ")}.`,
+      );
       pl.mulligans++;
     }
     pl.prizes = pl.deck.splice(0, 6);
@@ -346,46 +353,68 @@ function knockOutIfNeeded(state: GameState, ownerId: PlayerId): void {
 }
 
 // Pokémon Checkup: runs at the end of each turn, before switching players.
-// Order (simplified from the official rulebook): Asleep wake-check, Paralysis
-// auto-wake, Burned damage + wake-check, Poisoned damage.
+// Rulebook order is Poison → Burn → Asleep → Paralyzed, and each condition
+// is resolved for *both* Actives before moving to the next. We apply that
+// interleaving here. Paralyze is cleared only on the owner's own Checkup —
+// a Paralyze applied by the opponent persists through the opponent's
+// Checkup and only wears off at the end of the owner's next turn.
 export function pokemonCheckup(state: GameState): void {
   if (state.phase === "gameOver") return;
-  for (const pid of ["p1", "p2"] as PlayerId[]) {
-    const pl = state.players[pid];
-    const a = pl.active;
-    if (!a) continue;
-    // Festival Grounds: status-immune Pokémon shed their conditions.
-    if (isStatusImmune(a, state) && a.statuses.length > 0) {
+  const ORDER: PlayerId[] = ["p1", "p2"];
+  const endingPlayer = state.activePlayer; // the player whose turn is ending
+
+  // Festival Grounds: status-immune Pokémon shed all conditions at Checkup
+  // start. Handle this cleanup once per Pokémon up-front so nothing else in
+  // the loop below operates on a condition that should have already fallen off.
+  for (const pid of ORDER) {
+    const a = state.players[pid].active;
+    if (a && isStatusImmune(a, state) && a.statuses.length > 0) {
       a.statuses = [];
       logEvent(state, "system", `${a.card.name} shakes off all Conditions (Festival Grounds).`);
-      continue;
     }
+  }
 
-    if (hasStatus(a, "asleep")) {
-      const woke = flipCoin(state, `${a.card.name} asleep flip`);
-      if (woke) {
-        removeStatus(a, "asleep");
-        logEvent(state, "system", `${a.card.name} woke up.`);
-      }
+  // 1. Poison damage (Perilous Jungle adds +20 on non-Darkness).
+  for (const pid of ORDER) {
+    const a = state.players[pid].active;
+    if (!a || !hasStatus(a, "poisoned")) continue;
+    const extra = poisonExtraCounters(state, a);
+    damageFromStatus(state, pid, a, 10 + extra, extra ? "poison (Perilous Jungle)" : "poison");
+    if ((state.phase as string) === "gameOver") return;
+  }
+
+  // 2. Burn damage (20) + cure flip (heads cures).
+  for (const pid of ORDER) {
+    const a = state.players[pid].active;
+    if (!a || !hasStatus(a, "burned")) continue;
+    damageFromStatus(state, pid, a, 20, "burn");
+    if ((state.phase as string) === "gameOver") return;
+    const cured = flipCoin(state, `${a.card.name} burn flip`);
+    if (cured) {
+      removeStatus(a, "burned");
+      logEvent(state, "system", `${a.card.name}'s burn is cured.`);
     }
-    if (hasStatus(a, "paralyzed")) {
-      // Paralysis auto-cures between turns.
+  }
+
+  // 3. Asleep wake-check flip.
+  for (const pid of ORDER) {
+    const a = state.players[pid].active;
+    if (!a || !hasStatus(a, "asleep")) continue;
+    const woke = flipCoin(state, `${a.card.name} asleep flip`);
+    if (woke) {
+      removeStatus(a, "asleep");
+      logEvent(state, "system", `${a.card.name} woke up.`);
+    }
+  }
+
+  // 4. Paralyze clears — ONLY on the owner's own Checkup. If the opponent
+  // paralyzed their Active at the end of their turn, it stays paralyzed for
+  // the owner's next turn and only wears off at the end of that turn.
+  {
+    const a = state.players[endingPlayer].active;
+    if (a && hasStatus(a, "paralyzed")) {
       removeStatus(a, "paralyzed");
       logEvent(state, "system", `${a.card.name} is no longer paralyzed.`);
-    }
-    if (hasStatus(a, "burned")) {
-      damageFromStatus(state, pid, a, 20, "burn");
-      if ((state.phase as string) === "gameOver") return;
-      const cured = flipCoin(state, `${a.card.name} burn flip`);
-      if (cured) {
-        removeStatus(a, "burned");
-        logEvent(state, "system", `${a.card.name}'s burn is cured.`);
-      }
-    }
-    if (hasStatus(a, "poisoned")) {
-      const extra = poisonExtraCounters(state, a);
-      damageFromStatus(state, pid, a, 10 + extra, extra ? "poison (Perilous Jungle)" : "poison");
-      if ((state.phase as string) === "gameOver") return;
     }
   }
 }
@@ -410,7 +439,8 @@ export function applyDamage(
   if (target.damage >= effectiveMaxHp(target, state)) knockOut(state, defenderOwner);
 }
 
-// Prize-card value when KO'd. ex/V/Radiant give 2, VMAX/VSTAR give 3, others 1.
+// Prize-card value when KO'd. ex/V/GX give 2; VMAX and V-UNION give 3;
+// VSTAR gives 2; Radiant and everything else give 1.
 export function prizeValue(card: PokemonCard): number {
   const subs = card.subtypes ?? [];
   if (subs.includes("VMAX")) return 3;

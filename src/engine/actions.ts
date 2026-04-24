@@ -188,7 +188,10 @@ export function playTrainer(
     if (pl.supporterPlayedThisTurn)
       return fail("Already played a Supporter this turn.");
     // Current rule: first player cannot play a Supporter on their first turn.
-    if (state.firstTurnNoAttack && state.activePlayer === "p1" && state.turn === 1)
+    // Rulebook: the player who goes first can't play a Supporter on their
+    // first turn. `firstTurnNoAttack` is true only during the starting
+    // player's first turn — regardless of whether that's p1 or p2.
+    if (state.firstTurnNoAttack)
       return fail("First player can't play a Supporter on the first turn.");
   }
 
@@ -208,8 +211,12 @@ export function playTrainer(
 
   // Stadium: replaces any existing Stadium (discards it, including the
   // opponent's if they had one). The new Stadium is now controlled by
-  // whoever played it.
+  // whoever played it. Rulebook exception: you can't play a Stadium with
+  // the same name as the one already in play.
   if (isStadium) {
+    if (state.stadium && state.stadium.card.name === t.name) {
+      return fail(`Can't play ${t.name} — a Stadium with the same name is already in play.`);
+    }
     if (state.stadium) {
       const prev = state.stadium;
       state.players[prev.controller].discard.push(prev.card);
@@ -226,7 +233,7 @@ export function playTrainer(
   }
 
   // Item / Supporter: check resource preconditions before committing the play.
-  const block = precheckTrainerEffect(state, player, t);
+  const block = precheckTrainerEffect(state, player, t, target);
   if (block) return fail(block);
   pl.hand.splice(handIndex, 1);
   applyTrainerEffect(state, player, t, target);

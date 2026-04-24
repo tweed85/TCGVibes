@@ -42,6 +42,7 @@ export interface BuildResult {
   deck: Card[];
   unmatched: DeckListEntry[]; // entries we couldn't resolve
   nameOnlyMatches: DeckListEntry[]; // resolved by name (set/number didn't match)
+  ruleViolations: string[]; // deckbuilding rule failures (4-per-name, 1 ACE SPEC, 1 Radiant)
 }
 
 // Inverse of SET_CODE_TO_LIMITLESS in cardImages.ts, plus a few extras for
@@ -108,10 +109,18 @@ function findBySetAndNumber(limitlessSet: string, number: string): Card | undefi
 // Resolve parsed entries into a concrete deck (one Card instance per copy).
 // Entries whose specific printing is missing try name-only match as a fallback.
 // Completely unresolved entries are reported so the UI can tell the user.
+// Also enforces deckbuilding rules: 4-per-name (except Basic Energy),
+// 1 Radiant Pokémon total, 1 ACE SPEC total.
 export function buildDeckFromEntries(entries: DeckListEntry[]): BuildResult {
   const deck: Card[] = [];
   const unmatched: DeckListEntry[] = [];
   const nameOnlyMatches: DeckListEntry[] = [];
+  const ruleViolations: string[] = [];
+
+  // Per-name count (for the 4-per-name rule).
+  const nameCounts = new Map<string, number>();
+  let radiantTotal = 0;
+  let aceSpecTotal = 0;
 
   for (const entry of entries) {
     const byPrinting = findBySetAndNumber(entry.limitlessSet, entry.number);
@@ -121,12 +130,32 @@ export function buildDeckFromEntries(entries: DeckListEntry[]): BuildResult {
       continue;
     }
     if (!byPrinting) nameOnlyMatches.push(entry);
+
+    const isBasicEnergy =
+      resolved.supertype === "Energy" && resolved.subtypes.includes("Basic");
+    const isRadiant = resolved.subtypes.includes("Radiant");
+    const isAceSpec = resolved.subtypes.includes("ACE SPEC");
+
+    nameCounts.set(entry.name, (nameCounts.get(entry.name) ?? 0) + entry.count);
+    if (isRadiant) radiantTotal += entry.count;
+    if (isAceSpec) aceSpecTotal += entry.count;
+
+    if (!isBasicEnergy && (nameCounts.get(entry.name) ?? 0) > 4) {
+      ruleViolations.push(`More than 4 copies of ${entry.name}.`);
+    }
     for (let i = 0; i < entry.count; i++) {
       deck.push({ ...resolved } as Card);
     }
   }
 
-  return { deck, unmatched, nameOnlyMatches };
+  if (radiantTotal > 1) {
+    ruleViolations.push(`${radiantTotal} Radiant Pokémon — deck may contain only 1.`);
+  }
+  if (aceSpecTotal > 1) {
+    ruleViolations.push(`${aceSpecTotal} ACE SPEC cards — deck may contain only 1.`);
+  }
+
+  return { deck, unmatched, nameOnlyMatches, ruleViolations };
 }
 
 // Convenience: parse + build in one step. Returns the parsed entries so
@@ -137,6 +166,7 @@ export function importDecklist(text: string): {
   deck: Card[];
   totalCards: number;
   unmatched: DeckListEntry[];
+  ruleViolations: string[];
   nameOnlyMatches: DeckListEntry[];
   parseErrors: string[];
 } {
@@ -148,6 +178,7 @@ export function importDecklist(text: string): {
     totalCards: parsed.totalCards,
     unmatched: built.unmatched,
     nameOnlyMatches: built.nameOnlyMatches,
+    ruleViolations: built.ruleViolations,
     parseErrors: parsed.parseErrors,
   };
 }
