@@ -112,7 +112,9 @@ describe("per-friendly-bench damage scaling — Dipplin-style attacks", () => {
         provides: ["Grass"],
       } as any,
     ];
-    // Put 4 benched Pokémon (fabricated) — expected damage = 20 * 4 = 80.
+    // Reset attacker's bench and put exactly 4 fabricated Pokémon on it —
+    // expected damage = 20 * 4 = 80.
+    state.players[ap].bench = [];
     for (let i = 0; i < 4; i++) {
       state.players[ap].bench.push({
         instanceId: `b${i}`,
@@ -128,10 +130,17 @@ describe("per-friendly-bench damage scaling — Dipplin-style attacks", () => {
       });
     }
     const oppId = ap === "p1" ? "p2" : "p1";
+    // Give the opponent a tanky enough Active so the 80 damage doesn't KO
+    // (which would set opp.active to null while pendingPromote resolves) —
+    // we want the damage counters visible on a still-standing defender.
+    const tankyHp = 200;
+    state.players[oppId].active!.card = {
+      ...state.players[oppId].active!.card,
+      hp: tankyHp,
+    };
     const defBefore = state.players[oppId].active!.damage;
     attack(state, ap, 0);
     const defAfter = state.players[oppId].active!.damage;
-    // Attack defender took at least 80 damage (may be more with weakness).
     expect(defAfter - defBefore).toBeGreaterThanOrEqual(80);
   });
 });
@@ -196,10 +205,23 @@ describe("Per-Pokemon lock flags (selfCantAttack / cantRetreat)", () => {
       retreatCost: ["Colorless"],
     };
     const startTurn = state.turn;
+    // Give the opponent a second Pokémon on bench so the 200-damage swing
+    // doesn't immediately end the game (game-over short-circuits the
+    // post-damage hook that sets cantAttackUntilTurn).
+    const oppId = ap === "p1" ? "p2" : "p1";
+    state.players[oppId].bench.push({
+      instanceId: "opp-bench-lock",
+      card: state.players[oppId].active!.card,
+      damage: 0,
+      attachedEnergy: [],
+      evolvedFrom: [],
+      tools: [],
+      playedThisTurn: false,
+      evolvedThisTurn: false,
+      statuses: [],
+      abilityUsedThisTurn: false,
+    });
     attack(state, ap, 0);
-    // After the attack, the Pokémon that just swung may have been KO'd from
-    // recoil / sent to promote; in either case the flag should be set on
-    // whichever copy of the attacker is reachable.
     const atkAfter =
       state.players[ap].active ??
       state.players[ap].bench.find((p) => p.card.name === "Test Big Hit");

@@ -124,7 +124,13 @@ export function buildDeckFromEntries(entries: DeckListEntry[]): BuildResult {
 
   for (const entry of entries) {
     const byPrinting = findBySetAndNumber(entry.limitlessSet, entry.number);
-    const resolved = byPrinting ?? findByName(entry.name);
+    // Name fallbacks: exact match first; then try "Basic <name>" since some
+    // decklist tools export basic energies as "Grass Energy" while the pool
+    // ships "Basic Grass Energy" (SVE printings).
+    const resolved =
+      byPrinting ??
+      findByName(entry.name) ??
+      findByName(`Basic ${entry.name}`);
     if (!resolved) {
       unmatched.push(entry);
       continue;

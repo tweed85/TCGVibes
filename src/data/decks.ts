@@ -1,192 +1,227 @@
-// Deck construction from the tournament-legal card pool.
+// Preset decks used by the pre-game modal's dropdown.
 //
-// Rules enforced:
-// - Exactly 60 cards.
-// - Max 4 copies per card name (except basic energies — unlimited).
-// - At least one Basic Pokémon.
-// - Returns separate card *instances* per copy so runtime state (damage,
-//   attached energy, etc.) is independent per card.
+// Each spec carries a raw Limitless-style decklist; buildDeck parses and
+// resolves it against the live card pool. If a specific printing is missing
+// we fall back to a name-only match (handled by buildDeckFromEntries). Any
+// truly unresolvable entries are logged to the console but the deck is still
+// returned at whatever count it could assemble — games won't start under 60
+// cards, so validatedDeckSpecs() filters those out from the UI dropdown.
 
-import { allCards, cardsByName, findByName } from "./cards";
-import type { Card, EnergyType, PokemonCard } from "../engine/types";
+import { cardsByName } from "./cards";
+import { importDecklist } from "./decklistParser";
+import type { Card } from "../engine/types";
 
 const DECK_SIZE = 60;
-
-function cloneCard(c: Card): Card {
-  // Cards are immutable data; runtime uses PokemonInPlay for state. A shallow
-  // clone gives each copy a unique `id` suffix so React keys stay stable.
-  return { ...c } as Card;
-}
-
-function isPokemon(c: Card): c is PokemonCard {
-  return c.supertype === "Pokémon";
-}
-
-// Basic energy card name follows the "<Type> Energy" pattern (SVE reprints:
-// "Basic <Type> Energy"). We prefer the short-name printings if available.
-function basicEnergy(type: EnergyType): Card | undefined {
-  const tryNames = [`${type} Energy`, `Basic ${type} Energy`];
-  for (const n of tryNames) {
-    const c = findByName(n);
-    if (c) return c;
-  }
-  return undefined;
-}
-
-// Recursively collect the full evolution line rooted at `name`.
-function evolutionLine(name: string): string[] {
-  const chain = [name];
-  let cursor: Card | undefined = findByName(name);
-  // Walk DOWN the chain (find things that evolve FROM each step).
-  const added = new Set<string>([name]);
-  const queue = [name];
-  while (queue.length) {
-    const cur = queue.shift()!;
-    for (const c of allCards) {
-      if (
-        isPokemon(c) &&
-        c.evolvesFrom === cur &&
-        !added.has(c.name)
-      ) {
-        added.add(c.name);
-        chain.push(c.name);
-        queue.push(c.name);
-      }
-    }
-  }
-  // Walk UP the chain from cursor in case user named an evolution.
-  while (cursor && isPokemon(cursor) && cursor.evolvesFrom) {
-    const pre = cursor.evolvesFrom;
-    if (!added.has(pre)) {
-      added.add(pre);
-      chain.unshift(pre);
-      cursor = findByName(pre);
-    } else {
-      break;
-    }
-  }
-  return chain;
-}
-
-function addCopies(deck: Card[], name: string, n: number): number {
-  const found = findByName(name);
-  if (!found) return 0;
-  for (let i = 0; i < n; i++) deck.push(cloneCard(found));
-  return n;
-}
-
-// Common staple trainers that exist in the current legal pool.
-const STAPLE_TRAINERS = [
-  "Buddy-Buddy Poffin", // Item: search 2 Basics from deck
-  "Ultra Ball", // Item: search any Pokémon
-  "Rare Candy", // Item: skip Stage 1 to evolve to Stage 2
-  "Boss's Orders", // Supporter: gust opponent's benched to Active
-];
 
 export interface DeckSpec {
   id: string;
   name: string;
-  core: string; // primary Pokémon name
-  energyType: EnergyType;
-  description: string;
+  description?: string;
+  decklist: string;
 }
+
+// ---------------------------------------------------------------------------
+// Preset decklists. Format is the standard Play! Pokémon / Limitless export:
+//   <count> <card name> <SET> <number>
+// Section headers ("Pokémon: 21" / "Trainer: 33" / "Energy: 6") are parsed
+// but ignored during resolution.
+// ---------------------------------------------------------------------------
+
+const FESTIVAL_LEADS = `Pokémon: 21
+4 Dipplin TWM 18
+4 Grookey TWM 14
+4 Thwackey TWM 15
+2 Applin PRE 9
+1 Applin DRI 16
+1 Applin TWM 17
+1 Goldeen PRE 20
+1 Psyduck ASC 39
+1 Rillaboom TWM 16
+1 Seaking PRE 21
+1 Shaymin DRI 10
+
+Trainer: 33
+4 Buddy-Buddy Poffin ASC 184
+4 Festival Grounds PRE 108
+4 Lillie's Determination MEG 119
+4 Poké Pad ASC 198
+3 Bug Catching Set PRE 102
+2 Boss's Orders MEG 114
+2 Judge POR 76
+2 Kieran PRE 113
+1 Air Balloon BLK 79
+1 Brave Bangle WHT 80
+1 Enhanced Hammer TWM 148
+1 Eri TEF 146
+1 Lana's Aid TWM 155
+1 Maximum Belt TEF 154
+1 Night Stretcher ASC 196
+1 Switch SVI 194
+
+Energy: 6
+6 Grass Energy SVE 1`;
+
+const ARBOLIVA = `Pokémon: 22
+1 Arboliva ex DRI 23
+2 Bayleef MEG 9
+2 Meowth ex POR 62
+2 Chikorita MEG 8
+1 Noctowl SCR 115
+4 Teal Mask Ogerpon ex TWM 25
+1 Arboliva ex DRI 207
+1 Fezandipiti ex SFA 38
+1 Budew PRE 4
+1 Hoothoot SCR 114
+2 Meganium MEG 10
+2 Smoliv DRI 21
+2 Dolliv DRI 22
+
+Trainer: 28
+2 Poké Pad ASC 198
+4 Lillie's Determination MEG 119
+1 Lana's Aid TWM 155
+2 Boss's Orders MEG 114
+2 Energy Switch MEG 115
+4 Forest of Vitality MEG 117
+4 Ultra Ball MEG 131
+1 Unfair Stamp TWM 165
+3 Dawn PFL 87
+4 Bug Catching Set TWM 143
+1 Judge DRI 167
+
+Energy: 10
+10 Grass Energy MEE 1`;
+
+const ALAKAZAM = `Pokémon: 23
+4 Abra MEG 54
+3 Kadabra MEG 55
+3 Alakazam MEG 56
+3 Dunsparce PAL 156
+1 Dunsparce TEF 128
+3 Dudunsparce TEF 129
+2 Fan Rotom SCR 118
+1 Shaymin DRI 10
+1 Psyduck ASC 39
+1 Fezandipiti ex ASC 142
+1 Genesect SFA 40
+
+Trainer: 32
+3 Hilda WHT 84
+3 Dawn PFL 87
+3 Boss's Orders MEG 114
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad ASC 198
+3 Rare Candy MEG 125
+2 Night Stretcher ASC 196
+2 Wondrous Patch PFL 94
+2 Enhanced Hammer TWM 148
+4 Battle Cage PFL 85
+1 Lana's Aid TWM 155
+1 Lucky Helmet TWM 158
+
+Energy: 5
+4 Psychic Energy MEE 5
+1 Enriching Energy SSP 191`;
+
+const LUCARIO = `Pokémon: 16
+3 Riolu MEG 76
+3 Mega Lucario ex MEG 77
+2 Makuhita MEG 72
+2 Hariyama MEG 73
+2 Solrock MEG 75
+2 Lunatone MEG 74
+1 Mega Zygarde ex POR 47
+1 Meowth ex POR 62
+
+Trainer: 34
+4 Lillie's Determination MEG 119
+2 Wally's Compassion MEG 132
+2 Judge DRI 167
+1 Boss's Orders MEG 114
+4 Fighting Gong MEG 116
+4 Ultra Ball MEG 131
+4 Premium Power Pro MEG 124
+3 Poké Pad ASC 198
+3 Night Stretcher ASC 196
+1 Switch MEG 130
+2 Air Balloon ASC 181
+1 Core Memory POR 70
+2 Gravity Mountain SSP 177
+1 Maximum Belt PRE 117
+
+Energy: 10
+10 Fighting Energy MEE 6`;
 
 export const DECK_SPECS: DeckSpec[] = [
   {
-    id: "miraidon-lightning",
-    name: "Miraidon ex Lightning",
-    core: "Miraidon ex",
-    energyType: "Lightning",
-    description: "Basic Lightning hitter. Pair with Pikachu ex for bench damage.",
+    id: "festival-leads",
+    name: "Festival Leads",
+    description: "Dipplin + Thwackey Festival Lead twin-hit engine under Festival Grounds.",
+    decklist: FESTIVAL_LEADS,
   },
   {
-    id: "koraidon-fighting",
-    name: "Koraidon ex Fighting",
-    core: "Koraidon ex",
-    energyType: "Fighting",
-    description: "Aggro Basic with strong one-energy attack options.",
+    id: "arboliva",
+    name: "Arboliva",
+    description: "Teal Mask Ogerpon ex ramp into Arboliva ex's steady pressure under Forest of Vitality.",
+    decklist: ARBOLIVA,
   },
   {
-    id: "reshiram-fire",
-    name: "Reshiram ex Fire",
-    core: "Reshiram ex",
-    energyType: "Fire",
-    description: "Big-damage Fire Basic ex.",
+    id: "alakazam",
+    name: "Alakazam",
+    description: "Alakazam + Dudunsparce draw engine with Battle Cage bench protection.",
+    decklist: ALAKAZAM,
   },
   {
-    id: "mewtwo-psychic",
-    name: "Team Rocket's Mewtwo ex Psychic",
-    core: "Team Rocket's Mewtwo ex",
-    energyType: "Psychic",
-    description: "Hard-hitting Psychic Basic ex.",
-  },
-  {
-    id: "yveltal-dark",
-    name: "Yveltal ex Darkness",
-    core: "Yveltal ex",
-    energyType: "Darkness",
-    description: "Darkness attacker supported by basic Darkness energy.",
-  },
-  {
-    id: "keldeo-water",
-    name: "Keldeo ex Water",
-    core: "Keldeo ex",
-    energyType: "Water",
-    description: "Water ex with solid two-energy options.",
+    id: "lucario-ex",
+    name: "Lucario ex",
+    description: "Mega Lucario ex hits hard under Premium Power Pro with a Fighting-search engine.",
+    decklist: LUCARIO,
   },
 ];
 
+// ---------------------------------------------------------------------------
+// Builders
+// ---------------------------------------------------------------------------
+
 export function buildDeck(spec: DeckSpec): Card[] {
-  const deck: Card[] = [];
-
-  // 4 copies of the core, then walk the evolution line (if any) with 4 each.
-  const line = evolutionLine(spec.core);
-  for (const name of line) {
-    addCopies(deck, name, 4);
-  }
-
-  // If there are no Basic Pokémon in the line (user picked a Stage 1/2 without
-  // a pre-evo in the pool), add a cheap generic basic attacker.
-  const hasBasic = deck.some((c) => isPokemon(c) && c.subtypes.includes("Basic"));
-  if (!hasBasic) {
-    // Find any Basic Pokémon in the pool matching the energy type.
-    const fallback = allCards.find(
-      (c) =>
-        isPokemon(c) &&
-        c.subtypes.includes("Basic") &&
-        c.types.includes(spec.energyType) &&
-        c.attacks.length > 0,
+  const built = importDecklist(spec.decklist);
+  if (built.unmatched.length > 0) {
+    // Log so a dataset rotation that drops a printing surfaces clearly in the
+    // dev console, but don't crash — the deck may still be playable.
+    console.warn(
+      `[decks] ${spec.name}: ${built.unmatched.length} unresolved entries`,
+      built.unmatched,
     );
-    if (fallback) addCopies(deck, fallback.name, 4);
   }
-
-  // Staple trainers — cap at 4 each, skip any not in the pool.
-  for (const t of STAPLE_TRAINERS) {
-    addCopies(deck, t, 4);
-    if (deck.length >= DECK_SIZE) break;
+  if (built.ruleViolations.length > 0) {
+    console.warn(`[decks] ${spec.name}: rule violations`, built.ruleViolations);
   }
-
-  // Fill the rest with basic energy matching the deck's energy type.
-  const energy = basicEnergy(spec.energyType) ?? basicEnergy("Colorless");
-  if (!energy) {
-    throw new Error(`Could not find basic ${spec.energyType} energy in dataset.`);
-  }
-  while (deck.length < DECK_SIZE) deck.push(cloneCard(energy));
-
-  // If we somehow overshot (over-adding staples + evo lines), trim the end.
-  if (deck.length > DECK_SIZE) deck.length = DECK_SIZE;
-
-  return deck;
+  return built.deck;
 }
 
-// Diagnostic: list of available deck specs that will actually build.
+// Only include a preset in the dropdown if it builds to a legal 60-card deck.
+// Rotating-out printings can leave a deck short; rather than shipping a bad
+// default, we filter it out so users don't pick something that won't run.
 export function validatedDeckSpecs(): DeckSpec[] {
-  return DECK_SPECS.filter((s) => cardsByName.has(s.core));
+  return DECK_SPECS.filter((s) => {
+    const built = importDecklist(s.decklist);
+    const hasBasic = built.deck.some(
+      (c) => c.supertype === "Pokémon" && c.subtypes.includes("Basic"),
+    );
+    return built.deck.length >= DECK_SIZE && hasBasic;
+  });
 }
 
-// Random legal deck — picks a random validated spec.
+// Random preset — used by tests / fallback paths when no deck was chosen.
 export function randomLegalDeck(rng: () => number): Card[] {
   const specs = validatedDeckSpecs();
+  if (specs.length === 0) {
+    throw new Error("No valid preset deck could be built from the current card pool.");
+  }
   const pick = specs[Math.floor(rng() * specs.length)];
   return buildDeck(pick);
 }
+
+// Kept for back-compat with older call sites that imported it as a named
+// symbol. Not used by the new builder.
+export { cardsByName };
