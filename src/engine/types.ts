@@ -64,7 +64,13 @@ export type AttackEffect =
   | { kind: "placeCountersPerHandCard"; countersPerCard: number } // Alakazam "Powerful Hand"
   | { kind: "fizzleIfNoStadium" } // Fan Rotom "Assault Landing"
   | { kind: "shieldNextTurn"; requiresHeads: boolean } // Dunsparce "Dig" — prevent damage+effects next turn
-  | { kind: "searchEnergyAttachBenchType"; pokemonType: EnergyType }; // Shaymin DRI "Send Flowers"
+  | { kind: "searchEnergyAttachBenchType"; pokemonType: EnergyType } // Shaymin DRI "Send Flowers"
+  | { kind: "attachNFromDiscardToBench"; energyType: EnergyType; max: number } // Mega Lucario ex "Aura Jab"
+  | { kind: "selfCantUseAttackNextTurn"; attackName: string } // Riolu / Mega Brave — only THIS attack is locked
+  | { kind: "multiCoinPerOppPokemon"; damagePerHeads: number } // Mega Zygarde ex "Nullifying Zero"
+  | { kind: "fizzleIfNoAlly"; allyName: string } // Solrock Cosmic Beam
+  | { kind: "ignoreWeaknessResistance" } // Cosmic Beam
+  | { kind: "returnSelfToHand" }; // Meowth ex Tuck Tail
 
 export type StatusCondition = "asleep" | "burned" | "confused" | "paralyzed" | "poisoned";
 
@@ -130,6 +136,7 @@ export type AbilityEffect =
   | { kind: "searchEnergyIfSupporterPlayedName"; energyType: EnergyType; count: number; supporterName: string; oncePerTurn: true } // Frilled Generator
   | { kind: "emergencyRotationFromHand"; requiresOppStage2: boolean; oncePerTurn: true } // Emergency Rotation (activated from hand)
   | { kind: "fanCallFirstTurn"; energyType: EnergyType; hpMax: number; max: number; oncePerTurn: true } // Fan Rotom "Fan Call"
+  | { kind: "lunarCycleDrawN"; allyName: string; costEnergyType: EnergyType; drawCount: number; oncePerTurn: true } // Lunatone "Lunar Cycle"
   | { kind: "searchDeckAnyCard"; oncePerTurn: true; condition?: AbilityCondition } // search for any 1 card
   | { kind: "searchDeckPokemon"; oncePerTurn: true } // search for any 1 Pokémon
   | { kind: "switchWithBench"; oncePerTurn: true }

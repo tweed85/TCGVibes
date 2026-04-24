@@ -277,6 +277,15 @@ const NAMED_ABILITY_EFFECTS: Record<string, AbilityEffect> = {
     max: 3,
     oncePerTurn: true,
   },
+  // Lunatone — if you have Solrock in play, discard a Basic Fighting Energy
+  // from your hand; then draw 3.
+  "Lunar Cycle": {
+    kind: "lunarCycleDrawN",
+    allyName: "Solrock",
+    costEnergyType: "Fighting",
+    drawCount: 3,
+    oncePerTurn: true,
+  },
 };
 
 export function detectAbilityEffect(a: { name: string; type: string; text: string }): AbilityEffect | undefined {
@@ -1436,6 +1445,33 @@ export function activateAbility(
       // is in play, so this case is effectively unreachable via the current
       // UI. We leave a clear failure to signal the limitation.
       return { ok: false, reason: "Activating abilities from hand isn't supported yet." };
+    }
+
+    case "lunarCycleDrawN": {
+      // Solrock-in-play gate.
+      const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+      if (!allies.some((p) => p.card.name === e.allyName)) {
+        return { ok: false, reason: `Requires ${e.allyName} in play.` };
+      }
+      // Discard a Basic <costEnergyType> Energy from hand.
+      const idx = pl.hand.findIndex(
+        (c) =>
+          c.supertype === "Energy" &&
+          c.subtypes.includes("Basic") &&
+          (c as EnergyCard).provides.includes(e.costEnergyType),
+      );
+      if (idx < 0) return { ok: false, reason: `No basic ${e.costEnergyType} Energy in hand to discard.` };
+      const [en] = pl.hand.splice(idx, 1) as [EnergyCard];
+      pl.discard.push(en);
+      let drawn = 0;
+      for (let i = 0; i < e.drawCount; i++) {
+        const c = pl.deck.shift();
+        if (!c) break;
+        pl.hand.push(c);
+        drawn++;
+      }
+      logEvent(state, player, `uses ${ability.name}: discards ${en.name}; draws ${drawn}.`);
+      break;
     }
 
     case "fanCallFirstTurn": {

@@ -545,6 +545,142 @@ export function resolveAttackEffects(
         break;
       }
 
+      case "attachNFromDiscardToBench": {
+        // Mega Lucario ex "Aura Jab" — up to N Basic <type> Energy from
+        // discard to your Benched Pokémon in any way. Auto-pick: round-robin
+        // across benched allies.
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          if (pl.bench.length === 0) return;
+          let attached = 0;
+          for (let i = 0; i < e.max; i++) {
+            const idx = pl.discard.findIndex(
+              (c) =>
+                c.supertype === "Energy" &&
+                c.subtypes.includes("Basic") &&
+                (c as import("./types").EnergyCard).provides.includes(e.energyType),
+            );
+            if (idx < 0) break;
+            const [en] = pl.discard.splice(idx, 1) as [import("./types").EnergyCard];
+            pl.bench[attached % pl.bench.length].attachedEnergy.push(en);
+            attached++;
+          }
+          if (attached > 0) {
+            logEvent(
+              state,
+              ctx.attackerOwner,
+              `${ctx.move.name}: attaches ${attached} ${e.energyType} Energy from discard to Bench.`,
+            );
+          }
+        });
+        break;
+      }
+
+      case "selfCantUseAttackNextTurn": {
+        // Set a per-attack lock. The attack() action checks this list before
+        // paying cost. We store it on the attacker instance via an ad-hoc set
+        // alongside cantAttackUntilTurn.
+        postHooks.push(() => {
+          const bag = (ctx.attacker as import("./types").PokemonInPlay & {
+            cantUseAttacksUntilTurn?: Record<string, number>;
+          });
+          if (!bag.cantUseAttacksUntilTurn) bag.cantUseAttacksUntilTurn = {};
+          // +2 = locks through the attacker's next turn, clears the turn after.
+          bag.cantUseAttacksUntilTurn[e.attackName] = state.turn + 2;
+          logEvent(state, "system", `${ctx.attacker.card.name} can't use ${e.attackName} next turn.`);
+        });
+        break;
+      }
+
+      case "multiCoinPerOppPokemon": {
+        // Mega Zygarde ex "Nullifying Zero". Bench snipe honoring Flower
+        // Curtain / Battle Cage semantics for non-Active targets.
+        postHooks.push(() => {
+          const opp = state.players[ctx.defenderOwner];
+          const targets: Array<{ p: import("./types").PokemonInPlay; isActive: boolean }> = [];
+          if (opp.active) targets.push({ p: opp.active, isActive: true });
+          for (const b of opp.bench) targets.push({ p: b, isActive: false });
+          let total = 0;
+          for (const { p, isActive } of targets) {
+            const heads = flipCoin(state, `${ctx.move.name} coin on ${p.card.name}`);
+            if (!heads) continue;
+            if (!isActive && benchDamageBlocked(state)) {
+              logEvent(state, "system", `Battle Cage protects ${p.card.name}.`);
+              continue;
+            }
+            if (!isActive && benchDamageBlockedByFlowerCurtain(state, ctx.defenderOwner, p)) {
+              logEvent(state, "system", `Flower Curtain protects ${p.card.name}.`);
+              continue;
+            }
+            p.damage += e.damagePerHeads;
+            total += e.damagePerHeads;
+            logEvent(state, "system", `${p.card.name} takes ${e.damagePerHeads} damage.`);
+          }
+          if (total === 0) {
+            logEvent(state, "system", `${ctx.move.name}: no heads — no damage dealt.`);
+          }
+        });
+        break;
+      }
+
+      case "fizzleIfNoAlly": {
+        // Solrock "Cosmic Beam" — fizzle if the named ally isn't on the bench.
+        const pl = state.players[ctx.attackerOwner];
+        const hasAlly = pl.bench.some((p) => p.card.name === e.allyName);
+        if (!hasAlly) {
+          damage = 0;
+          postHooks.length = 0;
+          logEvent(state, "system", `${ctx.move.name} fizzles — no ${e.allyName} on Bench.`);
+        }
+        break;
+      }
+
+      case "ignoreWeaknessResistance": {
+        // Weakness/Resistance multipliers already ran in executeAttackHit
+        // before resolveAttackEffects. Reverse-engineering to strip them out
+        // isn't practical, so we approximate by adding a damage correction
+        // post-hook based on what the applied weakness/resistance was.
+        if (ctx.defender) {
+          const atkType = ctx.attacker.card.types[0];
+          const weak = ctx.defender.card.weaknesses?.find((w) => w.type === atkType);
+          const res = ctx.defender.card.resistances?.find((w) => w.type === atkType);
+          // Reverse the weakness multiplier: damage was multiplied by N; divide.
+          if (weak?.value.startsWith("×")) {
+            const mult = parseInt(weak.value.slice(1), 10) || 2;
+            damage = Math.floor(damage / mult);
+          }
+          // Reverse the resistance subtraction: add back what was subtracted.
+          if (res?.value.startsWith("-")) {
+            damage += parseInt(res.value.slice(1), 10) || 30;
+          }
+        }
+        break;
+      }
+
+      case "returnSelfToHand": {
+        // Meowth ex "Tuck Tail" — return the attacker + all attached cards
+        // to the hand after the attack resolves.
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          if (pl.active?.instanceId !== ctx.attacker.instanceId) return;
+          pl.hand.push(
+            ctx.attacker.card,
+            ...ctx.attacker.evolvedFrom,
+            ...ctx.attacker.attachedEnergy,
+            ...ctx.attacker.tools,
+          );
+          pl.active = null;
+          // Force a promote so the player can still make a legal turn end.
+          if (pl.bench.length > 0) {
+            state.pendingPromote = ctx.attackerOwner;
+            state.phase = "promoteActive";
+            state.onPromoteResolved = null;
+          }
+          logEvent(state, ctx.attackerOwner, `${ctx.attacker.card.name} returns to hand with all attached cards.`);
+        });
+        break;
+      }
+
       case "searchEnergyAttachBenchType": {
         // Shaymin "Send Flowers" — search deck for any Energy, attach to one
         // of your Benched Pokémon of the given type. Auto-pick the first
@@ -669,6 +805,18 @@ export function describeEffects(effects: AttackEffect[] | undefined): string {
           return e.requiresHeads ? "flip→shield next turn" : "shield next turn";
         case "searchEnergyAttachBenchType":
           return `search Energy → Bench ${e.pokemonType}`;
+        case "attachNFromDiscardToBench":
+          return `attach ${e.max} ${e.energyType} from discard → bench`;
+        case "selfCantUseAttackNextTurn":
+          return `lock ${e.attackName} next turn`;
+        case "multiCoinPerOppPokemon":
+          return `multi-coin ${e.damagePerHeads}/heads`;
+        case "fizzleIfNoAlly":
+          return `fizzles without ${e.allyName}`;
+        case "ignoreWeaknessResistance":
+          return "ignore W/R";
+        case "returnSelfToHand":
+          return "return self to hand";
       }
     })
     .join(", ");

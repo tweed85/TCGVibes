@@ -391,6 +391,68 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
     }
   }
 
+  // ---- Attach N Basic <type> Energy from discard to bench -----------------
+  // Mega Lucario ex "Aura Jab": "Attach up to 3 Basic Fighting Energy cards
+  // from your discard pile to your Benched Pokémon in any way you like."
+  {
+    const m = text.match(/attach up to (\d+) basic ([A-Za-z]+) energy cards? from your discard pile to your benched pok[eé]mon/i);
+    if (m) {
+      const t = matchEnergyType(m[2]);
+      if (t) effects.push({ kind: "attachNFromDiscardToBench", energyType: t, max: parseInt(m[1], 10) });
+    }
+  }
+
+  // ---- "This Pokémon can't use <name> next turn" --------------------------
+  // Riolu "Accelerating Stab" / Mega Lucario "Mega Brave" — scoped lock
+  // against re-using the SAME attack. Detect via "can't use <AttackName>"
+  // matching the attack's own name.
+  {
+    const m = text.match(/during your next turn, this pok[eé]mon can'?t use (.+?)\./i);
+    if (m && atk.name) {
+      const expected = atk.name.trim().toLowerCase();
+      const locked = m[1].trim().toLowerCase();
+      if (expected === locked) {
+        effects.push({ kind: "selfCantUseAttackNextTurn", attackName: atk.name });
+      } else {
+        // Different attack named — fall back to the broader "no attacks"
+        // lock so at least SOME restriction fires.
+        effects.push({ kind: "selfCantAttackNextTurn" });
+      }
+    }
+  }
+
+  // ---- For each opp Pokémon, flip a coin; N damage per heads --------------
+  // Mega Zygarde ex "Nullifying Zero"
+  if (/for each of your opponent'?s pok[eé]mon, flip a coin\. if heads, this attack does (\d+) damage to that pok[eé]mon/i.test(text)) {
+    const m = text.match(/if heads, this attack does (\d+) damage to that pok[eé]mon/i);
+    if (m) {
+      effects.push({ kind: "multiCoinPerOppPokemon", damagePerHeads: parseInt(m[1], 10) });
+      baseDamageOverride = 0;
+    }
+  }
+
+  // ---- Fizzle unless a named ally is on your Bench ------------------------
+  // Solrock "Cosmic Beam": "If you don't have Lunatone on your Bench, this
+  // attack does nothing."
+  {
+    const m = text.match(/if you don'?t have ([A-Za-z][A-Za-z' -]*?) on your bench, this attack does nothing/i);
+    if (m) {
+      effects.push({ kind: "fizzleIfNoAlly", allyName: m[1].trim() });
+    }
+  }
+
+  // ---- Ignore Weakness / Resistance ---------------------------------------
+  if (/this attack'?s damage isn'?t affected by weakness or resistance/i.test(text)) {
+    effects.push({ kind: "ignoreWeaknessResistance" });
+  }
+
+  // ---- Return self + all attached to hand ---------------------------------
+  // Meowth ex "Tuck Tail": "Put this Pokémon and all attached cards into
+  // your hand."
+  if (/put this pok[eé]mon and all attached cards into your hand/i.test(text)) {
+    effects.push({ kind: "returnSelfToHand" });
+  }
+
   return { effects, baseDamageOverride };
 }
 

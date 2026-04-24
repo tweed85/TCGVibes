@@ -39,6 +39,7 @@ import {
   canEvolveOnPlayTurn,
   confusedPersistsOnEvolve,
   effectiveAttackCost,
+  effectiveAttacks,
   effectiveMaxHp,
   effectiveRetreatCost,
   maxBenchSize,
@@ -452,7 +453,7 @@ function executeAttackHit(
   const pl = state.players[player];
   const atk = pl.active;
   if (!atk) return;
-  const move = atk.card.attacks[attackIndex];
+  const move = effectiveAttacks(atk)[attackIndex];
   if (!move) return;
   const defOwner = opponentOf(player);
   const def = state.players[defOwner].active;
@@ -634,8 +635,13 @@ export function attack(
   if (atk.cantAttackUntilTurn !== undefined && state.turn <= atk.cantAttackUntilTurn) {
     return fail("This Pokémon can't attack this turn.");
   }
-  const move = atk.card.attacks[attackIndex];
+  const move = effectiveAttacks(atk)[attackIndex];
   if (!move) return fail("No such attack.");
+  // Per-attack lock (Riolu "Accelerating Stab" / Mega Brave etc.).
+  const perAttackLock = (atk as typeof atk & { cantUseAttacksUntilTurn?: Record<string, number> }).cantUseAttacksUntilTurn;
+  if (perAttackLock && perAttackLock[move.name] !== undefined && state.turn <= perAttackLock[move.name]) {
+    return fail(`This Pokémon can't use ${move.name} this turn.`);
+  }
   const provided = energyProvidedBy(atk);
   const effectiveCost = effectiveAttackCost(state, atk, move.cost);
   if (!canPayCost(provided, effectiveCost))

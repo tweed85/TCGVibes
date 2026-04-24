@@ -34,7 +34,7 @@ import {
   resolveCoinGuess,
   setupGame,
 } from "./engine/rules";
-import { effectiveMaxHp, estimateAttackDamage } from "./engine/ongoingEffects";
+import { effectiveAttacks, effectiveMaxHp, estimateAttackDamage } from "./engine/ongoingEffects";
 import type { ActionResult } from "./engine/actions";
 import type { Ability, Card, GameState, PlayerId, PokemonInPlay } from "./engine/types";
 import { buildDeck, validatedDeckSpecs } from "./data/decks";
@@ -635,7 +635,7 @@ export default function App() {
   const myActiveAttacks = (() => {
     if (!me.active) return [];
     const provided = energyProvidedBy(me.active);
-    return me.active.card.attacks.map((a, i) => ({
+    return effectiveAttacks(me.active).map((a, i) => ({
       index: i,
       name: a.name,
       damage: a.damage,

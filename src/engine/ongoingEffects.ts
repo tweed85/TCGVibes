@@ -64,6 +64,28 @@ export function benchDamageBlocked(state: GameState): boolean {
   return state.stadium?.card.name === "Battle Cage";
 }
 
+// Return the effective attack list for a Pokémon, including any attacks
+// granted by attached Tools (Core Memory: Geobuster attack on Mega Zygarde ex).
+// The tool's rule text gates which Pokémon card names can use the attack.
+export function effectiveAttacks(p: PokemonInPlay): import("./types").Attack[] {
+  const base = p.card.attacks ?? [];
+  const toolAttacks: import("./types").Attack[] = [];
+  for (const tool of p.tools) {
+    if (tool.name === "Core Memory") {
+      if (p.card.name === "Mega Zygarde ex") {
+        toolAttacks.push({
+          name: "Geobuster",
+          cost: ["Fighting", "Fighting", "Fighting", "Fighting"],
+          damage: 350,
+          text: "Discard all Energy from this Pokémon.",
+          effects: [{ kind: "discardOwnEnergy", count: 99 }],
+        });
+      }
+    }
+  }
+  return toolAttacks.length > 0 ? [...base, ...toolAttacks] : base;
+}
+
 // Shaymin "Flower Curtain": "Prevent all damage done to your Benched Pokémon
 // that don't have a Rule Box by attacks from your opponent's Pokémon." Returns
 // true when the given bench Pokémon is immune to incoming opponent-attack
