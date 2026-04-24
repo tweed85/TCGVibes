@@ -689,31 +689,22 @@ export function estimateAttackDamage(
 ): number {
   const defOwner: PlayerId = attackerOwner === "p1" ? "p2" : "p1";
   const def = state.players[defOwner].active;
+  // Mirrors the runtime attack pipeline exactly (actions.ts executeAttackHit):
+  //   base → attacker bonuses → attack-effect additions → W/R → defender
+  //   reductions. Must match runtime behavior or the AI preview diverges
+  //   from what actually lands.
   let d = move.damage;
   d += stadiumAttackBonus(state, attacker, def);
   d += passiveAttackBonus(state, attackerOwner, attacker, def);
-  // Turn-scoped bonuses (Black Belt's Training, Premium Power Pro).
   const atkPl = state.players[attackerOwner];
   for (const b of atkPl.thisTurnAttackBonuses) {
     if (b.againstEx && (!def || !def.card.subtypes.includes("ex"))) continue;
     if (b.attackerType && !attacker.card.types.includes(b.attackerType)) continue;
     d += b.amount;
   }
-  if (def) {
-    const atkType = attacker.card.types[0];
-    const weak = def.card.weaknesses?.find((w) => w.type === atkType);
-    const res = def.card.resistances?.find((w) => w.type === atkType);
-    if (weak?.value.startsWith("×")) d *= parseInt(weak.value.slice(1), 10) || 2;
-    if (res?.value.startsWith("-")) d = Math.max(0, d - (parseInt(res.value.slice(1), 10) || 30));
-    d = Math.max(0, d - stadiumDamageReduction(state, attacker, def));
-    // Defender-side turn reduction (Jasmine's Gaze, Iron Defender).
-    const defPl = state.players[defOwner];
-    for (const r of defPl.nextOpponentTurnDamageReductions) {
-      if (r.defenderType && !def.card.types.includes(r.defenderType)) continue;
-      d = Math.max(0, d - r.amount);
-    }
-  }
-  // Deterministic structured effects: handle the most common +damage ones.
+  // Attack-effect additions BEFORE W/R so per-bench/per-energy/etc. are part
+  // of the total the multiplier scales. Uses median / expected values for
+  // coin-flip effects so the preview stays stable.
   for (const e of move.effects ?? []) {
     switch (e.kind) {
       case "perAttachedEnergy": {
@@ -746,14 +737,28 @@ export function estimateAttackDamage(
         d += e.perCount * (6 - state.players[defOwner].prizes.length);
         break;
       case "flipHeadsBonus":
-        d += e.bonus / 2; // expected value
+        d += e.bonus / 2;
         break;
       case "flipHeadsDouble":
-        d += d / 2; // expected value ≈ 1.5× base
+        d += d / 2;
         break;
       case "flipTailsFizzle":
         d /= 2;
         break;
+    }
+  }
+  // Now apply W/R and defender reductions to the final total.
+  if (def) {
+    const atkType = attacker.card.types[0];
+    const weak = def.card.weaknesses?.find((w) => w.type === atkType);
+    const res = def.card.resistances?.find((w) => w.type === atkType);
+    if (weak?.value.startsWith("×")) d *= parseInt(weak.value.slice(1), 10) || 2;
+    if (res?.value.startsWith("-")) d = Math.max(0, d - (parseInt(res.value.slice(1), 10) || 30));
+    d = Math.max(0, d - stadiumDamageReduction(state, attacker, def));
+    const defPl = state.players[defOwner];
+    for (const r of defPl.nextOpponentTurnDamageReductions) {
+      if (r.defenderType && !def.card.types.includes(r.defenderType)) continue;
+      d = Math.max(0, d - r.amount);
     }
   }
   return Math.max(0, Math.floor(d));

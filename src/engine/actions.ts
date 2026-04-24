@@ -463,25 +463,24 @@ function executeAttackHit(
     logEvent(state, "system", `${def.card.name} is shielded — ${move.name} has no effect.`);
     return;
   }
+  // Damage pipeline — order matters per TCG rules:
+  //   1. Base damage from the attack
+  //   2. Attacker-side additions (Stadium / Tool / ability passives, turn
+  //      bonuses like Black Belt's Training)
+  //   3. Attack-effect additions (per-bench, per-energy, per-damage-counter,
+  //      coin-flip bonuses) — resolved inside resolveAttackEffects
+  //   4. Weakness (×) — applied to the full summed damage
+  //   5. Resistance (−) — subtracted from the weakness-adjusted damage
+  //   6. Defender-side reductions (Stadium, Tool Berries, Jasmine's Gaze,
+  //      Iron Defender)
+  //
+  // Doing W/R after step 3 is critical: e.g., Dipplin "Do the Wave" adds
+  // +20 per bench inside resolveAttackEffects, and that full total must be
+  // doubled against a Grass-weak Lunatone, not just the base.
   let damage = move.damage;
   damage += stadiumAttackBonus(state, atk, def);
   damage += passiveAttackBonus(state, player, atk, def);
   damage += turnAttackBonus(state, player, atk, def);
-  if (def) {
-    const atkType = atk.card.types[0];
-    const weak = def.card.weaknesses?.find((w) => w.type === atkType);
-    const res = def.card.resistances?.find((w) => w.type === atkType);
-    if (weak && weak.value.startsWith("×")) {
-      damage *= parseInt(weak.value.slice(1), 10) || 2;
-    }
-    if (res && res.value.startsWith("-")) {
-      damage = Math.max(0, damage - (parseInt(res.value.slice(1), 10) || 30));
-    }
-    const reduction = stadiumDamageReduction(state, atk, def);
-    const turnRed = turnDamageReduction(state, defOwner, def);
-    const total = reduction + turnRed;
-    if (total > 0) damage = Math.max(0, damage - total);
-  }
   const result = resolveAttackEffects(state, {
     attacker: atk,
     attackerOwner: player,
@@ -491,6 +490,33 @@ function executeAttackHit(
     damage,
   });
   damage = result.damage;
+  if (def && damage > 0) {
+    const atkType = atk.card.types[0];
+    const weak = def.card.weaknesses?.find((w) => w.type === atkType);
+    const res = def.card.resistances?.find((w) => w.type === atkType);
+    if (weak && weak.value.startsWith("×")) {
+      const mult = parseInt(weak.value.slice(1), 10) || 2;
+      damage *= mult;
+      logEvent(
+        state,
+        "system",
+        `Weakness: ${def.card.name} takes ×${mult} from ${atkType} attacks.`,
+      );
+    }
+    if (res && res.value.startsWith("-")) {
+      const red = parseInt(res.value.slice(1), 10) || 30;
+      damage = Math.max(0, damage - red);
+      logEvent(
+        state,
+        "system",
+        `Resistance: ${def.card.name} reduces ${atkType} damage by ${red}.`,
+      );
+    }
+    const reduction = stadiumDamageReduction(state, atk, def);
+    const turnRed = turnDamageReduction(state, defOwner, def);
+    const total = reduction + turnRed;
+    if (total > 0) damage = Math.max(0, damage - total);
+  }
   // Survival Brace: cap damage so full-HP defender survives with 10 HP; it
   // discards after triggering.
   let survivalBraceTriggered = false;

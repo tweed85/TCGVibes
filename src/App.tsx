@@ -180,6 +180,10 @@ export default function App() {
   const stateRef = useRef<GameState>(buildInitial());
   const rerender = useForceRerender();
   const [selected, setSelected] = useState<Selection>(null);
+  // Instance-id of the Pokémon whose ability button is currently hovered.
+  // Used to glow the source Pokémon in the play area so multiple same-named
+  // cards (e.g. two Teal Mask Ogerpon ex) are immediately distinguishable.
+  const [hoveredAbilitySource, setHoveredAbilitySource] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string>("");
   const [openHands, setOpenHands] = useState(savedSettings.openHands ?? false);
   const [importOpen, setImportOpen] = useState(false);
@@ -653,11 +657,19 @@ export default function App() {
     }));
   })();
 
+  // Derive a location label ("Active", "Bench 1", "Bench 2"…) per Pokémon
+  // so the ability button can disambiguate multiple copies of the same card
+  // in play (e.g. two Teal Mask Ogerpon ex, each with its own Teal Dance).
+  const locationOf = (p: PokemonInPlay): string => {
+    if (me.active?.instanceId === p.instanceId) return "Active";
+    const idx = me.bench.findIndex((b) => b.instanceId === p.instanceId);
+    return idx >= 0 ? `Bench ${idx + 1}` : "";
+  };
   const activatableAbilities = [me.active, ...me.bench]
     .filter((p): p is PokemonInPlay => !!p)
     .flatMap((p) =>
       (p.card.abilities ?? [])
-        .map((a, i) => ({ p, a, i }))
+        .map((a, i) => ({ p, a, i, location: locationOf(p) }))
         .filter(({ a, p }) => a.effect && !p.abilityUsedThisTurn),
     );
 
@@ -767,6 +779,10 @@ export default function App() {
         }
       }
     }
+
+    // Hovering an ability button glows the source Pokémon so duplicates are
+    // distinguishable at a glance.
+    if (hoveredAbilitySource) own.add(hoveredAbilitySource);
 
     return { own, opp: opp_, benchHint };
   })();
@@ -1182,6 +1198,7 @@ export default function App() {
         onRetreat={onRetreat}
         onEndTurn={onEndTurn}
         onActivateAbility={onActivateAbility}
+        onHoverAbilitySource={setHoveredAbilitySource}
         pendingTargetActive={
           state.pendingInPlayTarget?.player === viewingPlayer ||
           state.pendingRareCandyChoice?.player === viewingPlayer
@@ -1417,7 +1434,7 @@ interface ActionBarProps {
   statusMsg: string;
   me: GameState["players"]["p1"];
   attacks: { index: number; name: string; damage: number; damageText?: string; cost: string[]; payable: boolean; estimated: number }[];
-  activatable: { p: PokemonInPlay; a: Ability; i: number }[];
+  activatable: { p: PokemonInPlay; a: Ability; i: number; location: string }[];
   stadiumButton?: React.ReactNode;
   canUndo?: boolean;
   onUndo?: () => void;
@@ -1425,6 +1442,7 @@ interface ActionBarProps {
   onRetreat: (i: number) => void;
   onEndTurn: () => void;
   onActivateAbility: (p: PokemonInPlay, i: number) => void;
+  onHoverAbilitySource?: (instanceId: string | null) => void;
   pendingTargetActive?: boolean;
   onCancelTarget?: () => void;
 }
@@ -1443,6 +1461,7 @@ function ActionBar({
   onRetreat,
   onEndTurn,
   onActivateAbility,
+  onHoverAbilitySource,
   pendingTargetActive,
   onCancelTarget,
 }: ActionBarProps) {
@@ -1478,15 +1497,20 @@ function ActionBar({
           <div className="group abilities">
             <div className="group-label">Abilities</div>
             <div className="group-buttons">
-              {activatable.map(({ p, a, i }) => (
+              {activatable.map(({ p, a, i, location }) => (
                 <button
                   key={`${p.instanceId}-${i}`}
                   className="ability"
                   disabled={!myTurn || promoteOpen}
                   onClick={() => onActivateAbility(p, i)}
-                  title={a.text}
+                  onMouseEnter={() => onHoverAbilitySource?.(p.instanceId)}
+                  onMouseLeave={() => onHoverAbilitySource?.(null)}
+                  onFocus={() => onHoverAbilitySource?.(p.instanceId)}
+                  onBlur={() => onHoverAbilitySource?.(null)}
+                  title={`${a.name} — ${p.card.name} (${location})\n\n${a.text}`}
                 >
-                  {a.name} ({p.card.name})
+                  <span className="ability-name">{a.name}</span>
+                  <span className="ability-source">{p.card.name} · {location}</span>
                 </button>
               ))}
             </div>
