@@ -665,6 +665,20 @@ export default function App() {
             <span className="dataset"> · {datasetFormat} {datasetAsOf}</span>
           </div>
         </div>
+        {!preGameOpen && state.phase === "main" && state.winner === null && (
+          <div
+            className={`turn-indicator ${
+              state.activePlayer === viewingPlayer ? "yours" : "theirs"
+            }`}
+          >
+            <span className="turn-label">
+              {state.activePlayer === viewingPlayer
+                ? "YOUR TURN"
+                : `${state.players[state.activePlayer].name.toUpperCase()}'S TURN`}
+            </span>
+            <span className="turn-meta">Turn {state.turn}</span>
+          </div>
+        )}
         <div className="controls-row">
           <label className="field">
             You
@@ -676,7 +690,7 @@ export default function App() {
             />
           </label>
           <label className="field">
-            CPU
+            Opponent
             <DeckSelect
               value={oppDeckId}
               onChange={setOppDeckId}
@@ -692,12 +706,25 @@ export default function App() {
             />
             Open hands
           </label>
-          <button onClick={() => setImportOpen(true)}>Import Deck</button>
-          <button onClick={() => setPreGameOpen(true)}>Change Decks</button>
-          <button onClick={onExportLog} title="Download this game's event log as JSON">
-            Export Log
-          </button>
+          <div className="utility-group" role="group" aria-label="Deck & log utilities">
+            <button className="secondary" onClick={() => setImportOpen(true)}>Import Deck</button>
+            <button className="secondary" onClick={() => setPreGameOpen(true)}>Change Decks</button>
+            <button className="secondary" onClick={onExportLog} title="Download this game's event log as JSON">
+              Export Log
+            </button>
+          </div>
           <button className="primary" onClick={onReset}>New Game</button>
+          <a
+            className="kofi-link"
+            href="https://ko-fi.com/pandabananas"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Support TCGVibes on Ko-fi"
+            aria-label="Support on Ko-fi (opens in new tab)"
+          >
+            <span className="kofi-cup" aria-hidden="true" />
+            Tip
+          </a>
         </div>
       </div>
 
@@ -882,22 +909,6 @@ export default function App() {
          of the play area and Deck/Discard on the opposite side. We keep
          both sides aligned visually (rather than rotating the opponent)
          so clicking and reading feel natural on a screen. */}
-      {/* Bold turn indicator — always shows who's to act. */}
-      {!preGameOpen && state.phase === "main" && state.winner === null && (
-        <div
-          className={`turn-indicator ${
-            state.activePlayer === viewingPlayer ? "yours" : "theirs"
-          }`}
-        >
-          <span className="turn-label">
-            {state.activePlayer === viewingPlayer
-              ? "YOUR TURN"
-              : `${state.players[state.activePlayer].name.toUpperCase()}'S TURN`}
-          </span>
-          <span className="turn-meta">Turn {state.turn}</span>
-        </div>
-      )}
-
       <div className="board">
         <PlayerSide
           state={state}
@@ -1358,7 +1369,6 @@ function ActionBar({
         {stadiumButton}
 
         <div className="group end">
-          <div className="group-label">&nbsp;</div>
           <div className="group-buttons">
             {onUndo && (
               <button

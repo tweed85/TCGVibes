@@ -53,8 +53,8 @@
   50% { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 0 6px rgba(34, 211, 238, 0); }
 }
 @keyframes tcg-attention {
-  0%, 100% { transform: translateX(-50%) scale(1); }
-  50% { transform: translateX(-50%) scale(1.04); }
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
 }
 
 * { box-sizing: border-box; }
@@ -139,6 +139,57 @@ body {
   border-radius: 4px;
   padding: 3px 4px;
   font-size: 12px;
+  flex: 0 0 auto;
+}
+
+/* Clustered "deck & log utility" buttons — Import / Change Decks / Export Log.
+   Group them visually so the eye reads "a row of three setup actions," then
+   a separator gap, then the primary New Game button. */
+.header .utility-group {
+  display: inline-flex;
+  gap: 4px;
+  padding: 2px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Ko-fi tip link in the header. Uses Ko-fi's signature red as a subtle
+   accent, sized like a tab chip so it reads as visible support-the-dev
+   affordance without competing with the primary New Game button. */
+.kofi-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 94, 91, 0.55);
+  background: rgba(255, 94, 91, 0.12);
+  color: #ffb7b5;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-decoration: none;
+  line-height: 1;
+  /* Push to the far right of the controls row so Ko-fi reads as a separate
+     support affordance, not part of the deck-setup cluster. */
+  margin-left: auto;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, transform 0.08s ease;
+}
+.kofi-link:hover {
+  background: #ff5e5b;
+  border-color: #ff5e5b;
+  color: #fff;
+  transform: translateY(-1px);
+}
+.kofi-link:focus-visible { outline: 2px solid #ff5e5b; outline-offset: 2px; }
+.kofi-cup {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  background-color: currentColor;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M3 10h14a3 3 0 0 1 0 6h-1.1A5 5 0 0 1 11 19H8a5 5 0 0 1-5-5V10zm14 5a1 1 0 0 0 0-3h-1v3h1zM8 5c.8-1 1.8-1 2 0s-1.2 1-1 2 1.8 1 2 0-1.2-1-1-2zm4 0c.8-1 1.8-1 2 0s-1.2 1-1 2 1.8 1 2 0-1.2-1-1-2z' fill='black'/></svg>") no-repeat center / contain;
+          mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M3 10h14a3 3 0 0 1 0 6h-1.1A5 5 0 0 1 11 19H8a5 5 0 0 1-5-5V10zm14 5a1 1 0 0 0 0-3h-1v3h1zM8 5c.8-1 1.8-1 2 0s-1.2 1-1 2 1.8 1 2 0-1.2-1-1-2zm4 0c.8-1 1.8-1 2 0s-1.2 1-1 2 1.8 1 2 0-1.2-1-1-2z' fill='black'/></svg>") no-repeat center / contain;
+  flex: 0 0 auto;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -201,22 +252,19 @@ body {
 /* -------------------------------------------------------------------------- */
 
 .turn-indicator {
-  position: fixed;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 20;
-  padding: 6px 14px;
+  /* Inline in the header flow so it never overlays the deck dropdowns or
+     control buttons at wide (fullscreen) widths. */
+  padding: 4px 12px;
   border-radius: 20px;
   font-size: var(--text-base);
   font-weight: 700;
   letter-spacing: 1px;
-  display: flex;
+  display: inline-flex;
   gap: 10px;
   align-items: baseline;
   border: 2px solid transparent;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-  pointer-events: none;
+  flex: 0 0 auto;
   animation: tcg-attention 0.6s ease-out 1;
 }
 .turn-indicator.yours {
@@ -241,14 +289,16 @@ body {
 .board {
   grid-area: board;
   display: grid;
-  /* Stadium lives as a right-side column that spans both player rows, so the
-     Active-above-Active axis is preserved and the Stadium reads as a shared
-     side zone rather than a strip between the two Actives. */
-  grid-template-columns: 1fr 140px;
+  /* Sides take the full board width; the Stadium floats as an overlay pinned
+     to the right, straddling the gap between the two sides. Both the
+     opponent's Active and the player's Active sit directly below/above each
+     other on the center axis, and the benches keep the full width they
+     need. */
+  grid-template-columns: 1fr;
   grid-template-rows: auto auto;
   grid-template-areas:
-    "opp-side stadium"
-    "my-side  stadium";
+    "opp-side"
+    "my-side";
   gap: 8px;
   min-height: 0;
   /* Subtle green felt so the mat reads like a playmat instead of a panel. */
@@ -257,10 +307,16 @@ body {
     var(--panel);
   border-radius: 10px;
   padding: 8px;
+  position: relative; /* anchor for the absolute Stadium overlay */
 }
 
 .side.opponent { grid-area: opp-side; }
 .side.me { grid-area: my-side; }
+/* Leave enough room on the right of each side that the Stadium overlay
+   doesn't obscure the ends of the benches. */
+.side {
+  padding-right: calc(var(--mini-card-w) + 30px);
+}
 
 /* Each side is a 3-row strip:
      back-row   (prizes | meta | deck/discard)
@@ -478,20 +534,36 @@ body {
 /* -------------------------------------------------------------------------- */
 
 .stadium-slot {
-  grid-area: stadium;
+  /* Floating overlay: pinned to the right edge of the board, vertically
+     centered so it sits exactly on the midline between the opponent's side
+     and the player's side. Spans both visually without costing either side
+     any width. */
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  z-index: 3;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 8px;
-  padding: 10px 8px;
+  gap: 6px;
+  padding: 8px 10px;
   min-width: 0;
-  border-left: 2px dashed rgba(124, 58, 237, 0.4);
+  border-radius: 10px;
+  border: 1px dashed rgba(124, 58, 237, 0.45);
+  /* Translucent fill so the underlying side card-layouts remain faintly
+     visible behind the overlay — it reads as a card floating over the mat,
+     not a solid panel. */
   background: linear-gradient(
-    to right,
-    rgba(124, 58, 237, 0.08),
-    transparent 70%
+    180deg,
+    rgba(76, 29, 149, 0.55),
+    rgba(49, 16, 110, 0.55)
   );
+  backdrop-filter: blur(4px);
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(167, 139, 250, 0.12);
 }
 .stadium-card-wrap {
   display: flex;
@@ -598,6 +670,9 @@ body {
   flex-direction: column;
   gap: 4px;
   min-height: 0;
+  /* Subtle top edge so the action bar reads as distinct from the hand
+     strip directly above it. */
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
 }
 
 .action-bar .status-line {
@@ -639,9 +714,11 @@ body {
 
 .action-bar .action-groups {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
-  align-items: flex-start;
+  /* Buttons bottom-align across all groups so the end group (no label)
+     lines up with the button rows in the other groups. */
+  align-items: flex-end;
 }
 .action-bar .group {
   display: flex;
@@ -657,7 +734,7 @@ body {
 }
 .action-bar .group .group-buttons {
   display: flex;
-  gap: 4px;
+  gap: 3px;
   flex-wrap: wrap;
 }
 .action-bar .group.abilities .group-label { color: var(--purple); }
@@ -1007,6 +1084,19 @@ button.primary:hover:not(:disabled) {
   background: var(--accent-hi);
   border-color: var(--accent-hi);
 }
+/* Muted variant for secondary / utility buttons (Import Deck, Change Decks,
+   Export Log). Reads as lower in the hierarchy than the amber primary. */
+button.secondary {
+  background: transparent;
+  border-color: rgba(148, 163, 184, 0.35);
+  color: var(--muted);
+  font-weight: 500;
+}
+button.secondary:hover:not(:disabled) {
+  background: var(--panel-2);
+  border-color: var(--panel-3);
+  color: var(--text);
+}
 
 /* Winner overlay. */
 .winner {
@@ -1040,8 +1130,9 @@ button.primary:hover:not(:disabled) {
   }
   .header h1 { font-size: 14px; }
   .header .meta { font-size: 10px; }
-  /* Keep the side Stadium column but narrow it so bench keeps its width. */
-  .board { grid-template-columns: 1fr 110px; }
+  /* Narrower padding reservation so bench keeps width on ~tablet widths. */
+  .side { padding-right: calc(var(--mini-card-w) + 18px); }
+  .stadium-slot { right: 8px; padding: 6px 8px; }
 }
 
 /* Short viewports: keep things tight vertically. */
@@ -1075,6 +1166,7 @@ button.primary:hover:not(:disabled) {
   .header .meta { font-size: 10px; }
   .header .controls-row { gap: 6px; width: 100%; }
   .header select { font-size: 11px; padding: 2px 3px; max-width: 110px; }
+  .kofi-link { padding: 4px 8px; font-size: var(--text-xs); }
 
   .side {
     gap: 6px;
@@ -1136,25 +1228,29 @@ button.primary:hover:not(:disabled) {
     min-height: var(--mini-card-h);
   }
 
-  /* Collapse the right-side Stadium column back to a full-width strip below
-     the player rows on narrow screens. The side column would crush bench
-     content otherwise. */
+  /* On phone widths, the floating overlay would cover too much bench — drop
+     it back inline as a strip between the two sides and let sides use full
+     width. */
+  .side { padding-right: 4px; }
   .board {
-    grid-template-columns: 1fr;
     grid-template-rows: auto auto auto;
     grid-template-areas:
       "opp-side"
-      "my-side"
-      "stadium";
+      "stadium"
+      "my-side";
   }
   .stadium-slot {
-    padding: 2px 4px;
-    min-height: 0;
+    position: static;
+    transform: none;
     flex-direction: row;
-    border-left: none;
-    border-top: 1px dashed rgba(124, 58, 237, 0.4);
-    border-bottom: 1px dashed rgba(124, 58, 237, 0.4);
-    background: linear-gradient(to right, transparent, rgba(124, 58, 237, 0.06), transparent);
+    padding: 4px 6px;
+    border: none;
+    border-top: 1px dashed rgba(124, 58, 237, 0.35);
+    border-bottom: 1px dashed rgba(124, 58, 237, 0.35);
+    background: linear-gradient(to right, transparent, rgba(124, 58, 237, 0.12), transparent);
+    backdrop-filter: none;
+    box-shadow: none;
+    border-radius: 0;
   }
   .stadium-card-wrap { flex-direction: row; gap: 6px; }
   .stadium-caption { font-size: 9px; }
@@ -1512,18 +1608,28 @@ button.primary:hover:not(:disabled) {
 .coin-modal .modal-actions { justify-content: center; gap: 12px; }
 .pregame-grid {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  /* minmax(0, 1fr) on both flanks so the slots size equally and don't let
+     their longest note expand past the grid cell (which was pushing the
+     right side out of alignment). */
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   gap: 16px;
-  align-items: center;
+  align-items: start;
   padding: 12px 0;
 }
-.pregame-slot { display: flex; flex-direction: column; gap: 6px; }
+.pregame-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  align-items: stretch;
+}
 .pregame-slot-label {
   font-size: 11px;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.6px;
   font-weight: 700;
+  text-align: left;
 }
 .pregame-slot select {
   background: var(--panel-2);
@@ -1532,20 +1638,44 @@ button.primary:hover:not(:disabled) {
   border-radius: 4px;
   padding: 6px 8px;
   font-size: 13px;
+  /* Fill the slot column so both sides align flush to their cell edges. */
+  width: 100%;
+  min-width: 0;
 }
-.pregame-slot-note { font-size: 10px; color: var(--muted); }
+.pregame-slot-note {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.35;
+  /* Let long deck descriptions wrap inside the cell instead of overflowing
+     to the right. */
+  overflow-wrap: break-word;
+}
 .pregame-vs {
   font-size: 14px;
   color: var(--accent);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 1px;
+  align-self: center;
+  white-space: nowrap;
+  /* Nudge the divider down so it visually sits between the two selects,
+     not between the two uppercase labels. */
+  padding-top: 22px;
 }
 .pregame-options {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 8px 0;
+  padding: 10px 0;
   border-top: 1px solid var(--panel-2);
+  flex-wrap: wrap;
 }
+/* Whatever left-side content we have (toggle in vs-CPU mode, muted hint in
+   local mode) claims the remaining space so "Import Deck…" floats to the
+   right edge without a yawning gap on short labels. */
+.pregame-options > :first-child { flex: 1 1 auto; min-width: 0; }
+.pregame-options > button { margin-left: auto; }
+/* Pre-game's Start Game button gets its own row of modal-actions; center it
+   so single-button rows don't leave asymmetric whitespace on the right. */
+.pregame-modal .modal-actions { justify-content: flex-end; }
+.pregame-modal .modal-actions .primary { min-width: 160px; }
