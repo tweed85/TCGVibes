@@ -287,7 +287,11 @@ function attackValue(
   const dmg = estimateDamage(state, owner, attacker, move, defender);
   const cost = Math.max(1, move.cost.length);
   let v = dmg + dmg / cost; // prefer efficient attacks
-  // Self-damage hurts (next turn we might get KO'd at reduced HP).
+  const defMax = defender ? effectiveMaxHp(defender, state) : 0;
+  const isOHKO = !!defender && dmg > 0 && defender.damage + dmg >= defMax;
+  // Self-damage / self-discard / self-locks are negatives — opening value lost.
+  let hasSelfLock = false;
+  let hasSetupEffect = false;
   for (const e of move.effects ?? []) {
     if (e.kind === "selfDamage") v -= e.damage * 0.7;
     if (e.kind === "discardOwnEnergy") v -= e.count * 15; // losing setup hurts
@@ -295,12 +299,34 @@ function attackValue(
     if (e.kind === "benchSnipe") v += e.damage * 1.5;
     if (e.kind === "applyStatus" && e.target === "defender") v += 15;
     if (e.kind === "heal") v += e.amount * 0.3;
+    if (e.kind === "selfCantAttackNextTurn") hasSelfLock = true;
+    if (e.kind === "selfCantUseAttackNextTurn") hasSelfLock = true;
+    // Setup attacks (energy acceleration to bench / self) get a bonus that
+    // makes the AI prefer them over a big non-KO swing when we have follow-up.
+    if (e.kind === "attachNFromDiscardToBench") hasSetupEffect = true;
+    if (e.kind === "searchEnergyAttachBenchType") hasSetupEffect = true;
+    if (e.kind === "callForFamily") hasSetupEffect = true;
   }
   // OHKO scales hugely because it ends the defender's next turn of offense
-  // and takes prizes.
-  if (defender && dmg > 0 && defender.damage + dmg >= effectiveMaxHp(defender, state)) {
-    v += 200 + prizeValue(defender.card) * 80;
+  // and takes prizes. Self-locks don't matter much on a KO (defender's gone).
+  if (isOHKO) {
+    v += 200 + prizeValue(defender!.card) * 80;
+    return v;
   }
+  // Non-KO path: self-lock is a real cost because we used this turn to deal
+  // partial damage AND can't follow up with this attack next turn.
+  if (hasSelfLock) v -= Math.max(40, dmg * 0.4);
+  // "Setup-KO line": if this attack doesn't OHKO but chips the defender
+  // below the OHKO threshold for a typical 120-damage follow-up swing, give
+  // it a moderate bonus — matches the Aura Jab → Mega Brave flow.
+  if (defender && !isOHKO && dmg > 0) {
+    const damageAfter = defender.damage + dmg;
+    const remaining = defMax - damageAfter;
+    if (remaining <= 150) v += 40;  // clearly in one-shot range next turn
+    else if (remaining <= 220) v += 20; // Mega Brave / Wild Press range
+  }
+  // Setup effects (attach-from-discard etc.) have lasting value beyond damage.
+  if (hasSetupEffect) v += 35;
   return v;
 }
 

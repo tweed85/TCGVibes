@@ -38,7 +38,7 @@ import { effectiveAttacks, effectiveMaxHp, estimateAttackDamage } from "./engine
 import type { ActionResult } from "./engine/actions";
 import type { Ability, Card, GameState, PlayerId, PokemonInPlay } from "./engine/types";
 import { buildDeck, validatedDeckSpecs } from "./data/decks";
-import { datasetAsOf, datasetFormat } from "./data/cards";
+import { allCards, datasetAsOf, datasetFormat } from "./data/cards";
 import {
   buildDeckFromEntries,
   importDecklist,
@@ -179,6 +179,7 @@ export default function App() {
   const [statusMsg, setStatusMsg] = useState<string>("");
   const [openHands, setOpenHands] = useState(savedSettings.openHands ?? false);
   const [importOpen, setImportOpen] = useState(false);
+  const [buildOpen, setBuildOpen] = useState(false);
   // Gate the game behind a pre-game deck selection step. Nothing runs (AI
   // setup, turn-1 draw, opening modal) until the player clicks Start.
   const [preGameOpen, setPreGameOpen] = useState(true);
@@ -388,6 +389,7 @@ export default function App() {
         if (zoomCard) { setZoomCard(null); ev.preventDefault(); return; }
         if (discardViewer) { setDiscardViewer(null); ev.preventDefault(); return; }
         if (importOpen) { setImportOpen(false); ev.preventDefault(); return; }
+        if (buildOpen) { setBuildOpen(false); ev.preventDefault(); return; }
         // Other modals (handoff, setup, pick, coin flip) are intentionally
         // non-dismissible via Esc to avoid accidental turn skips.
         return;
@@ -400,6 +402,7 @@ export default function App() {
         state.pendingHandReveal ||
         discardViewer ||
         importOpen ||
+        buildOpen ||
         state.phase === "coinFlip" ||
         (state.phase === "setup" && !state.players[viewingPlayer].setupComplete) ||
         state.phase === "promoteActive" ||
@@ -707,6 +710,7 @@ export default function App() {
             Open hands
           </label>
           <div className="utility-group" role="group" aria-label="Deck & log utilities">
+            <button className="secondary" onClick={() => setBuildOpen(true)}>Build Deck</button>
             <button className="secondary" onClick={() => setImportOpen(true)}>Import Deck</button>
             <button className="secondary" onClick={() => setPreGameOpen(true)}>Change Decks</button>
             <button className="secondary" onClick={onExportLog} title="Download this game's event log as JSON">
@@ -875,6 +879,20 @@ export default function App() {
             if (assignTo === "me" || assignTo === "both") setMyDeckId(id);
             if (assignTo === "opp" || assignTo === "both") setOppDeckId(id);
             setImportOpen(false);
+          }}
+        />
+      )}
+
+      {buildOpen && (
+        <DeckBuilderModal
+          existingNames={imports.map((d) => d.name)}
+          onClose={() => setBuildOpen(false)}
+          onSave={(name, entries, deck, assignTo) => {
+            const id = `bld-${Date.now()}`;
+            setImports((prev) => [...prev, { id, name, entries, cards: deck }]);
+            if (assignTo === "me" || assignTo === "both") setMyDeckId(id);
+            if (assignTo === "opp" || assignTo === "both") setOppDeckId(id);
+            setBuildOpen(false);
           }}
         />
       )}
@@ -1667,6 +1685,333 @@ function CoinResultBanner({
         <p className="modal-hint">
           You called <b>{guess}</b>. CPU won the toss — they'll choose who goes first.
         </p>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+//  Deck Builder modal — in-app card browser + deck construction
+// ---------------------------------------------------------------------------
+
+// Inverse of the LIMITLESS_TO_SET_CODE map inside decklistParser; exported
+// entries use the limitless codes so a decklist round-trips legibly.
+const SET_CODE_TO_LIMITLESS: Record<string, string> = {
+  sv4pt5: "PAF",
+  sv5: "TEF",
+  sv6: "TWM",
+  sv6pt5: "SFA",
+  sv7: "SCR",
+  sv8: "SSP",
+  sv8pt5: "PRE",
+  sv9: "JTG",
+  sv10: "DRI",
+  zsv10pt5: "BLK",
+  rsv10pt5: "WHT",
+  me1: "MEG",
+  me2: "PFL",
+  me2pt5: "ASC",
+  me3: "POR",
+  sve: "SVE",
+  svp: "SVP",
+};
+
+function toLimitlessCode(setCode: string | undefined): string {
+  if (!setCode) return "";
+  return SET_CODE_TO_LIMITLESS[setCode] ?? setCode.toUpperCase();
+}
+
+interface DeckBuilderModalProps {
+  existingNames: string[];
+  onClose: () => void;
+  onSave: (
+    name: string,
+    entries: DeckListEntry[],
+    cards: Card[],
+    assignTo: "me" | "opp" | "both" | "none",
+  ) => void;
+}
+
+type BuilderFilter = {
+  search: string;
+  supertype: "all" | "Pokémon" | "Trainer" | "Energy";
+  energyType: string; // "" = any; else a specific EnergyType string
+  subtype: string;    // "" = any; else a specific subtype ("Basic", "Stage 1", "ex", "Supporter", "Item", "Stadium", "Pokémon Tool")
+};
+
+function DeckBuilderModal({ existingNames, onClose, onSave }: DeckBuilderModalProps) {
+  const [name, setName] = useState("My Deck");
+  const [filter, setFilter] = useState<BuilderFilter>({
+    search: "",
+    supertype: "all",
+    energyType: "",
+    subtype: "",
+  });
+  // Selected printings: key = card.id, value = copies.
+  const [selected, setSelected] = useState<Map<string, number>>(new Map());
+  const [showCount, setShowCount] = useState(80);
+
+  const selectedCards: Array<{ card: Card; count: number }> = useMemo(() => {
+    const out: Array<{ card: Card; count: number }> = [];
+    for (const [id, count] of selected.entries()) {
+      const card = allCards.find((c) => c.id === id);
+      if (card) out.push({ card, count });
+    }
+    out.sort((a, b) => {
+      const order = (c: Card) =>
+        c.supertype === "Pokémon" ? 0 : c.supertype === "Trainer" ? 1 : 2;
+      return order(a.card) - order(b.card) || a.card.name.localeCompare(b.card.name);
+    });
+    return out;
+  }, [selected]);
+
+  const totalCount = useMemo(
+    () => selectedCards.reduce((n, s) => n + s.count, 0),
+    [selectedCards],
+  );
+
+  const groups = useMemo(() => {
+    let pk = 0, tr = 0, en = 0;
+    for (const s of selectedCards) {
+      if (s.card.supertype === "Pokémon") pk += s.count;
+      else if (s.card.supertype === "Trainer") tr += s.count;
+      else en += s.count;
+    }
+    return { pk, tr, en };
+  }, [selectedCards]);
+
+  // Rule validation — reuse the import pipeline's validator.
+  const validation = useMemo(() => {
+    const entries: DeckListEntry[] = selectedCards.map(({ card, count }) => ({
+      count,
+      name: card.name,
+      limitlessSet: toLimitlessCode(card.setCode),
+      number: card.number ?? "",
+    }));
+    const built = buildDeckFromEntries(entries);
+    return {
+      entries,
+      deck: built.deck,
+      violations: built.ruleViolations,
+    };
+  }, [selectedCards]);
+
+  const filteredCards = useMemo(() => {
+    const q = filter.search.trim().toLowerCase();
+    const out: Card[] = [];
+    for (const c of allCards) {
+      if (filter.supertype !== "all" && c.supertype !== filter.supertype) continue;
+      if (q && !c.name.toLowerCase().includes(q)) continue;
+      if (filter.subtype) {
+        const subs = (c as { subtypes?: string[] }).subtypes ?? [];
+        if (!subs.includes(filter.subtype)) continue;
+      }
+      if (filter.energyType) {
+        const et = filter.energyType;
+        if (c.supertype === "Pokémon") {
+          if (!c.types.includes(et as typeof c.types[number])) continue;
+        } else if (c.supertype === "Energy") {
+          if (!c.provides.includes(et as typeof c.provides[number])) continue;
+        } else {
+          continue; // Trainers don't have an energy type.
+        }
+      }
+      out.push(c);
+    }
+    return out;
+  }, [filter]);
+
+  const displayCards = filteredCards.slice(0, showCount);
+
+  function nameExists(n: string): boolean {
+    return existingNames.some((e) => e.toLowerCase() === n.trim().toLowerCase());
+  }
+
+  function changeCount(cardId: string, delta: number) {
+    setSelected((prev) => {
+      const next = new Map(prev);
+      const cur = next.get(cardId) ?? 0;
+      const target = Math.max(0, cur + delta);
+      if (target === 0) next.delete(cardId);
+      else next.set(cardId, target);
+      return next;
+    });
+  }
+
+  const canSave =
+    name.trim().length > 0 &&
+    validation.violations.length === 0 &&
+    validation.deck.length === 60 &&
+    !nameExists(name);
+
+  const saveAndAssign = (assignTo: "me" | "opp" | "both" | "none") => {
+    onSave(name.trim(), validation.entries, validation.deck, assignTo);
+  };
+
+  // How many copies of each card name are already selected (for the 4-cap hint).
+  const copiesByName = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const s of selectedCards) m.set(s.card.name, (m.get(s.card.name) ?? 0) + s.count);
+    return m;
+  }, [selectedCards]);
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal deck-builder-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Build a Deck</h2>
+          <span className={`pick-counter${totalCount === 60 ? " good" : totalCount > 60 ? " over" : ""}`}>
+            {totalCount}/60 · P {groups.pk} · T {groups.tr} · E {groups.en}
+          </span>
+        </div>
+
+        <div className="builder-toolbar">
+          <label className="deck-name-field">
+            Deck name
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="My Deck"
+            />
+          </label>
+          <input
+            className="builder-search"
+            type="text"
+            value={filter.search}
+            onChange={(e) => setFilter((f) => ({ ...f, search: e.target.value }))}
+            placeholder="Search card name…"
+          />
+          <select
+            value={filter.supertype}
+            onChange={(e) => setFilter((f) => ({ ...f, supertype: e.target.value as BuilderFilter["supertype"] }))}
+          >
+            <option value="all">All types</option>
+            <option value="Pokémon">Pokémon</option>
+            <option value="Trainer">Trainer</option>
+            <option value="Energy">Energy</option>
+          </select>
+          <select
+            value={filter.subtype}
+            onChange={(e) => setFilter((f) => ({ ...f, subtype: e.target.value }))}
+          >
+            <option value="">Any subtype</option>
+            <option value="Basic">Basic</option>
+            <option value="Stage 1">Stage 1</option>
+            <option value="Stage 2">Stage 2</option>
+            <option value="ex">ex</option>
+            <option value="MEGA">Mega</option>
+            <option value="Tera">Tera</option>
+            <option value="Supporter">Supporter</option>
+            <option value="Item">Item</option>
+            <option value="Stadium">Stadium</option>
+            <option value="Pokémon Tool">Tool</option>
+            <option value="ACE SPEC">ACE SPEC</option>
+          </select>
+          <select
+            value={filter.energyType}
+            onChange={(e) => setFilter((f) => ({ ...f, energyType: e.target.value }))}
+          >
+            <option value="">Any energy</option>
+            <option value="Grass">Grass</option>
+            <option value="Fire">Fire</option>
+            <option value="Water">Water</option>
+            <option value="Lightning">Lightning</option>
+            <option value="Psychic">Psychic</option>
+            <option value="Fighting">Fighting</option>
+            <option value="Darkness">Darkness</option>
+            <option value="Metal">Metal</option>
+            <option value="Dragon">Dragon</option>
+            <option value="Colorless">Colorless</option>
+          </select>
+        </div>
+
+        <div className="builder-body">
+          <div className="builder-results">
+            <div className="builder-results-meta">
+              Showing {displayCards.length} of {filteredCards.length} matching
+            </div>
+            <div className="builder-grid">
+              {displayCards.map((c) => {
+                const count = selected.get(c.id) ?? 0;
+                const nameCount = copiesByName.get(c.name) ?? 0;
+                const isBasicEnergy =
+                  c.supertype === "Energy" && (c.subtypes ?? []).includes("Basic");
+                const atFourCap = !isBasicEnergy && nameCount >= 4;
+                return (
+                  <div
+                    key={c.id}
+                    className={`builder-card${count > 0 ? " picked" : ""}${atFourCap && count === 0 ? " capped" : ""}`}
+                    onClick={() => {
+                      if (atFourCap) return;
+                      changeCount(c.id, 1);
+                    }}
+                    title={atFourCap ? `Already 4× ${c.name}` : `Add ${c.name}`}
+                  >
+                    <CardView card={c} />
+                    {count > 0 && <span className="builder-count">×{count}</span>}
+                  </div>
+                );
+              })}
+            </div>
+            {showCount < filteredCards.length && (
+              <button
+                className="secondary builder-more"
+                onClick={() => setShowCount((n) => n + 80)}
+              >
+                Show {Math.min(80, filteredCards.length - showCount)} more
+              </button>
+            )}
+          </div>
+
+          <div className="builder-selected">
+            <div className="builder-selected-header">Your deck</div>
+            {selectedCards.length === 0 ? (
+              <div className="muted" style={{ padding: 12, fontSize: 12 }}>
+                No cards picked yet. Click cards on the left to add.
+              </div>
+            ) : (
+              <ul className="builder-selected-list">
+                {selectedCards.map(({ card, count }) => (
+                  <li key={card.id}>
+                    <span className="bsel-count">{count}×</span>
+                    <span className="bsel-name" title={card.name}>{card.name}</span>
+                    <span className="bsel-printing">{toLimitlessCode(card.setCode)} {card.number}</span>
+                    <button
+                      className="bsel-btn"
+                      onClick={() => changeCount(card.id, -1)}
+                      title="Remove one"
+                    >−</button>
+                    <button
+                      className="bsel-btn"
+                      onClick={() => changeCount(card.id, 1)}
+                      title="Add one"
+                    >+</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+
+        {validation.violations.length > 0 && (
+          <div className="builder-violations">
+            {validation.violations.map((v, i) => <div key={i}>⚠ {v}</div>)}
+          </div>
+        )}
+        {nameExists(name) && (
+          <div className="builder-violations">⚠ A deck named "{name.trim()}" already exists.</div>
+        )}
+
+        <div className="modal-actions">
+          <button onClick={onClose}>Cancel</button>
+          <button disabled={!canSave} onClick={() => saveAndAssign("none")}>Save only</button>
+          <button disabled={!canSave} onClick={() => saveAndAssign("me")}>Save + Use as You</button>
+          <button disabled={!canSave} onClick={() => saveAndAssign("opp")}>Save + Use as Opp</button>
+          <button className="primary" disabled={!canSave} onClick={() => saveAndAssign("both")}>
+            Save + Use for Both
+          </button>
+        </div>
       </div>
     </div>
   );
