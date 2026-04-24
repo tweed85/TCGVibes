@@ -805,6 +805,13 @@ function pickBestAttack(state: GameState, player: PlayerId): { index: number; va
   const pl = state.players[player];
   if (!pl.active) return null;
   const atk = pl.active;
+  // If this Pokémon can't attack at all this turn (Riolu's Accelerating Stab
+  // self-lock, confusion sleep, paralysis, etc.), bail — no point scoring.
+  if (atk.cantAttackUntilTurn !== undefined && state.turn <= atk.cantAttackUntilTurn) {
+    return null;
+  }
+  // Per-attack locks (Riolu/Mega Brave-style "can't use <name> next turn").
+  const perAttackLock = (atk as typeof atk & { cantUseAttacksUntilTurn?: Record<string, number> }).cantUseAttacksUntilTurn;
   const provided = energyProvidedBy(atk);
   const defender = state.players[opponentOf(player)].active;
   let best: { index: number; value: number } | null = null;
@@ -812,6 +819,10 @@ function pickBestAttack(state: GameState, player: PlayerId): { index: number; va
     const move = atk.card.attacks[i];
     const cost = effectiveAttackCost(state, atk, move.cost);
     if (!canPayCost(provided, cost)) continue;
+    // Skip attacks that are locked for this turn by a prior self-lock effect.
+    if (perAttackLock && perAttackLock[move.name] !== undefined && state.turn <= perAttackLock[move.name]) {
+      continue;
+    }
     const v = attackValue(state, player, atk, move, defender);
     if (!best || v > best.value) best = { index: i, value: v };
   }
@@ -1266,6 +1277,9 @@ function tryAttack(state: GameState, player: PlayerId): boolean {
   const pick = pickBestAttack(state, player);
   if (!pick) return false;
 
-  attack(state, player, pick.index);
-  return true;
+  // Respect the action's return value: if attack() rejects the play (sleep
+  // flip mid-resolve, precondition change between pick and call, etc.) we
+  // must NOT report success or takeAiTurn will exit without ending the turn.
+  const result = attack(state, player, pick.index);
+  return result.ok;
 }
