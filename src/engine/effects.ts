@@ -373,6 +373,70 @@ export function resolveAttackEffects(
         });
         break;
       }
+
+      case "callForFamily": {
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          const slotsAvailable = 5 - pl.bench.length;
+          const max = Math.min(e.max, slotsAvailable);
+          if (max <= 0) return;
+          const rest: typeof pl.deck = [];
+          let benched = 0;
+          for (const c of pl.deck) {
+            if (
+              benched < max &&
+              c.supertype === "Pokémon" &&
+              c.subtypes.includes("Basic")
+            ) {
+              // Defer the instance creation to a late-bound helper so we
+              // don't need rules.ts imported here.
+              pl.bench.push({
+                instanceId: `cff-${Date.now()}-${Math.random()}`,
+                card: c,
+                damage: 0,
+                attachedEnergy: [],
+                evolvedFrom: [],
+                tools: [],
+                playedThisTurn: true,
+                evolvedThisTurn: false,
+                statuses: [],
+                abilityUsedThisTurn: false,
+              });
+              benched++;
+            } else {
+              rest.push(c);
+            }
+          }
+          pl.deck = rest;
+          // Shuffle afterwards.
+          const arr = pl.deck;
+          for (let i = arr.length - 1; i > 0; i--) {
+            const j = state.rng.int(i + 1);
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+          }
+          if (benched > 0) {
+            logEvent(state, ctx.attackerOwner, `Call for Family benches ${benched} Basic Pokémon.`);
+          }
+        });
+        break;
+      }
+
+      case "flipUntilTailsPerHeads": {
+        let heads = 0;
+        // Cap at 10 to keep it bounded.
+        for (let i = 0; i < 10; i++) {
+          const h = flipCoin(state, `${ctx.move.name} geometric flip`);
+          if (!h) break;
+          heads++;
+        }
+        damage += e.perHeads * heads;
+        logEvent(
+          state,
+          "system",
+          `${ctx.move.name}: ${heads} consecutive heads → +${e.perHeads * heads}.`,
+        );
+        break;
+      }
       default: {
         // Exhaustiveness guard — unknown effect kinds are preserved on the
         // Attack.text for display and skipped here.
@@ -456,6 +520,10 @@ export function describeEffects(effects: AttackEffect[] | undefined): string {
           return `mill opp ${e.count}`;
         case "discardOppTools":
           return "discard opp tools";
+        case "callForFamily":
+          return `bench up to ${e.max} Basics`;
+        case "flipUntilTailsPerHeads":
+          return `geom ${e.perHeads}/heads`;
       }
     })
     .join(", ");

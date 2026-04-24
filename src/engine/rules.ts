@@ -9,7 +9,13 @@ import type {
   PokemonInPlay,
   StatusCondition,
 } from "./types";
-import { effectiveMaxHp, isStatusImmune, poisonExtraCounters, prizeReductionFromTools } from "./ongoingEffects";
+import {
+  effectiveMaxHp,
+  isStatusImmune,
+  poisonExtraCounters,
+  prizeReductionFromTools,
+  toolOnKoActions,
+} from "./ongoingEffects";
 import type { Rng } from "./rng";
 
 let instanceCounter = 0;
@@ -477,6 +483,46 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
   const owner = state.players[ownerId];
   if (!owner.active) return;
   const ko = owner.active;
+  // Resolve KO-triggered Tool effects BEFORE the KO'd card goes to discard,
+  // so the Tool is still "attached" for any condition checks. These effects
+  // take place from the KO'd player's perspective.
+  for (const act of toolOnKoActions(state, ko)) {
+    if (act.kind === "searchDeckAnyN") {
+      // Amulet of Hope — grab the top N cards (AI-style auto-pick; the real
+      // rule is search, but we approximate for speed and no interactive pick
+      // is available mid-KO).
+      let taken = 0;
+      for (let i = 0; i < act.count; i++) {
+        const c = owner.deck.shift();
+        if (!c) break;
+        owner.hand.push(c);
+        taken++;
+      }
+      if (taken > 0) {
+        logEvent(state, ownerId, `Amulet of Hope: takes ${taken} card(s) from deck.`);
+      }
+      // Shuffle afterwards per the card text.
+      const arr = owner.deck;
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = state.rng.int(i + 1);
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    } else if (act.kind === "moveEnergyToBench") {
+      // Heavy Baton — move up to 4 Energy from the KO'd Pokémon to a Benched Pokémon.
+      const target = owner.bench[0];
+      if (target) {
+        let moved = 0;
+        while (moved < act.max && ko.attachedEnergy.length > 0) {
+          const [e] = ko.attachedEnergy.splice(0, 1);
+          target.attachedEnergy.push(e);
+          moved++;
+        }
+        if (moved > 0) {
+          logEvent(state, ownerId, `Heavy Baton moves ${moved} Energy to ${target.card.name}.`);
+        }
+      }
+    }
+  }
   const basePrizes = prizeValue(ko.card);
   const prizes = Math.max(0, basePrizes - prizeReductionFromTools(ko));
   if (prizes !== basePrizes) {

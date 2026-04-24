@@ -87,39 +87,93 @@ src/
 
 ## Effect coverage across the 2,693-card pool
 
-- **Attacks (3,373 total)** — 562 (17%) auto-wired. Patterns: flipHeadsBonus (55),
-  flipTailsFizzle (21), flipHeadsDouble, perAttachedEnergy (33), benchSnipe (9),
-  selfDamage (93), applyStatus (176), heal (52), discardOwnEnergy (88),
-  drawCards (39).
-- **Abilities (505 total; 179 activated)** — 37 auto-wired. Patterns: drawOne,
-  drawTwo, healSelf, searchBasicEnergy, attachEnergyFromHand.
-- **Trainers (399 total)** — staples wired: Professor's Research-style
-  drawUntilSeven (7), Buddy-Buddy Poffin (5), Ultra Ball (3), Boss's Orders (3),
-  Rare Candy (2 — interactive chooser still TODO), Potion, Energy Search.
+**Attack effects (3,373 total instances)** — ~25 kinds wired:
+flipHeadsBonus, flipTailsFizzle, flipHeadsDouble, flipMultiCoinsPerHeads,
+flipUntilTailsPerHeads, perAttachedEnergy, perFriendlyBench,
+perOpponentBench, perBothBench, perDamageCounterOnSelf,
+perDamageCounterOnDefender, perEnergyOnDefender, perPrizeOppTaken,
+benchSnipe, snipeOne, selfDamage, applyStatus, heal, discardOwnEnergy,
+drawCards, blockOppItemsNextTurn, selfCantAttackNextTurn,
+defenderCantRetreatNextTurn, selfDamageReductionNextTurn, switchOutOpponent,
+selfSwitch, discardOppEnergy, flipHeadsDiscardOppEnergy, healEachOwnPokemon,
+discardTopOfOppDeck, discardOppTools, callForFamily.
+
+**Abilities** (505 total; 179 activated-once-per-turn):
+- Activated (wired by name/pattern): drawOne, drawTwo, drawN, healSelf,
+  healAny, searchBasicEnergy, attachEnergyFromHand,
+  attachEnergyFromDiscardToSelf, searchDeckAnyCard (Thwackey conditional),
+  searchDeckPokemon, switchWithBench, shuffleSelfIntoDeck (Abra, Dudunsparce),
+  peek2Top (Drakloak), oppShuffleHandAndDrawN (Gothitelle),
+  attackBonusThisTurnSelfDamage (Feraligatr).
+- Triggered-on-evolve: Jewel Seeker (Noctowl + Tera gate), Psychic Draw
+  (Alakazam/Kadabra), Heave-Ho Catcher (Hariyama), Prison Panic
+  (Brambleghast), Energized Steps (Grumpig), Cast-Off Shell (Ninjask),
+  Multiplying Cocoon (Silcoon), Haphazard Hammer (Tinkatuff),
+  Emergency Evolution (Pidove).
+
+**Trainers (399 total)** — ~60+ effects wired across Items, Supporters,
+Stadiums, Tools. Coverage includes: all 6 preset-deck staples, discard
+recovery (Night Stretcher, Energy Retrieval, Lana's Aid, Tarragon),
+search (Nest/Poké/Master/Ultra Ball, Poffin, Tera Orb, Mega Signal, Hop's
+Bag, Fighting Gong, TM Machine, etc.), heals (Potion, Super Potion,
+Arven's Sandwich, Lumiose Galette, Jumbo Ice Cream, Cook, Pokémon Center
+Lady, Jacinthe, Clemont's, Fennel, Bianca's Devotion, Poké Vital A),
+disruption (Enhanced/Crushing Hammer, Hand Trimmer, Hole-Digging Shovel,
+Tool Scrapper, Xerosic's Machinations, Ruffian, Eri, Dangerous Laser),
+gusts (Boss's Orders, Pokémon Catcher, Prime Catcher, Repel, Lisia's
+Appeal), turn-scoped (Black Belt's Training, Premium Power Pro, Jasmine's
+Gaze, Iron Defender), Rare Candy (interactive Stage-2 chooser).
+
+**Stadiums (42 total)** — 12+ passives wired:
+Lively Stadium, Gravity Mountain, Full Metal Lab, Granite Cave,
+Neutralization Zone, Postwick, N's Castle, Paradise Resort, Jamming
+Tower, Team Rocket's Watchtower, Area Zero Underdepths, Festival
+Grounds, Battle Cage, Risky Ruins, Perilous Jungle, Dizzying Valley,
+Forest of Vitality, Nighttime Mine.
+
+**Tools (47 total)** — ~18 wired:
+HP: Hero's Cape, Cynthia's Power Weight, Ancient Booster Energy Capsule.
+Retreat: Air Balloon, Rescue Board, Future Booster Energy Capsule.
+Damage boost: Maximum Belt, Brave Bangle, Light Ball, Hop's Choice Band,
+Binding Mochi.
+Berry reductions + auto-discard: Occa, Passho, Babiri, Colbur, Payapa,
+Haban. Thick Scale (Dragon).
+Cost: Counter Gain, Sparkling Crystal.
+On-damage: Lucky Helmet, Punk Helmet, Team Rocket's Hypnotizer, Deluxe
+Bomb.
+KO-triggered: Survival Brace (damage cap), Lillie's Pearl (-1 prize),
+Amulet of Hope (search 3), Heavy Baton (Energy move on retreat-cost-4 KO).
+End-of-turn: Powerglass.
+
+## Test suite
+
+Vitest — **111 tests across 6 files** in `src/engine/__tests__/` and
+`src/data/__tests__/`. Covers energy-cost matching, Stadium+Tool
+passive modifiers, full-game setup+coin-flip+checkup flow, trainer-effect
+detection against the live dataset, and attack-text pattern detection for
+every wired AttackEffect kind.
+
+Run with `npm run test` or watch mode `npm run test:watch`.
 
 ## Known gaps (intentional MVP scope)
 
-Displayed-but-not-evaluated effects the engine accepts in stride:
-- Ultra Ball enforces its "discard 2" cost but auto-picks the first 2 hand
-  cards (no chooser yet)
-- Rare Candy needs an interactive Stage-2 chooser UI
-- Stadium ongoing effects: HP boosts wired (Lively +30 Basic, Gravity
-  Mountain -30 Stage 2). Not yet wired: once-per-turn Stadium activated
-  effects (Lumiose City search, Levincia energy recovery, etc.), damage
-  reduction (Full Metal Lab, Granite Cave), bench-size changes (Area Zero)
-- Tool ongoing effects: HP boosts (Hero's Cape +100, Cynthia's Power Weight
-  +70 for Cynthia's Pokémon, Ancient Booster +60 for Ancient) and retreat
-  reductions (Air Balloon -CC, Rescue Board -C, Future Booster for Future)
-  wired. Not yet wired: damage reduction Tools (Berries, Sacred Charm,
-  Thick Scale), KO-triggered Tools (Amulet of Hope, Lucky Helmet, Survival
-  Brace), damage-boost Tools (Maximum Belt, Brave Bangle, Light Ball, Hop's
-  Choice Band)
-- Passive abilities ("This Pokémon's attacks do +20") not evaluated
-- Conditional attack bonuses ("if Stadium in play, +50")
-- Bench-target picker for "1 of your opponent's Benched Pokémon" attacks
-- Starter/bench setup phase (auto-places first Basic — no multi-basic layout)
-- Hand-size 0 loss condition is covered by can't-draw, but no separate log for it
-- No support for Lost Zone card effects (zone exists but unused)
+- Ultra Ball auto-picks the first 2 hand cards to discard (no chooser).
+- Stadium once-per-turn activated effects (Academy at Night, Community
+  Center, Levincia, Lumiose City, Mystery Garden, Spikemuth Gym, Surfing
+  Beach, Team Rocket's Factory, Grand Tree) need a per-turn Stadium
+  button UI — not wired.
+- Fossil "play as 60-HP Basic" mechanic not modeled (Antique Cover/Jaw/
+  Plume/Root/Sail Fossil).
+- Some multi-step interactive Supporters auto-pick rather than prompt
+  (Perrin, Cassiopeia, Salvatore, Colress's Tenacity sequential picks).
+- A few niche KO/damage-trigger Tools skipped (Handheld Fan energy return,
+  Heavy Baton auto-target is primitive).
+- Bench-target picker for attacks that say "1 of your opponent's Benched
+  Pokémon" (snipeOne currently auto-targets most-damaged).
+- Prize-pick UI (player always takes top prize; no effect on gameplay
+  since no wired card reveals/manipulates prize identity).
+- Passive attack-modifying abilities ("This Pokémon's attacks do +20")
+  not evaluated.
 
 ## Decks available
 

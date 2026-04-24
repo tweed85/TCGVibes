@@ -388,7 +388,8 @@ function executeAttackHit(
   }
   logEvent(state, player, `attacks with ${move.name} for ${damage}.`);
   if (damage > 0) applyDamage(state, defOwner, damage);
-  // Tool "on damage" triggers (Lucky Helmet draw, Punk Helmet counter).
+  // Tool "on damage" triggers (Lucky Helmet draw, Punk Helmet counter,
+  // Team Rocket's Hypnotizer asleep, Deluxe Bomb counter).
   if (def && damage > 0) {
     for (const act of toolOnDamageActions(state, def, true)) {
       if (act.kind === "drawCards") {
@@ -403,7 +404,10 @@ function executeAttackHit(
         if (drawn > 0) logEvent(state, defOwner, `draws ${drawn} card(s) from Lucky Helmet.`);
       } else if (act.kind === "counterDamage") {
         atk.damage += act.damage;
-        logEvent(state, "system", `${atk.card.name} takes ${act.damage} counter damage (Punk Helmet).`);
+        logEvent(state, "system", `${atk.card.name} takes ${act.damage} counter damage.`);
+      } else if (act.kind === "applyStatusToAttacker") {
+        if (!atk.statuses.includes(act.status)) atk.statuses.push(act.status);
+        logEvent(state, "system", `${atk.card.name} is now ${act.status}.`);
       }
     }
   }

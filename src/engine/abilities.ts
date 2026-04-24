@@ -54,6 +54,28 @@ const NAMED_ABILITY_EFFECTS: Record<string, AbilityEffect> = {
   "Seething Spirit": { kind: "attachEnergyFromDiscardToSelf", oncePerTurn: true },
   // Team Rocket's Spidops — attach Basic Energy from discard to self.
   "Charging Up": { kind: "attachEnergyFromDiscardToSelf", oncePerTurn: true },
+  // Abra — shuffle self + all attached cards into deck (requires Active).
+  "Teleporter": { kind: "shuffleSelfIntoDeck", oncePerTurn: true },
+  // Drakloak — look at top 2, put 1 into hand, 1 on bottom of deck.
+  "Recon Directive": { kind: "peek2Top", oncePerTurn: true },
+  // Gothitelle — opp shuffles hand into deck + draws 3.
+  "Distorted Future": {
+    kind: "oppShuffleHandAndDrawN",
+    drawCount: 3,
+    oncePerTurn: true,
+  },
+  // Feraligatr — put 5 damage counters on self, attacks do +120 to Active this turn.
+  "Torrential Heart": {
+    kind: "attackBonusThisTurnSelfDamage",
+    selfDamage: 50,
+    bonusPerAttack: 120,
+    oncePerTurn: true,
+  },
+  // Dudunsparce — draw 3, then shuffle self into deck.
+  "Run Away Draw": {
+    kind: "shuffleSelfIntoDeck",
+    oncePerTurn: true,
+  },
 };
 
 export function detectAbilityEffect(a: { name: string; type: string; text: string }): AbilityEffect | undefined {
@@ -300,6 +322,92 @@ export function activateAbility(
       logEvent(state, player, `uses ${ability.name}: switches ${outgoing.card.name} → ${incoming.card.name}.`);
       break;
     }
+
+    case "shuffleSelfIntoDeck": {
+      // Dudunsparce draws 3 first, then shuffles.
+      if (ability.name === "Run Away Draw") {
+        let drawn = 0;
+        for (let i = 0; i < 3; i++) {
+          const c = pl.deck.shift();
+          if (!c) break;
+          pl.hand.push(c);
+          drawn++;
+        }
+        logEvent(state, player, `uses ${ability.name}: draws ${drawn}.`);
+      }
+      // Shuffle this Pokémon + all attached cards back into the deck.
+      const fromActive = pl.active?.instanceId === holder.instanceId;
+      const cards: Card[] = [
+        holder.card,
+        ...holder.evolvedFrom,
+        ...holder.attachedEnergy,
+        ...holder.tools,
+      ];
+      pl.deck.push(...cards);
+      if (fromActive) {
+        pl.active = null;
+        // Force a promote so the player can still act this turn.
+        state.pendingPromote = player;
+        state.phase = "promoteActive";
+        state.onPromoteResolved = null;
+      } else {
+        pl.bench = pl.bench.filter((p) => p.instanceId !== holder.instanceId);
+      }
+      // Shuffle.
+      for (let i = pl.deck.length - 1; i > 0; i--) {
+        const j = state.rng.int(i + 1);
+        [pl.deck[i], pl.deck[j]] = [pl.deck[j], pl.deck[i]];
+      }
+      logEvent(state, player, `uses ${ability.name}: shuffles ${holder.card.name} into deck.`);
+      break;
+    }
+
+    case "peek2Top": {
+      // Drakloak — look at top 2, put 1 in hand, 1 on bottom of deck.
+      const top = pl.deck.splice(0, 2);
+      if (top.length === 0) break;
+      // Auto-pick: prefer the more-useful card (Pokemon > Trainer > Energy).
+      const score = (c: Card) =>
+        c.supertype === "Pokémon" ? 2 : c.supertype === "Trainer" ? 1 : 0;
+      top.sort((a, b) => score(b) - score(a));
+      pl.hand.push(top[0]);
+      if (top[1]) pl.deck.push(top[1]); // bottom
+      logEvent(state, player, `uses ${ability.name}: takes ${top[0].name}.`);
+      break;
+    }
+
+    case "oppShuffleHandAndDrawN": {
+      const oppId: PlayerId = player === "p1" ? "p2" : "p1";
+      const opp = state.players[oppId];
+      const hand = opp.hand.splice(0);
+      opp.deck.push(...hand);
+      for (let i = opp.deck.length - 1; i > 0; i--) {
+        const j = state.rng.int(i + 1);
+        [opp.deck[i], opp.deck[j]] = [opp.deck[j], opp.deck[i]];
+      }
+      for (let i = 0; i < e.drawCount; i++) {
+        const c = opp.deck.shift();
+        if (!c) break;
+        opp.hand.push(c);
+      }
+      logEvent(
+        state,
+        player,
+        `uses ${ability.name}: ${opp.name} shuffles and draws ${e.drawCount}.`,
+      );
+      break;
+    }
+
+    case "attackBonusThisTurnSelfDamage": {
+      holder.damage += e.selfDamage;
+      pl.thisTurnAttackBonuses.push({ amount: e.bonusPerAttack });
+      logEvent(
+        state,
+        player,
+        `uses ${ability.name}: ${holder.card.name} takes ${e.selfDamage} damage to gain +${e.bonusPerAttack}.`,
+      );
+      break;
+    }
   }
 
   holder.abilityUsedThisTurn = true;
@@ -344,13 +452,14 @@ const TRIGGERED_ON_EVOLVE: Record<string, TriggeredOnEvolveEffect> = {
       }
     },
   },
-  // Alakazam — draw 3 cards.
+  // Alakazam / Kadabra — "Psychic Draw". Alakazam draws 3, Kadabra draws 2.
   "Psychic Draw": {
-    label: "Psychic Draw: draw 3",
-    run: (state, player) => {
+    label: "Psychic Draw: draw cards",
+    run: (state, player, self) => {
       const pl = state.players[player];
+      const count = self.card.name === "Kadabra" ? 2 : 3;
       let drawn = 0;
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < count; i++) {
         const c = pl.deck.shift();
         if (!c) break;
         pl.hand.push(c);
@@ -441,6 +550,97 @@ const TRIGGERED_ON_EVOLVE: Record<string, TriggeredOnEvolveEffect> = {
       logEvent(state, player, `Cast-Off Shell benches Shedinja.`);
     },
   },
+
+  // Silcoon — search for a Cascoon/Silcoon and put it onto the Bench.
+  "Multiplying Cocoon": {
+    label: "Multiplying Cocoon: bench a Silcoon/Cascoon",
+    run: (state, player) => {
+      const pl = state.players[player];
+      if (pl.bench.length >= 5) return;
+      const idx = pl.deck.findIndex(
+        (c) =>
+          c.supertype === "Pokémon" &&
+          (c.name === "Silcoon" || c.name === "Cascoon"),
+      );
+      if (idx < 0) return;
+      const [got] = pl.deck.splice(idx, 1);
+      pl.bench.push({
+        instanceId: `cocoon-${Date.now()}-${Math.random()}`,
+        card: got as PokemonCard,
+        damage: 0,
+        attachedEnergy: [],
+        evolvedFrom: [],
+        tools: [],
+        playedThisTurn: true,
+        evolvedThisTurn: false,
+        statuses: [],
+        abilityUsedThisTurn: false,
+      });
+      const arr = pl.deck;
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = state.rng.int(i + 1);
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      logEvent(state, player, `Multiplying Cocoon benches ${got.name}.`);
+    },
+  },
+
+  // Tinkatuff — flip a coin; if heads, discard a Basic Energy from opp's Active.
+  "Haphazard Hammer": {
+    label: "Haphazard Hammer: flip → discard Basic Energy from opp",
+    run: (state, player) => {
+      const heads = state.rng.next() < 0.5;
+      logEvent(state, "system", `Haphazard Hammer flip: ${heads ? "heads" : "tails"}.`);
+      if (!heads) return;
+      const opp = state.players[player === "p1" ? "p2" : "p1"];
+      if (!opp.active) return;
+      const idx = opp.active.attachedEnergy.findIndex(
+        (e) => e.subtypes.includes("Basic"),
+      );
+      if (idx < 0) return;
+      const [e] = opp.active.attachedEnergy.splice(idx, 1);
+      opp.discard.push(e);
+      logEvent(state, player, `Haphazard Hammer discards ${e.name} from ${opp.active.card.name}.`);
+    },
+  },
+
+  // Pidove — search for Unfezant/Unfezant ex if Pidove has ≤30 HP remaining.
+  "Emergency Evolution": {
+    label: "Emergency Evolution: bench an Unfezant",
+    condition: (_state, _player) => true, // HP check handled in run
+    run: (state, player, self) => {
+      const remaining = self.card.hp - self.damage;
+      if (remaining > 30) return;
+      const pl = state.players[player];
+      if (pl.bench.length >= 5) return;
+      const idx = pl.deck.findIndex(
+        (c) =>
+          c.supertype === "Pokémon" &&
+          (c.name === "Unfezant" || c.name === "Unfezant ex"),
+      );
+      if (idx < 0) return;
+      const [got] = pl.deck.splice(idx, 1);
+      pl.bench.push({
+        instanceId: `unfezant-${Date.now()}-${Math.random()}`,
+        card: got as PokemonCard,
+        damage: 0,
+        attachedEnergy: [],
+        evolvedFrom: [],
+        tools: [],
+        playedThisTurn: true,
+        evolvedThisTurn: false,
+        statuses: [],
+        abilityUsedThisTurn: false,
+      });
+      const arr = pl.deck;
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = state.rng.int(i + 1);
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      logEvent(state, player, `Emergency Evolution benches ${got.name}.`);
+    },
+  },
+
 };
 
 // Called from `evolve()` immediately after the Pokémon's card swap. Fires any

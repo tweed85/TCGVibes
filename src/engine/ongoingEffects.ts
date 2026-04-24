@@ -422,7 +422,8 @@ export function prizeReductionFromTools(defender: PokemonInPlay): number {
 // action list the caller should execute.
 export type ToolOnDamageAction =
   | { kind: "drawCards"; owner: "defender"; count: number } // Lucky Helmet
-  | { kind: "counterDamage"; target: "attacker"; damage: number }; // Punk Helmet
+  | { kind: "counterDamage"; target: "attacker"; damage: number } // Punk Helmet, Deluxe Bomb
+  | { kind: "applyStatusToAttacker"; status: "asleep" | "burned" | "confused" | "paralyzed" | "poisoned" }; // TR Hypnotizer
 
 export function toolOnDamageActions(
   state: GameState,
@@ -441,6 +442,45 @@ export function toolOnDamageActions(
           out.push({ kind: "counterDamage", target: "attacker", damage: 40 });
         }
         break;
+      case "Team Rocket's Hypnotizer":
+        if (defenderIsActive && isNamed(defender.card, "Team Rocket's ")) {
+          out.push({ kind: "applyStatusToAttacker", status: "asleep" });
+        }
+        break;
+      case "Deluxe Bomb":
+        if (defenderIsActive) {
+          out.push({ kind: "counterDamage", target: "attacker", damage: 60 });
+        }
+        break;
+    }
+  }
+  return out;
+}
+
+// Called from the KO flow just before the KO'd Pokémon's cards go to discard.
+// Returns an action list describing post-KO tool triggers (Amulet of Hope etc.)
+// so the caller can resolve them against the current state.
+export type ToolOnKoAction =
+  | { kind: "searchDeckAnyN"; count: number } // Amulet of Hope
+  | { kind: "moveEnergyToBench"; max: number }; // Heavy Baton (retreat-cost=4 gate)
+
+export function toolOnKoActions(
+  state: GameState,
+  defender: PokemonInPlay,
+): ToolOnKoAction[] {
+  if (!toolsActive(state)) return [];
+  const out: ToolOnKoAction[] = [];
+  for (const tool of defender.tools) {
+    switch (tool.name) {
+      case "Amulet of Hope":
+        out.push({ kind: "searchDeckAnyN", count: 3 });
+        break;
+      case "Heavy Baton": {
+        // Only triggers if the KO'd holder has an exact Retreat Cost of 4.
+        const cost = defender.card.retreatCost ?? [];
+        if (cost.length === 4) out.push({ kind: "moveEnergyToBench", max: 4 });
+        break;
+      }
     }
   }
   return out;

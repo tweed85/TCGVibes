@@ -58,7 +58,9 @@ export type AttackEffect =
   | { kind: "flipHeadsDiscardOppEnergy" } // Flip — heads: discard one Energy from opp's Active
   | { kind: "healEachOwnPokemon"; amount: number } // Heal N from each of your Pokémon
   | { kind: "discardTopOfOppDeck"; count: number } // Mill the opp deck by N
-  | { kind: "discardOppTools" }; // "Before doing damage, discard all Tools from opp's Active"
+  | { kind: "discardOppTools" } // "Before doing damage, discard all Tools from opp's Active"
+  | { kind: "callForFamily"; max: number } // "Search your deck for up to N Basic Pokémon and put them onto your Bench."
+  | { kind: "flipUntilTailsPerHeads"; perHeads: number }; // Geometric damage ("Flip until you get tails")
 
 export type StatusCondition = "asleep" | "burned" | "confused" | "paralyzed" | "poisoned";
 
@@ -81,7 +83,11 @@ export type AbilityEffect =
   | { kind: "attachEnergyFromDiscardToSelf"; oncePerTurn: true } // any Basic Energy from discard → self
   | { kind: "searchDeckAnyCard"; oncePerTurn: true; condition?: AbilityCondition } // search for any 1 card
   | { kind: "searchDeckPokemon"; oncePerTurn: true } // search for any 1 Pokémon
-  | { kind: "switchWithBench"; oncePerTurn: true };
+  | { kind: "switchWithBench"; oncePerTurn: true }
+  | { kind: "shuffleSelfIntoDeck"; oncePerTurn: true } // Abra Teleporter
+  | { kind: "peek2Top"; oncePerTurn: true } // Drakloak Recon Directive — look at top 2, take 1
+  | { kind: "oppShuffleHandAndDrawN"; drawCount: number; oncePerTurn: true } // Gothitelle Distorted Future
+  | { kind: "attackBonusThisTurnSelfDamage"; selfDamage: number; bonusPerAttack: number; oncePerTurn: true }; // Feraligatr Torrential Heart
 
 // Conditional gates evaluated at activation time. If the condition fails,
 // the button is disabled (or the activation blocked with a reason).

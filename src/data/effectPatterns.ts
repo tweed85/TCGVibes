@@ -336,6 +336,22 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
     effects.push({ kind: "discardOppTools" });
   }
 
+  // ---- Call for Family: search for up to N Basics to Bench ------------------
+  {
+    const m = text.match(/search your deck for up to (\d+) basic pok[eé]mon and put them onto your bench/i);
+    if (m) effects.push({ kind: "callForFamily", max: parseInt(m[1], 10) });
+  }
+
+  // ---- Flip-until-tails geometric damage -----------------------------------
+  // "Flip a coin until you get tails. This attack does N damage for each heads."
+  if (damageText.endsWith("×")) {
+    const m = text.match(/flip a coin until you get tails\. this attack does (\d+) damage for each heads/i);
+    if (m) {
+      effects.push({ kind: "flipUntilTailsPerHeads", perHeads: parseInt(m[1], 10) });
+      baseDamageOverride = 0;
+    }
+  }
+
   return { effects, baseDamageOverride };
 }
 
