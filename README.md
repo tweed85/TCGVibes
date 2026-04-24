@@ -1,1 +1,1 @@
-# TCGVibes
+# PandaBananasTCG

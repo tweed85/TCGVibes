@@ -1,4 +1,4 @@
-# TCGVibes
+# PandaBananasTCG
 
 A browser-based Pokémon TCG clone. Vite + React + TypeScript. Plays a human
 vs. a simple AI, local hot-seat style, using the real Play! Pokémon

@@ -3,7 +3,17 @@ frontend:
   phases:
     preBuild:
       commands:
-        - npm ci
+        # Pin Node 20 LTS so the build environment matches what the app
+        # was developed against. Amplify's image ships multiple Node versions
+        # preinstalled via nvm.
+        - nvm use 20 || nvm install 20
+        - node -v
+        - npm -v
+        # npm install (not npm ci) so build-time lockfile reconciliation
+        # works around esbuild's optional platform-specific transitive deps
+        # that npm versions disagree about. For a static SPA the
+        # reproducibility trade-off is fine.
+        - npm install --no-audit --no-fund
     build:
       commands:
         - npm run typecheck

@@ -261,7 +261,7 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `tcgvibes-game-${Date.now()}.json`;
+    a.download = `pandabananastcg-game-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
     setStatusMsg("Game log exported.");
@@ -659,7 +659,7 @@ export default function App() {
       {/* ------------------------- Header ------------------------- */}
       <div className="header">
         <div className="brand">
-          <h1>TCGVibes</h1>
+          <h1>PandaBananasTCG</h1>
           <div className="meta">
             T{state.turn} · {state.players[state.activePlayer].name} · {state.phase}
             <span className="dataset"> · {datasetFormat} {datasetAsOf}</span>
@@ -719,7 +719,7 @@ export default function App() {
             href="https://ko-fi.com/pandabananas"
             target="_blank"
             rel="noopener noreferrer"
-            title="Support TCGVibes on Ko-fi"
+            title="Support PandaBananasTCG on Ko-fi"
             aria-label="Support on Ko-fi (opens in new tab)"
           >
             <span className="kofi-cup" aria-hidden="true" />
@@ -1713,7 +1713,7 @@ function PreGameModal({
     <div className="modal-backdrop">
       <div className="modal pregame-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>TCGVibes — Start a game</h2>
+          <h2>PandaBananasTCG — Start a game</h2>
         </div>
         <div className="pregame-mode">
           <label className={`mode-option${gameMode === "vsCPU" ? " active" : ""}`}>
