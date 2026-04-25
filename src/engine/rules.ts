@@ -11,6 +11,7 @@ import type {
 } from "./types";
 import {
   effectiveMaxHp,
+  enforceAreaZeroBench,
   isStatusImmune,
   poisonExtraCounters,
   prizeReductionFromTools,
@@ -732,6 +733,9 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
     ...(ko.tools ?? []),
   );
   owner.active = null;
+  // Area Zero Underdepths — if the KO'd Pokémon was the holder's only Tera,
+  // their bench cap drops back to 5 and excess bench Pokémon are discarded.
+  enforceAreaZeroBench(state);
 
   takePrizes(state, opponentOf(ownerId), prizes);
 

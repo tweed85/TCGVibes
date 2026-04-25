@@ -3,7 +3,7 @@
 // retreat cost / HP), these require the player to *press* the Stadium to
 // take its action on their turn.
 
-import { logEvent } from "./rules";
+import { endTurn, logEvent } from "./rules";
 import { setDeckSearchPick } from "./pendingPick";
 import type {
   Card,
@@ -96,16 +96,17 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
   },
 
   "Lumiose City": {
-    precheck: () => null,
+    precheck: (state, player) => {
+      if (state.players[player].bench.length >= 5) return "Your bench is full.";
+      // Card text: "If a player searches their deck in this way, their turn
+      // ends." This is a real cost — caller must accept that activating it
+      // ends their turn.
+      return null;
+    },
     run: (state, player) => {
       // Search deck for a Basic Pokémon and put it onto the Bench.
       const isBasicPokemon = (c: Card): c is PokemonCard =>
         c.supertype === "Pokémon" && c.subtypes.includes("Basic");
-      const pl = state.players[player];
-      if (pl.bench.length >= 5) {
-        logEvent(state, player, "Lumiose City: bench is full.");
-        return;
-      }
       const opened = setDeckSearchPick(
         state,
         player,
@@ -115,11 +116,15 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
         { toBench: true },
       );
       if (opened && state.pendingPick) {
-        // Lumiose City: "Your turn ends after putting the Pokémon onto your
-        // Bench." Flag the pick so resolvePendingPick runs endTurn when done.
+        // "Your turn ends after putting the Pokémon onto your Bench." Flag
+        // the pick so resolvePendingPick runs endTurn when done.
         state.pendingPick.endTurnOnResolve = true;
-      } else if (!opened) {
-        logEvent(state, player, "Lumiose City: no Basic Pokémon in deck.");
+      } else {
+        // No Basic in deck — per the card's "if a player searches their
+        // deck" clause, the search still happened (just yielded nothing) so
+        // the turn still ends.
+        logEvent(state, player, "Lumiose City: no Basic Pokémon in deck — turn ends anyway.");
+        endTurn(state);
       }
     },
   },
@@ -163,37 +168,90 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
 
   "Grand Tree": {
     precheck: (state, player) => {
-      if (state.players[player].bench.length === 0 && !state.players[player].active) {
-        return "No Basic Pokémon in play.";
-      }
+      // Need at least one Basic Pokémon in play that's eligible to evolve
+      // (not played-this-turn) AND a matching Stage 1 in deck.
+      const pl = state.players[player];
+      const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+      const eligibleBasics = allies.filter(
+        (p) => p.card.subtypes.includes("Basic") && !p.playedThisTurn && !p.evolvedThisTurn,
+      );
+      if (eligibleBasics.length === 0) return "No eligible Basic Pokémon in play.";
+      if (state.turn === 1) return "Grand Tree can't evolve a Basic on your first turn.";
+      const hasStage1Match = pl.deck.some(
+        (c) =>
+          c.supertype === "Pokémon" &&
+          c.subtypes.includes("Stage 1") &&
+          eligibleBasics.some((p) => p.card.name === c.evolvesFrom),
+      );
+      if (!hasStage1Match) return "No matching Stage 1 evolution in deck.";
       return null;
     },
     run: (state, player) => {
-      // Search deck for a Stage 1 or Stage 2 Pokémon that can eventually land
-      // on one of your in-play Pokémon. The evolution itself is not auto-
-      // applied — the chosen card goes to hand and the player evolves normally.
+      // Real card text:
+      // "search your deck for a Stage 1 Pokémon that evolves from 1 of your
+      //  Basic Pokémon and put it onto that Pokémon to evolve it. If that
+      //  Pokémon was evolved in this way, you may search your deck for a
+      //  Stage 2 Pokémon that evolves from that Pokémon and put it onto
+      //  that Pokémon to evolve it."
+      // Implementation auto-picks the first eligible Basic + matching Stage 1
+      // (interactive picker would be a multi-step pendingInPlayTarget — kept
+      // out of scope for this pass).
       const pl = state.players[player];
-      const basicNames = new Set<string>();
-      const stage1Names = new Set<string>();
-      for (const p of [pl.active, ...pl.bench]) {
-        if (!p) continue;
-        if (p.card.subtypes.includes("Basic")) basicNames.add(p.card.name);
-        if (p.card.subtypes.includes("Stage 1")) stage1Names.add(p.card.name);
-      }
-      const pred = (c: Card): c is PokemonCard => {
-        if (c.supertype !== "Pokémon" || !c.evolvesFrom) return false;
-        if (c.subtypes.includes("Stage 1")) return basicNames.has(c.evolvesFrom);
-        if (c.subtypes.includes("Stage 2")) {
-          return stage1Names.has(c.evolvesFrom) ||
-                 // Also allow if the Basic → Stage1 → Stage 2 chain exists in play.
-                 basicNames.has(c.evolvesFrom);
+      const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+      const eligibleBasics = allies.filter(
+        (p) => p.card.subtypes.includes("Basic") && !p.playedThisTurn && !p.evolvedThisTurn,
+      );
+      // Stage 1 search.
+      let evolved: PokemonInPlay | null = null;
+      for (const basic of eligibleBasics) {
+        const idx = pl.deck.findIndex(
+          (c) =>
+            c.supertype === "Pokémon" &&
+            c.subtypes.includes("Stage 1") &&
+            c.evolvesFrom === basic.card.name,
+        );
+        if (idx >= 0) {
+          const [s1] = pl.deck.splice(idx, 1) as [PokemonCard];
+          basic.evolvedFrom.push(basic.card);
+          basic.card = s1;
+          basic.evolvedThisTurn = true;
+          basic.abilityUsedThisTurn = false;
+          evolved = basic;
+          logEvent(state, player, `Grand Tree: evolves into ${s1.name}.`);
+          break;
         }
-        return false;
-      };
-      if (
-        !setDeckSearchPick(state, player, pred, 1, "Grand Tree: pick a Stage 1 or Stage 2 Pokémon")
-      ) {
-        logEvent(state, player, "Grand Tree: no matching evolution in deck.");
+      }
+      if (!evolved) {
+        logEvent(state, player, "Grand Tree: no Stage 1 found.");
+        // Still shuffle deck per "Then, that player shuffles their deck."
+        const arr = pl.deck;
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = state.rng.int(i + 1);
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return;
+      }
+      // Stage 2 search — only if the just-evolved Stage 1 has a matching
+      // Stage 2 in deck. Auto-applies the second evolution.
+      const s2idx = pl.deck.findIndex(
+        (c) =>
+          c.supertype === "Pokémon" &&
+          c.subtypes.includes("Stage 2") &&
+          c.evolvesFrom === evolved!.card.name,
+      );
+      if (s2idx >= 0) {
+        const [s2] = pl.deck.splice(s2idx, 1) as [PokemonCard];
+        evolved.evolvedFrom.push(evolved.card);
+        evolved.card = s2;
+        // Stage 1 → Stage 2 in the same activation; per rule we keep
+        // evolvedThisTurn true.
+        logEvent(state, player, `Grand Tree: evolves into ${s2.name}.`);
+      }
+      // Shuffle deck after.
+      const arr = pl.deck;
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = state.rng.int(i + 1);
+        [arr[i], arr[j]] = [arr[j], arr[i]];
       }
     },
   },
@@ -236,6 +294,8 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
       if (benchIdx < 0) return;
       const incoming = pl.bench.splice(benchIdx, 1)[0];
       const outgoing = pl.active;
+      // Switch rule: outgoing Pokémon recovers from all Special Conditions.
+      outgoing.statuses = [];
       pl.active = incoming;
       pl.bench.push(outgoing);
       logEvent(
@@ -248,20 +308,10 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
 
   "Team Rocket's Factory": {
     precheck: (state, player) => {
-      if (!state.players[player].supporterPlayedThisTurn)
-        return "Need to have played a Supporter this turn.";
-      // Additional check: it must have been a Team Rocket Supporter. We don't
-      // currently track *which* Supporter, so we approximate by checking the
-      // discard for a recent Team Rocket Supporter. Close enough for MVP.
-      const disc = state.players[player].discard;
-      const recent = disc[disc.length - 1];
-      if (
-        !recent ||
-        recent.supertype !== "Trainer" ||
-        !recent.subtypes.includes("Supporter") ||
-        !recent.name.includes("Team Rocket")
-      ) {
-        return "Last Supporter played wasn't a Team Rocket one.";
+      const last = state.players[player].lastSupporterNameThisTurn;
+      if (!last) return "Need to have played a Supporter this turn.";
+      if (!last.includes("Team Rocket")) {
+        return `Last Supporter "${last}" wasn't a Team Rocket one.`;
       }
       return null;
     },

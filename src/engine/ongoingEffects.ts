@@ -59,6 +59,29 @@ export function maxBenchSize(state: GameState, owner: PokemonInPlay[] | null, ac
   return hasTera ? 8 : 5;
 }
 
+// Area Zero Underdepths card text:
+// "If a player no longer has any Tera Pokémon in play, that player discards
+//  Pokémon from their Bench until they have 5."
+// Called wherever a Pokémon may leave play (KO, retreat, scoop-up, etc.).
+// Sweeps both sides — if a player has > maxBench effective cap, discard
+// excess from the end of bench.
+export function enforceAreaZeroBench(state: GameState): void {
+  if (state.stadium?.card.name !== "Area Zero Underdepths") return;
+  for (const pid of ["p1", "p2"] as PlayerId[]) {
+    const side = state.players[pid];
+    const cap = maxBenchSize(state, side.bench, side.active);
+    while (side.bench.length > cap) {
+      const [discarded] = side.bench.splice(side.bench.length - 1, 1);
+      side.discard.push(
+        discarded.card,
+        ...discarded.evolvedFrom,
+        ...discarded.attachedEnergy,
+        ...(discarded.tools ?? []),
+      );
+    }
+  }
+}
+
 // Battle Cage: prevent bench damage from opp's attacks/abilities.
 export function benchDamageBlocked(state: GameState): boolean {
   return state.stadium?.card.name === "Battle Cage";
@@ -834,9 +857,22 @@ export function stadiumDamageReduction(
         if (isNamed(defCard, "Steven's ")) red += 30;
         break;
       case "Neutralization Zone":
-        // Reduces damage *from* attackers with a rule box (ex/V) by 20.
-        // Gates on the attacker, not the defender.
-        if (hasRuleBox(attacker.card)) red += 20;
+        // "Prevent all damage done to Pokémon that don't have a Rule Box
+        // (both yours and your opponent's) by attacks from the opponent's
+        // Pokémon ex and Pokémon V." Gates on BOTH defender (no rule box)
+        // and attacker (ex or V). Full prevention, not a small reduction.
+        {
+          const atkSubs = attacker.card.subtypes ?? [];
+          const atkIsExOrV =
+            atkSubs.some((s) => /^(?:ex|EX)$/.test(s)) ||
+            atkSubs.includes("V") ||
+            atkSubs.includes("VMAX") ||
+            atkSubs.includes("VSTAR") ||
+            atkSubs.includes("V-UNION");
+          if (atkIsExOrV && !hasRuleBox(defCard)) {
+            red += 9999;
+          }
+        }
         break;
     }
   }

@@ -153,24 +153,40 @@ export default function App() {
       : deckSpecs[0]?.id ?? "",
   );
   const [oppDeckId, setOppDeckId] = useState(
-    savedSettings.oppDeckId && knownDeckIds.has(savedSettings.oppDeckId)
-      ? savedSettings.oppDeckId
-      : deckSpecs[1]?.id ?? deckSpecs[0]?.id ?? "",
+    savedSettings.oppDeckId === "__random__"
+      ? "__random__"
+      : savedSettings.oppDeckId && knownDeckIds.has(savedSettings.oppDeckId)
+        ? savedSettings.oppDeckId
+        : deckSpecs[1]?.id ?? deckSpecs[0]?.id ?? "",
   );
   const rngRef = useRef(makeRng(Date.now()));
 
+  // Resolve "__random__" to a concrete preset id at game start time, so we
+  // can log / banner the deck that was rolled. Pass-through for other ids.
+  const resolveDeckId = (id: string): string => {
+    if (id === "__random__" && deckSpecs.length > 0) {
+      const idx = Math.floor(Math.random() * deckSpecs.length);
+      return deckSpecs[idx].id;
+    }
+    return id;
+  };
+
   // Build a deck for the picker id — either a preset spec or an imported list.
+  // The "__random__" sentinel must be resolved via `resolveDeckId` first.
   const deckForId = (id: string, fallback: Card[]): Card[] => {
-    const imported = imports.find((d) => d.id === id);
+    const resolved = resolveDeckId(id);
+    const imported = imports.find((d) => d.id === resolved);
     if (imported) return imported.cards.map((c) => ({ ...c }));
-    const spec = deckSpecs.find((d) => d.id === id);
+    const spec = deckSpecs.find((d) => d.id === resolved);
     if (spec) return buildDeck(spec);
     return fallback;
   };
 
+
   const buildInitial = (): GameState => {
-    const myDeck = buildDeck(deckSpecs.find((d) => d.id === myDeckId) ?? deckSpecs[0]);
-    const oppDeck = buildDeck(deckSpecs.find((d) => d.id === oppDeckId) ?? deckSpecs[0]);
+    const fallback = buildDeck(deckSpecs[0]);
+    const myDeck = deckForId(myDeckId, fallback);
+    const oppDeck = deckForId(oppDeckId, fallback);
     return setupGame(myDeck, oppDeck, rngRef.current, {
       p1Name: "You",
       p2Name: "CPU",
@@ -661,11 +677,23 @@ export default function App() {
   const onReset = () => {
     rngRef.current = makeRng(Date.now());
     const fallback = buildDeck(deckSpecs[0]);
+    // Resolve random opp deck once so we can both build the deck and surface
+    // the chosen name in the CPU's banner / log.
+    const resolvedOppId = resolveDeckId(oppDeckId);
     const myDeck = deckForId(myDeckId, fallback);
-    const oppDeck = deckForId(oppDeckId, fallback);
+    const oppSpec = deckSpecs.find((d) => d.id === resolvedOppId);
+    const oppDeck = oppSpec
+      ? buildDeck(oppSpec)
+      : deckForId(resolvedOppId, fallback);
+    const cpuName =
+      gameMode === "vsCPU" && oppDeckId === "__random__" && oppSpec
+        ? `CPU (${oppSpec.name})`
+        : gameMode === "local"
+          ? "Player 2"
+          : "CPU";
     stateRef.current = setupGame(myDeck, oppDeck, rngRef.current, {
       p1Name: gameMode === "local" ? "Player 1" : "You",
-      p2Name: gameMode === "local" ? "Player 2" : "CPU",
+      p2Name: cpuName,
       p2IsAI: gameMode !== "local",
     });
     // Reset hotseat state: p1 holds the device first; no handoff pending.
@@ -955,7 +983,14 @@ export default function App() {
           onChangeMyDeck={setMyDeckId}
           onChangeOppDeck={setOppDeckId}
           onToggleOpenHands={setOpenHands}
-          onChangeMode={setGameMode}
+          onChangeMode={(m) => {
+            // Random-preset is a vs-CPU-only feature; if the user switches
+            // to local, drop the sentinel back to a concrete preset.
+            if (m === "local" && oppDeckId === "__random__") {
+              setOppDeckId(deckSpecs[1]?.id ?? deckSpecs[0]?.id ?? "");
+            }
+            setGameMode(m);
+          }}
           onOpenImport={() => setImportOpen(true)}
           onOpenBuild={() => setBuildOpen(true)}
           onStart={() => {
@@ -1691,14 +1726,21 @@ function DeckSelect({
   onChange,
   specs,
   imports,
+  allowRandom,
 }: {
   value: string;
   onChange: (id: string) => void;
   specs: { id: string; name: string }[];
   imports: ImportedDeck[];
+  /** When true, expose a "🎲 Random preset" option that resolves to a
+   *  random preset deck at game-start. Used for the CPU side. */
+  allowRandom?: boolean;
 }) {
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)}>
+      {allowRandom && (
+        <option value="__random__">🎲 Random preset</option>
+      )}
       <optgroup label="Preset decks">
         {specs.map((d) => (
           <option key={d.id} value={d.id}>{d.name}</option>
@@ -2100,8 +2142,15 @@ function PreGameModal({
               onChange={onChangeOppDeck}
               specs={deckSpecs}
               imports={imports}
+              allowRandom={gameMode === "vsCPU"}
             />
-            {describe(oppDeckId) && <div className="pregame-slot-note">{describe(oppDeckId)}</div>}
+            {oppDeckId === "__random__" ? (
+              <div className="pregame-slot-note">
+                A preset deck will be picked at random when you start.
+              </div>
+            ) : (
+              describe(oppDeckId) && <div className="pregame-slot-note">{describe(oppDeckId)}</div>
+            )}
           </div>
         </div>
         <div className="pregame-options">

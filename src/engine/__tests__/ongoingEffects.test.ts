@@ -293,11 +293,12 @@ describe("stadiumDamageReduction — defender-side reductions", () => {
     expect(stadiumDamageReduction(s, atk, def)).toBe(30);
   });
 
-  it("Neutralization Zone reduces 20 when the attacker has a Rule Box", () => {
+  it("Neutralization Zone fully prevents damage from ex/V to non-Rule-Box defenders", () => {
     const atkEx = mkInPlay(mkPokemon({ subtypes: ["Basic", "ex"] }));
     const def = mkInPlay(mkPokemon({ subtypes: ["Basic"] }));
     const s = mkState({ stadium: { card: mkStadium("Neutralization Zone"), controller: "p1" } });
-    expect(stadiumDamageReduction(s, atkEx, def)).toBe(20);
+    // 9999 sentinel = full prevention (caps damage to 0 in actions.ts).
+    expect(stadiumDamageReduction(s, atkEx, def)).toBe(9999);
   });
 
   it("Neutralization Zone does nothing when the attacker is non-Rule-Box", () => {
@@ -305,6 +306,13 @@ describe("stadiumDamageReduction — defender-side reductions", () => {
     const def = mkInPlay(mkPokemon({ subtypes: ["Basic"] }));
     const s = mkState({ stadium: { card: mkStadium("Neutralization Zone"), controller: "p1" } });
     expect(stadiumDamageReduction(s, atk, def)).toBe(0);
+  });
+
+  it("Neutralization Zone does nothing when the defender has a Rule Box", () => {
+    const atkEx = mkInPlay(mkPokemon({ subtypes: ["Basic", "ex"] }));
+    const defEx = mkInPlay(mkPokemon({ subtypes: ["Basic", "ex"] }));
+    const s = mkState({ stadium: { card: mkStadium("Neutralization Zone"), controller: "p1" } });
+    expect(stadiumDamageReduction(s, atkEx, defEx)).toBe(0);
   });
 
   it("Occa Berry reduces 60 vs Fire attacker", () => {
