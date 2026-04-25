@@ -654,6 +654,7 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
 
   const basePrizes = prizeValue(ko.card);
   let reduction = prizeReductionFromTools(ko);
+  let bonus = 0;
   // Legacy Energy — once per game per player: if KO'd by opponent's attack,
   // opp takes 1 fewer Prize.
   const hasLegacy = ko.attachedEnergy.some((e) => e.name === "Legacy Energy");
@@ -662,7 +663,59 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
     owner.legacyEnergyUsed = true;
     logEvent(state, ownerId, `Legacy Energy triggers — opponent takes 1 fewer Prize.`);
   }
-  const prizes = Math.max(0, basePrizes - reduction);
+  // Fragile Husk (Shedinja) — if KO'd by opp's Pokémon ex, opp takes 0 prizes.
+  if ((ko.card.abilities ?? []).some((a) => a.name === "Fragile Husk")) {
+    const oppActive = state.players[opponentOf(ownerId)].active;
+    if (oppActive && (oppActive.card.subtypes ?? []).some((s) => /^(?:ex|EX)$/.test(s))) {
+      reduction += 99;
+      logEvent(state, ownerId, `Fragile Husk: opponent takes no Prizes.`);
+    }
+  }
+  // Shadowy Concealment (Mega Gengar ex) — if 1 of your Darkness Pokémon is
+  // KO'd by opp's ex, opp takes 1 fewer Prize. Doesn't stack.
+  if (ko.card.types.includes("Darkness")) {
+    const allies = [owner.active, ...owner.bench].filter((p): p is PokemonInPlay => !!p);
+    const hasShadowy = allies.some((p) => (p.card.abilities ?? []).some((a) => a.name === "Shadowy Concealment"));
+    if (hasShadowy) {
+      const oppActive = state.players[opponentOf(ownerId)].active;
+      if (oppActive && (oppActive.card.subtypes ?? []).some((s) => /^(?:ex|EX)$/.test(s))) {
+        reduction += 1;
+        logEvent(state, ownerId, `Shadowy Concealment: opponent takes 1 fewer Prize.`);
+      }
+    }
+  }
+  // Greedy Eater (Hydreigon ex) — if you (the KOing player) have Hydreigon ex
+  // with this ability and the KO'd Pokémon is Basic, take 1 more Prize.
+  {
+    const taker = state.players[opponentOf(ownerId)];
+    const takerAllies = [taker.active, ...taker.bench].filter((p): p is PokemonInPlay => !!p);
+    const hasGreedy = takerAllies.some((p) => (p.card.abilities ?? []).some((a) => a.name === "Greedy Eater"));
+    if (hasGreedy && (ko.card.subtypes ?? []).includes("Basic")) {
+      bonus += 1;
+      logEvent(state, taker.id, `Greedy Eater: takes 1 more Prize.`);
+    }
+    // Wonder Kiss (Togekiss) — when opp Active is KO'd, flip → +1 Prize.
+    const hasWonderKiss = takerAllies.some((p) => (p.card.abilities ?? []).some((a) => a.name === "Wonder Kiss"));
+    if (hasWonderKiss) {
+      const heads = state.rng.next() < 0.5;
+      if (heads) {
+        bonus += 1;
+        logEvent(state, taker.id, `Wonder Kiss flip: heads — takes 1 more Prize.`);
+      } else {
+        logEvent(state, taker.id, `Wonder Kiss flip: tails.`);
+      }
+    }
+  }
+  // Oh No You Don't (Munkidori ex) — if KO'd by opp's Pokémon AND you have
+  // any Pecharunt ex in play, opp takes 1 fewer Prize.
+  if ((ko.card.abilities ?? []).some((a) => a.name === "Oh No You Don't")) {
+    const ownerAllies = [owner.active, ...owner.bench].filter((p): p is PokemonInPlay => !!p);
+    if (ownerAllies.some((p) => p.card.name === "Pecharunt ex")) {
+      reduction += 1;
+      logEvent(state, ownerId, `Oh No You Don't: opp takes 1 fewer Prize.`);
+    }
+  }
+  const prizes = Math.max(0, basePrizes - reduction + bonus);
   if (prizes !== basePrizes) {
     logEvent(state, "system", `${ko.card.name} Knocked Out — prizes reduced.`);
   }
@@ -823,6 +876,31 @@ export function endTurn(state: GameState): void {
       p.playedThisTurn = false;
       p.evolvedThisTurn = false;
       p.abilityUsedThisTurn = false;
+      p.movedToActiveThisTurn = false;
+    }
+  }
+  // noWeaknessUntilTurn protects during opp's upcoming turn — clear AFTER
+  // the opponent's turn (i.e., at the start of this player's NEXT cleanup).
+  // Simpler: clear when state.turn > value at end of any turn.
+  for (const pid of ["p1", "p2"] as PlayerId[]) {
+    for (const p of [state.players[pid].active, ...state.players[pid].bench]) {
+      if (p && p.noWeaknessUntilTurn !== undefined && state.turn > p.noWeaknessUntilTurn) {
+        p.noWeaknessUntilTurn = undefined;
+      }
+    }
+  }
+  // Glaceon "Permeating Chill" — at the end of opp's turn, place delayed
+  // counters on the still-Active defender if any.
+  {
+    const justEnded = prev; // the player whose turn just ended
+    const defender = justEnded.active;
+    if (defender) {
+      const bag = defender as PokemonInPlay & { delayedCountersAtTurnEnd?: number };
+      if (bag.delayedCountersAtTurnEnd && bag.delayedCountersAtTurnEnd > 0) {
+        defender.damage += bag.delayedCountersAtTurnEnd * 10;
+        logEvent(state, "system", `Delayed damage: ${defender.card.name} takes ${bag.delayedCountersAtTurnEnd * 10}.`);
+        bag.delayedCountersAtTurnEnd = undefined;
+      }
     }
   }
   // Pokémon Checkup: process status effects on both actives. A status KO here

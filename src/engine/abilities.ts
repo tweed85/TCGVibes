@@ -22,6 +22,7 @@ import type {
   PlayerId,
   PokemonCard,
   PokemonInPlay,
+  TrainerCard,
 } from "./types";
 
 const ENERGY_TYPES: EnergyType[] = [
@@ -286,6 +287,49 @@ const NAMED_ABILITY_EFFECTS: Record<string, AbilityEffect> = {
     drawCount: 3,
     oncePerTurn: true,
   },
+  // N's Zoroark ex — Trade: discard a card → draw 2.
+  "Trade": {
+    kind: "drawNDiscardCost",
+    count: 2,
+    oncePerTurn: true,
+  },
+  // Hydrapple ex — Ripening Charge: attach Basic Grass + heal 30 from that Pokémon.
+  "Ripening Charge": {
+    kind: "attachEnergyFromHandThenHeal",
+    energyType: "Grass",
+    healAmount: 30,
+    oncePerTurn: true,
+  },
+  // Mega Kangaskhan ex — Run Errand: active-only, once-per-turn, draw 2.
+  "Run Errand": {
+    kind: "drawNActiveOnly",
+    count: 2,
+    oncePerTurn: true,
+  },
+  // Mega Venusaur ex — Solar Transfer: as-often, move Basic Grass Energy.
+  "Solar Transfer": {
+    kind: "moveBasicEnergyAnywhere",
+    energyType: "Grass",
+  },
+  // Iono's Bellibolt ex — Electric Streamer: as-often, attach Basic Lightning
+  // from hand to 1 of your Iono's Pokémon.
+  "Electric Streamer": {
+    kind: "attachEnergyFromHandToNamedAsOften",
+    energyType: "Lightning",
+    namePrefix: "Iono's ",
+  },
+  // Emboar — Inferno Fandango: as-often, attach Basic Fire Energy from hand
+  // to 1 of your Pokémon (no name filter — empty prefix matches any).
+  "Inferno Fandango": {
+    kind: "attachEnergyFromHandToNamedAsOften",
+    energyType: "Fire",
+    namePrefix: "",
+  },
+  // Rapidash — Hurried Gait: once-per-turn drawOne.
+  "Hurried Gait": {
+    kind: "drawOne",
+    oncePerTurn: true,
+  },
 };
 
 export function detectAbilityEffect(a: { name: string; type: string; text: string }): AbilityEffect | undefined {
@@ -419,8 +463,15 @@ export function activateAbility(
   const ability = holder.card.abilities?.[abilityIndex];
   if (!ability) return { ok: false, reason: "No such ability." };
   if (!ability.effect) return { ok: false, reason: "That ability isn't engine-playable." };
-  if (ability.effect.oncePerTurn && holder.abilityUsedThisTurn)
+  // Some abilities are "as often as you like" — they have no `oncePerTurn`
+  // field. Most abilities are once-per-turn (the field is `true`).
+  if (
+    "oncePerTurn" in ability.effect &&
+    ability.effect.oncePerTurn &&
+    holder.abilityUsedThisTurn
+  ) {
     return { ok: false, reason: "Ability already used this turn." };
+  }
   if (!abilitiesActiveOn(state, holder.card))
     return { ok: false, reason: "Abilities are disabled by the current Stadium." };
   // Psyduck "Damp" — "Pokémon in play (both yours and your opponent's) lose
@@ -1447,6 +1498,91 @@ export function activateAbility(
       return { ok: false, reason: "Activating abilities from hand isn't supported yet." };
     }
 
+    case "drawNDiscardCost": {
+      if (pl.hand.length < 2) {
+        return { ok: false, reason: "Need another card in hand to discard." };
+      }
+      // Auto-pick: discard first non-Pokémon-active-name card. Simpler: discard
+      // first hand card.
+      const [c] = pl.hand.splice(0, 1);
+      pl.discard.push(c);
+      let drawn = 0;
+      for (let i = 0; i < e.count; i++) {
+        const d = pl.deck.shift();
+        if (!d) break;
+        pl.hand.push(d);
+        drawn++;
+      }
+      logEvent(state, player, `uses ${ability.name}: discards ${c.name}, draws ${drawn}.`);
+      break;
+    }
+    case "attachEnergyFromHandThenHeal": {
+      const idx = pl.hand.findIndex(
+        (c) => c.supertype === "Energy" && c.subtypes.includes("Basic") &&
+          (c as EnergyCard).provides.includes(e.energyType),
+      );
+      if (idx < 0) return { ok: false, reason: `No basic ${e.energyType} Energy in hand.` };
+      // Auto-pick target: holder.
+      const [en] = pl.hand.splice(idx, 1) as [EnergyCard];
+      holder.attachedEnergy.push(en);
+      const before = holder.damage;
+      holder.damage = Math.max(0, holder.damage - e.healAmount);
+      logEvent(state, player, `uses ${ability.name}: attaches ${en.name}, heals ${before - holder.damage}.`);
+      break;
+    }
+    case "drawNActiveOnly": {
+      if (pl.active?.instanceId !== holder.instanceId) {
+        return { ok: false, reason: "This ability requires the Pokémon to be in the Active Spot." };
+      }
+      let drawn = 0;
+      for (let i = 0; i < e.count; i++) {
+        const c = pl.deck.shift();
+        if (!c) break;
+        pl.hand.push(c);
+        drawn++;
+      }
+      logEvent(state, player, `uses ${ability.name}: draws ${drawn}.`);
+      break;
+    }
+    case "moveBasicEnergyAnywhere": {
+      // As-often-as-you-like — DON'T set abilityUsedThisTurn at the end.
+      // Move a Basic <energyType> Energy from one of your Pokémon to another.
+      // Auto-pick: source = first ally with matching energy other than the
+      // player's chosen target; target = active.
+      const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+      const source = allies.find((p) =>
+        p.attachedEnergy.some((en) => en.subtypes.includes("Basic") && en.provides.includes(e.energyType)),
+      );
+      if (!source) return { ok: false, reason: `No Basic ${e.energyType} Energy on any of your Pokémon.` };
+      const target = allies.find((p) => p !== source);
+      if (!target) return { ok: false, reason: "Need another Pokémon to move energy to." };
+      const idx = source.attachedEnergy.findIndex((en) => en.subtypes.includes("Basic") && en.provides.includes(e.energyType));
+      const [en] = source.attachedEnergy.splice(idx, 1);
+      target.attachedEnergy.push(en);
+      logEvent(state, player, `uses ${ability.name}: moves ${en.name} from ${source.card.name} to ${target.card.name}.`);
+      // Don't set abilityUsedThisTurn — usable again same turn.
+      return { ok: true };
+    }
+    case "attachEnergyFromHandToNamedAsOften": {
+      // As-often-as-you-like; attach a Basic <type> Energy from hand to a
+      // <namePrefix> Pokémon (empty prefix → any of your Pokémon, active or
+      // bench). Auto-pick first match.
+      const idx = pl.hand.findIndex(
+        (c) => c.supertype === "Energy" && c.subtypes.includes("Basic") &&
+          (c as EnergyCard).provides.includes(e.energyType),
+      );
+      if (idx < 0) return { ok: false, reason: `No basic ${e.energyType} Energy in hand.` };
+      const allies = e.namePrefix === ""
+        ? [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p)
+        : pl.bench.filter((p) => p.card.name.startsWith(e.namePrefix));
+      const target = allies[0];
+      if (!target) return { ok: false, reason: e.namePrefix ? `No Benched ${e.namePrefix.trim()} Pokémon.` : "No Pokémon to attach to." };
+      const [en] = pl.hand.splice(idx, 1) as [EnergyCard];
+      target.attachedEnergy.push(en);
+      logEvent(state, player, `uses ${ability.name}: attaches ${en.name} to ${target.card.name}.`);
+      // As-often: don't set abilityUsedThisTurn.
+      return { ok: true };
+    }
     case "lunarCycleDrawN": {
       // Solrock-in-play gate.
       const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
@@ -1740,6 +1876,238 @@ const TRIGGERED_ON_EVOLVE: Record<string, TriggeredOnEvolveEffect> = {
     },
   },
 
+  // Crobat ex Biting Spree — put 2 damage counters on each of 2 opp's Pokémon.
+  "Biting Spree": {
+    label: "Biting Spree: 2 counters on each of 2 opp's Pokémon",
+    run: (state, player) => {
+      const oppId: PlayerId = player === "p1" ? "p2" : "p1";
+      const opp = state.players[oppId];
+      const all = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+      const sorted = all.slice().sort((a, b) => b.damage - a.damage).slice(0, 2);
+      for (const t of sorted) {
+        t.damage += 20;
+        logEvent(state, player, `Biting Spree: ${t.card.name} takes 20 damage.`);
+      }
+    },
+  },
+
+  // Ledian Glittering Star Pattern — gust opp benched ≤90 HP remaining.
+  "Glittering Star Pattern": {
+    label: "Glittering Star Pattern: gust an opp Benched (≤90 HP remaining)",
+    run: (state, player) => {
+      const oppId: PlayerId = player === "p1" ? "p2" : "p1";
+      const opp = state.players[oppId];
+      if (!opp.active || opp.bench.length === 0) return;
+      const candidates = opp.bench.filter((p) => (p.card.hp - p.damage) <= 90);
+      if (candidates.length === 0) return;
+      const pick = candidates[0];
+      const idx = opp.bench.indexOf(pick);
+      const pulled = opp.bench.splice(idx, 1)[0];
+      const wasActive = opp.active;
+      opp.active = pulled;
+      opp.bench.push(wasActive);
+      logEvent(state, player, `Glittering Star Pattern: gusts ${pulled.card.name} into the Active spot.`);
+    },
+  },
+
+  // Dachsbun ex Time to Chow Down — heal all from each Evolution Pokémon, then discard energy from those.
+  "Time to Chow Down": {
+    label: "Time to Chow Down: heal each Evolution + discard their Energy",
+    run: (state, player) => {
+      const pl = state.players[player];
+      const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+      const evos = allies.filter((p) => (p.card.subtypes ?? []).some((s) => s === "Stage 1" || s === "Stage 2"));
+      let healed = 0;
+      for (const p of evos) {
+        if (p.damage > 0) {
+          healed += p.damage;
+          p.damage = 0;
+        }
+      }
+      if (healed > 0) {
+        for (const p of evos) {
+          if (p.attachedEnergy.length > 0) {
+            pl.discard.push(...p.attachedEnergy);
+            p.attachedEnergy = [];
+          }
+        }
+        logEvent(state, player, `Time to Chow Down: heals ${healed} across Evolution Pokémon and discards their Energy.`);
+      }
+    },
+  },
+
+  // Durant ex Sudden Shearing — discard top of opp deck.
+  "Sudden Shearing": {
+    label: "Sudden Shearing: discard top card of opp's deck",
+    run: (state, player) => {
+      const oppId: PlayerId = player === "p1" ? "p2" : "p1";
+      const opp = state.players[oppId];
+      const top = opp.deck.shift();
+      if (!top) return;
+      opp.discard.push(top);
+      logEvent(state, player, `Sudden Shearing: discards ${top.name} from ${opp.name}'s deck.`);
+    },
+  },
+
+  // Archaludon ex Assemble Alloy — attach up to 2 Basic Metal Energy from
+  // discard to your Metal Pokémon (round-robin).
+  "Assemble Alloy": {
+    label: "Assemble Alloy: 2 Basic Metal Energy from discard → Metal Pokémon",
+    run: (state, player) => {
+      const pl = state.players[player];
+      const metalAllies = [pl.active, ...pl.bench]
+        .filter((p): p is PokemonInPlay => !!p)
+        .filter((p) => p.card.types.includes("Metal"));
+      if (metalAllies.length === 0) return;
+      let attached = 0;
+      for (let i = 0; i < 2; i++) {
+        const idx = pl.discard.findIndex(
+          (c) => c.supertype === "Energy" && c.subtypes.includes("Basic") &&
+            (c as EnergyCard).provides.includes("Metal"),
+        );
+        if (idx < 0) break;
+        const [en] = pl.discard.splice(idx, 1) as [EnergyCard];
+        metalAllies[attached % metalAllies.length].attachedEnergy.push(en);
+        attached++;
+      }
+      if (attached > 0) logEvent(state, player, `Assemble Alloy: attaches ${attached} Metal Energy.`);
+    },
+  },
+
+  // Marnie's Grimmsnarl ex Punk Up — 5 Basic Darkness Energy from deck to
+  // Marnie's Pokémon. Auto-distributes round-robin.
+  "Punk Up": {
+    label: "Punk Up: search 5 Basic Darkness Energy → Marnie's Pokémon",
+    run: (state, player) => {
+      const pl = state.players[player];
+      const allies = [pl.active, ...pl.bench]
+        .filter((p): p is PokemonInPlay => !!p)
+        .filter((p) => p.card.name.startsWith("Marnie's "));
+      if (allies.length === 0) return;
+      let attached = 0;
+      for (let i = 0; i < 5; i++) {
+        const idx = pl.deck.findIndex(
+          (c) => c.supertype === "Energy" && c.subtypes.includes("Basic") &&
+            (c as EnergyCard).provides.includes("Darkness"),
+        );
+        if (idx < 0) break;
+        const [en] = pl.deck.splice(idx, 1) as [EnergyCard];
+        allies[attached % allies.length].attachedEnergy.push(en);
+        attached++;
+      }
+      const arr = pl.deck;
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = state.rng.int(i + 1);
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      if (attached > 0) logEvent(state, player, `Punk Up: attaches ${attached} Darkness Energy to Marnie's Pokémon.`);
+    },
+  },
+
+  // Arven's Greedent Greedy Order — recover up to 2 Arven's Sandwich from discard.
+  "Greedy Order": {
+    label: "Greedy Order: up to 2 Arven's Sandwich from discard → hand",
+    run: (state, player) => {
+      const pl = state.players[player];
+      let recovered = 0;
+      for (let i = 0; i < 2; i++) {
+        const idx = pl.discard.findIndex((c) => c.name === "Arven's Sandwich");
+        if (idx < 0) break;
+        const [c] = pl.discard.splice(idx, 1);
+        pl.hand.push(c);
+        recovered++;
+      }
+      if (recovered > 0) logEvent(state, player, `Greedy Order: returns ${recovered} Arven's Sandwich.`);
+    },
+  },
+
+  // Team Rocket's Golbat Sneaky Bite — put 2 damage counters on 1 of opp's Pokémon.
+  "Sneaky Bite": {
+    label: "Sneaky Bite: 2 counters on 1 opp Pokémon",
+    run: (state, player) => {
+      const oppId: PlayerId = player === "p1" ? "p2" : "p1";
+      const opp = state.players[oppId];
+      const targets = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+      if (targets.length === 0) return;
+      const target = targets.slice().sort((a, b) => b.damage - a.damage)[0];
+      target.damage += 20;
+      logEvent(state, player, `Sneaky Bite: ${target.card.name} takes 20 damage.`);
+    },
+  },
+
+  // Hop's Dubwool Defiant Horn — gust opp's bench (alias of Heave-Ho Catcher).
+  "Defiant Horn": {
+    label: "Defiant Horn: gust opp's Benched",
+    run: (state, player) => {
+      const oppId: PlayerId = player === "p1" ? "p2" : "p1";
+      const opp = state.players[oppId];
+      if (!opp.active || opp.bench.length === 0) return;
+      const target = opp.bench.slice().sort((a, b) => b.card.hp - a.card.hp)[0];
+      const idx = opp.bench.indexOf(target);
+      const pulled = opp.bench.splice(idx, 1)[0];
+      const wasActive = opp.active;
+      opp.active = pulled;
+      opp.bench.push(wasActive);
+      logEvent(state, player, `Defiant Horn gusts ${pulled.card.name} to Active.`);
+    },
+  },
+
+  // Lycanroc Spike-Clad — attach up to 2 Spiky Energy from discard to self.
+  "Spike-Clad": {
+    label: "Spike-Clad: 2 Spiky Energy from discard → self",
+    run: (state, player, self) => {
+      const pl = state.players[player];
+      let attached = 0;
+      for (let i = 0; i < 2; i++) {
+        const idx = pl.discard.findIndex((c) => c.name === "Spiky Energy");
+        if (idx < 0) break;
+        const [en] = pl.discard.splice(idx, 1) as [EnergyCard];
+        self.attachedEnergy.push(en);
+        attached++;
+      }
+      if (attached > 0) logEvent(state, player, `Spike-Clad: attaches ${attached} Spiky Energy.`);
+    },
+  },
+
+  // Ambipom Wicked Tail — flip 2 coins, per heads put a random opp hand card to opp deck.
+  "Wicked Tail": {
+    label: "Wicked Tail: 2 coins → random opp hand → deck per heads",
+    run: (state, player) => {
+      const oppId: PlayerId = player === "p1" ? "p2" : "p1";
+      const opp = state.players[oppId];
+      let heads = 0;
+      for (let i = 0; i < 2; i++) {
+        if (state.rng.next() < 0.5) heads++;
+      }
+      for (let i = 0; i < heads; i++) {
+        if (opp.hand.length === 0) break;
+        const idx = state.rng.int(opp.hand.length);
+        const [c] = opp.hand.splice(idx, 1);
+        opp.deck.push(c);
+        logEvent(state, "system", `${c.name} returned to ${opp.name}'s deck.`);
+      }
+      // Shuffle opp deck.
+      const arr = opp.deck;
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = state.rng.int(i + 1);
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    },
+  },
+
+  // Whimsicott Wafting Heal — heal all damage from Active Grass Pokémon, then discard its Energy.
+  "Wafting Heal": {
+    label: "Wafting Heal: full-heal Active Grass + discard its Energy",
+    run: (state, player) => {
+      const pl = state.players[player];
+      if (!pl.active || !pl.active.card.types.includes("Grass") || pl.active.damage === 0) return;
+      const healed = pl.active.damage;
+      pl.active.damage = 0;
+      pl.discard.push(...pl.active.attachedEnergy);
+      pl.active.attachedEnergy = [];
+      logEvent(state, player, `Wafting Heal: heals ${healed} from ${pl.active.card.name} and discards its Energy.`);
+    },
+  },
 };
 
 // Called from `evolve()` immediately after the Pokémon's card swap. Fires any
@@ -1799,6 +2167,118 @@ const TRIGGERED_ON_BENCH: Record<string, TriggeredOnBenchEffect> = {
         logEvent(state, player, "Last-Ditch Catch: no Supporter in deck.");
       }
       state.players[player].lastDitchUsedThisTurn = true;
+    },
+  },
+
+  // Iron Leaves ex Rapid Vernier — switch with Active and (optionally) move
+  // any Energy from your other Pokémon. Auto-resolves: switch + move all
+  // Energy from formerly-Active onto Iron Leaves.
+  "Rapid Vernier": {
+    label: "Rapid Vernier: switch with Active + move Energy",
+    run: (state, player, self) => {
+      const pl = state.players[player];
+      if (!pl.active) return;
+      const oldActive = pl.active;
+      const idx = pl.bench.findIndex((p) => p.instanceId === self.instanceId);
+      if (idx < 0) return;
+      pl.bench.splice(idx, 1);
+      pl.bench.push(oldActive);
+      pl.active = self;
+      // Move all energy from oldActive (now benched) to self.
+      self.attachedEnergy.push(...oldActive.attachedEnergy);
+      oldActive.attachedEnergy = [];
+      logEvent(state, player, `Rapid Vernier: ${self.card.name} switches in and absorbs ${oldActive.card.name}'s Energy.`);
+    },
+  },
+
+  // Bloodmoon Ursaluna Battle-Hardened — when played to bench, attach up to
+  // 2 Basic Fighting Energy from hand to this Pokémon.
+  "Battle-Hardened": {
+    label: "Battle-Hardened: attach up to 2 Basic Fighting Energy from hand",
+    run: (state, player, self) => {
+      const pl = state.players[player];
+      let attached = 0;
+      for (let i = 0; i < 2; i++) {
+        const idx = pl.hand.findIndex(
+          (c) => c.supertype === "Energy" && c.subtypes.includes("Basic") &&
+            (c as EnergyCard).provides.includes("Fighting"),
+        );
+        if (idx < 0) break;
+        const [en] = pl.hand.splice(idx, 1) as [EnergyCard];
+        self.attachedEnergy.push(en);
+        attached++;
+      }
+      if (attached > 0) logEvent(state, player, `Battle-Hardened: attaches ${attached} Fighting Energy.`);
+    },
+  },
+  // Chien-Pao Snow Sink — discard a Stadium in play.
+  "Snow Sink": {
+    label: "Snow Sink: discard a Stadium in play",
+    run: (state) => {
+      if (!state.stadium) return;
+      const stadium = state.stadium.card;
+      const owner = state.stadium.controller;
+      state.players[owner].discard.push(stadium);
+      state.stadium = null;
+      logEvent(state, "system", `Snow Sink: ${stadium.name} discarded.`);
+    },
+  },
+  // Indeedee Obliging Heal — heal 30 from Active + cure a status.
+  "Obliging Heal": {
+    label: "Obliging Heal: heal 30 from Active + cure status",
+    run: (state, player) => {
+      const pl = state.players[player];
+      if (!pl.active) return;
+      const before = pl.active.damage;
+      pl.active.damage = Math.max(0, pl.active.damage - 30);
+      if (pl.active.statuses.length > 0) pl.active.statuses = [];
+      logEvent(state, player, `Obliging Heal: heals ${before - pl.active.damage} from ${pl.active.card.name}.`);
+    },
+  },
+  // Drilbur Dig Dig Dig — search 3 Basic Fighting Energy and discard them
+  // (deck thinning + setup for Energy-from-discard plays).
+  "Dig Dig Dig": {
+    label: "Dig Dig Dig: search 3 Basic Fighting Energy and discard",
+    run: (state, player) => {
+      const pl = state.players[player];
+      let pulled = 0;
+      for (let i = 0; i < 3; i++) {
+        const idx = pl.deck.findIndex(
+          (c) => c.supertype === "Energy" && c.subtypes.includes("Basic") &&
+            (c as EnergyCard).provides.includes("Fighting"),
+        );
+        if (idx < 0) break;
+        const [en] = pl.deck.splice(idx, 1);
+        pl.discard.push(en);
+        pulled++;
+      }
+      const arr = pl.deck;
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = state.rng.int(i + 1);
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      if (pulled > 0) logEvent(state, player, `Dig Dig Dig: discards ${pulled} Fighting Energy from deck.`);
+    },
+  },
+  // Farfetch'd Impromptu Carrier — search a Pokémon Tool from deck and attach
+  // to this Pokémon.
+  "Impromptu Carrier": {
+    label: "Impromptu Carrier: search a Tool and attach to self",
+    run: (state, player, self) => {
+      const pl = state.players[player];
+      const idx = pl.deck.findIndex(
+        (c) => c.supertype === "Trainer" &&
+          ((c.subtypes ?? []).includes("Pokémon Tool") || (c.subtypes ?? []).includes("Tool")),
+      );
+      if (idx < 0) return;
+      const [tool] = pl.deck.splice(idx, 1);
+      self.tools.push(tool as TrainerCard);
+      const arr = pl.deck;
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = state.rng.int(i + 1);
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      logEvent(state, player, `Impromptu Carrier: attaches ${tool.name}.`);
     },
   },
 };
@@ -1933,6 +2413,9 @@ export function fireTriggeredOnMoveToActive(
   player: PlayerId,
   promoted: PokemonInPlay,
 ): void {
+  // Mark for predicates like Rayquaza Breakthrough Assault. Cleared at end
+  // of the player's turn.
+  promoted.movedToActiveThisTurn = true;
   // "Once during your turn" — these abilities only fire on the owner's turn.
   // A gust that forces a move on the opponent's turn doesn't trigger.
   if (state.activePlayer !== player) return;
@@ -1980,6 +2463,15 @@ export function fireTriggeredOnMoveToBench(
   player: PlayerId,
   moved: PokemonInPlay,
 ): void {
+  // Clear "until it leaves the Active Spot" attack-locks. These are sentinel
+  // 99999 entries on cantUseAttacksUntilTurn — drop them now that the
+  // Pokémon has moved to the bench.
+  const bag = moved as PokemonInPlay & { cantUseAttacksUntilTurn?: Record<string, number> };
+  if (bag.cantUseAttacksUntilTurn) {
+    for (const [name, turn] of Object.entries(bag.cantUseAttacksUntilTurn)) {
+      if (turn === 99999) delete bag.cantUseAttacksUntilTurn[name];
+    }
+  }
   if (state.activePlayer !== player) return;
   const abilities = moved.card.abilities ?? [];
   for (const ab of abilities) {

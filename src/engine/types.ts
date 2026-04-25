@@ -39,38 +39,301 @@ export type AttackEffect =
   | { kind: "perDamageCounterOnSelf"; perCount: number } // "... for each damage counter on this Pokémon."
   | { kind: "perDamageCounterOnDefender"; perCount: number } // "... for each damage counter on the opponent's Active."
   | { kind: "perEnergyOnDefender"; perCount: number } // "... for each Energy attached to your opponent's Active."
+  | { kind: "perEnergyOnBothActives"; perCount: number } // "... for each Energy attached to both Active Pokémon."
+  // "Discard up to N Energy from your Benched Pokémon. +M damage per discard."
+  | { kind: "discardBenchEnergyForDamage"; max: number; damagePer: number }
+  // "You may discard any amount of Energy from this Pokémon. +N damage per discarded card." (Iron Hands etc.)
+  | { kind: "discardOwnEnergyForDamage"; damagePer: number; max?: number }
+  // Discard a Stadium in play (Eternatus Shatter etc.)
+  | { kind: "discardStadium" }
+  // "Put N damage counters on opp's Benched Pokémon in any way." (Dragapult Phantom Dive.)
+  | { kind: "placeCountersOnOppBenchAny"; counters: number }
+  // "During opp's next turn, attacks by Defending do N less damage."
+  | { kind: "defenderAttacksWeakerNextTurn"; amount: number }
+  // "During opp's next turn, if this Pokémon is damaged, put N damage counters on the Attacker."
+  | { kind: "counterAttackerNextTurn"; counters: number }
+  // "Your opponent discards N cards from their hand." (random)
+  | { kind: "oppDiscardsHand"; count: number }
+  // "This attack does N damage for each card in your opponent's hand."
+  | { kind: "perCardInOppHand"; perCount: number }
+  // "You may attach any number of Basic Energy cards from your hand to your Pokémon in any way you like." (Alolan Exeggutor Tropical Frenzy)
+  | { kind: "attachAnyBasicFromHandAll" }
+  // "You may put this Pokémon into your hand. (Discard all attached cards.)" (Team Rocket's Crobat ex)
+  | { kind: "returnSelfToHandDiscardAttached" }
+  // "Put an Energy attached to this Pokémon into your hand." (Landorus Screw Knuckle)
+  | { kind: "ownEnergyToHand"; count: number }
+  // "Switch in 1 of your opponent's Benched Pokémon to the Active Spot." (Clefairy Follow Me)
+  | { kind: "gustOppBenchedAttack" }
+  // "Discard any amount of Basic Energy from your Pokémon. +N damage per card discarded."
+  // OR with type filter ("any amount of Fire Energy from among your Pokémon").
+  | { kind: "discardAnyEnergyAcrossOwnForDamage"; damagePer: number; energyType?: EnergyType }
+  // "You may discard up to N Energy cards from your hand. +M damage per discarded."
+  | { kind: "discardHandEnergyForDamage"; max: number; damagePer: number }
+  // "This attack does N damage for each Pokémon Tool attached to all of your Pokémon."
+  | { kind: "perOwnToolAttached"; perCount: number }
+  // "Your opponent chooses N cards from their hand and shuffles them into their deck."
+  | { kind: "oppChoosesHandToDeck"; count: number }
+  // "Discard up to N Energy cards from this Pokémon. +M damage per discarded."
+  | { kind: "discardOwnEnergyUpToForDamage"; max: number; damagePer: number; energyType?: EnergyType }
+  // "During your opponent's next turn, this Pokémon has no Weakness." (Archaludon Metal Defender)
+  | { kind: "selfNoWeaknessNextTurn" }
+  // "Discard a card from your hand. If you do, draw N cards." (Klefki Stick 'n' Draw, Tropius Fruit Bearing)
+  | { kind: "discardHandForDraw"; drawCount: number }
+  // "If <pred>, this attack's base damage is N." (Mega Mawile ex Huge Bite)
+  | { kind: "conditionalBaseDamageOverride"; baseDamage: number; predicate: AttackPredicate }
+  // "Look at the top card of your deck. You may discard that card." (Litwick Brighten and Burn)
+  | { kind: "peekTopMayDiscard" }
+  // "Discard the top N cards of your deck. +M damage per <Type> Energy discarded." (Mega Abomasnow Hammer-lanche)
+  | { kind: "millSelfForDamagePerType"; count: number; damagePer: number; energyType: EnergyType }
+  // "Move all damage counters from 1 of your Benched Pokémon to 1 of your opponent's Pokémon."
+  | { kind: "moveDamageOwnBenchToOpp" }
+  // "Knock Out each of your opponent's Pokémon that has N HP or less remaining." (Yveltal ex Soul Destroyer)
+  | { kind: "koAllOppWithLowHp"; hpMax: number }
+  // "Choose 2 of your opponent's Benched Pokémon. Shuffle those Pokémon and all attached cards into deck."
+  | { kind: "shuffleOppBenchToDeck"; count: number }
+  // "Look at the top N cards of your deck. You may put any number of Pokémon found there onto your Bench."
+  | { kind: "peekTopOptionalBench"; count: number }
+  // "You may discard N <Type> Energy from this Pokémon and make opp's Active Pokémon <Status>." (Mega Eelektross Disaster Shock)
+  | { kind: "discardOwnEnergyForStatus"; count: number; energyType: EnergyType; status: StatusCondition }
+  // "Reveal any number of <Name1>, <Name2>, and <Name3> from your hand. +N damage per revealed." (Doublade Weaponized Swords)
+  | { kind: "revealNamedFromHandForDamage"; namesPattern: string[]; damagePer: number }
+  // "Discard a <Name> Energy from this Pokémon. If you do, discard opp's Active Pokémon and all attached cards." (Team Rocket's Moltres ex Evil Incineration)
+  | { kind: "discardSpecialEnergyKoOpp"; energyName: string }
+  // "Your opponent reveals their hand." (Hoothoot Silent Wing — info-only.)
+  | { kind: "revealOppHand" }
+  // "For each of your Benched Pokémon, search your deck for a card that
+  // evolves from that Pokémon and put it onto that Pokémon to evolve it."
+  | { kind: "searchEvolveBench" }
+  // "During your next turn, this Pokémon's <Name> attack does N more damage."
+  // (Meloetta Echoed Voice, Metagross Meteor Mash, etc.)
+  | { kind: "selfNextTurnAttackBonus"; attackName: string; bonus: number }
+  // "This Pokémon can't use <Name> again until it leaves the Active Spot."
+  // (Gouging Fire Blaze Blitz.) Lock until move-out.
+  | { kind: "selfCantUseAttackUntilLeavesActive"; attackName: string }
+  // "If your opponent's Active Pokémon has exactly N damage counters on it,
+  // that Pokémon is Knocked Out." (Mega Absol Terminal Period.)
+  | { kind: "koOppIfExactlyDamageCounters"; counters: number }
+  // "Discard up to N Pokémon Tools from your opponent's Pokémon." (Minccino)
+  | { kind: "discardOppToolsN"; max: number }
+  // "This attack does N damage for each Special Energy card attached to this Pokémon."
+  | { kind: "perSpecialEnergyOnSelf"; perCount: number }
+  // "This attack does N less damage for each damage counter on this Pokémon."
+  | { kind: "perDamageCounterReduction"; perCount: number }
+  // "Attach a Basic Energy card from your hand to 1 of your Pokémon." (simple — auto-pick)
+  | { kind: "attachBasicFromHandToOne" }
+  // "You may put N Energy attached to opp's Active Pokémon into their hand."
+  | { kind: "bounceOppEnergyToHand"; count: number }
+  // "At the end of your opponent's next turn, put N damage counters on the Defending Pokémon."
+  | { kind: "delayedDamageOnDefender"; counters: number }
+  // "Put damage counters on opp's Active Pokémon until its remaining HP is N."
+  | { kind: "damageOppDownTo"; floorHp: number }
+  // "Discard this Pokémon and all attached cards." (Revavroom Shattering Speed — self-KO)
+  | { kind: "selfKoDiscardAll" }
+  // "Discard the top N cards of your deck." (self-mill, no damage rider)
+  | { kind: "discardTopOfOwnDeck"; count: number }
+  // "Reveal the top N cards of your deck. This attack does M damage for each
+  // <subtype> card found. Then, discard those <subtype> cards and shuffle." (Iron Thorns Destructo-Press)
+  | { kind: "revealTopForFilteredDamage"; count: number; damagePer: number; subtype: string }
+  // "This attack does N damage for each damage counter on all of your Benched <X> Pokémon."
+  | { kind: "perCountersOnFilteredBench"; perCount: number; filter: PokemonFilter }
+  // "Put 1 of your Benched Pokémon and all attached cards into your hand."
+  | { kind: "bounceOneBench" }
+  // "Discard the top card of each player's deck. +N damage per Energy card discarded."
+  | { kind: "millBothForEnergyDamage"; damagePer: number }
+  // "This attack does N damage for each Prize card you have taken."
+  | { kind: "perPrizeYouTaken"; perCount: number }
+  // "This attack does N damage for each [type] Energy card in your opponent's discard pile."
+  | { kind: "perEnergyInOppDiscard"; perCount: number; energyType?: EnergyType }
+  // "This attack does N damage for each Special Condition affecting your opponent's Active Pokémon."
+  | { kind: "perStatusOnDefender"; perCount: number }
+  // "This attack does N more damage for each [card filter] in your discard pile."
+  | { kind: "perCardInOwnDiscard"; perCount: number; filter: PokemonFilter | { kind: "energyOfType"; energyType: EnergyType } | { kind: "cardNamePart"; namePart: string } }
+  // "Discard a [type] Energy from your opponent's Active Pokémon."
+  | { kind: "discardTypedOppEnergy"; count: number; energyType: EnergyType }
+  // "This Pokémon recovers from all Special Conditions." (Arboliva Aroma Shot)
+  | { kind: "selfRecoverAllStatuses" }
   | { kind: "perPrizeOppTaken"; perCount: number } // "... for each Prize card your opponent has taken."
-  | { kind: "benchSnipe"; damage: number; target: "opponentBench" | "allBench" | "allOpponents" }
+  | { kind: "benchSnipe"; damage: number; target: "opponentBench" | "allBench" | "allOpponents" | "ownBench" }
   | { kind: "selfDamage"; damage: number } // "This Pokémon also does N damage to itself."
-  | { kind: "applyStatus"; status: StatusCondition; target: "defender" | "self" }
+  | { kind: "applyStatus"; status: StatusCondition; target: "defender" | "self"; requiresHeads?: boolean }
   | { kind: "heal"; amount: number; target: "self" | "active" }
+  // "Heal N damage from 1 of your Pokémon." Auto-picks the most-damaged ally.
+  | { kind: "healOneOfYours"; amount: number }
+  // "Heal from this Pokémon the same amount of damage you did to opp's Active."
+  // Giga Drain pattern — drain attacker for damage dealt this hit.
+  | { kind: "healEqualToDamageDealt" }
+  // "Heal N damage from each of your <subtype> Pokémon." (Leavanny "Healing
+  // Wrapping" — only heals Basic Pokémon.)
+  | { kind: "healEachOwnSubtype"; amount: number; subtype: "Basic" | "Stage 1" | "Stage 2" | "Evolution" }
   | { kind: "discardOwnEnergy"; count: number } // "Discard N Energy from this Pokémon."
   | { kind: "drawCards"; count: number }
+  | { kind: "drawUntilHandSize"; targetSize: number; optional?: boolean } // "Draw cards until you have N in hand."
   | { kind: "blockOppItemsNextTurn" } // Budew Itchy Pollen — opp can't play Items next turn.
   | { kind: "flipMultiCoinsPerHeads"; coins: number; perHeads: number } // "Flip N coins. N damage per heads."
   | { kind: "selfCantAttackNextTurn" } // During your next turn, this Pokémon can't attack.
   | { kind: "defenderCantRetreatNextTurn" } // During opp's next turn, Defending can't retreat.
+  | { kind: "defenderCantAttackNextTurn" } // During opp's next turn, Defending can't use attacks.
   | { kind: "selfDamageReductionNextTurn"; amount: number } // "takes N less damage next turn"
   | { kind: "snipeOne"; damage: number } // "This attack also does N damage to 1 of opp's Benched"
+  // "This attack does N damage to 2/3 of your opponent's Pokémon." Hits both
+  // Active + Bench; auto-picks the most-damaged targets.
+  | { kind: "damageMultipleTargets"; damage: number; count: number; benchOnly: boolean }
   | { kind: "switchOutOpponent" } // Opp promotes new Active from bench
   | { kind: "selfSwitch" } // Switch attacker with a benched Pokémon
   | { kind: "discardOppEnergy"; count: number } // Discard N Energy from opp's Active
+  | { kind: "discardOppSpecialEnergy"; count: number } // Discard N Special Energy from opp's Active
   | { kind: "flipHeadsDiscardOppEnergy" } // Flip — heads: discard one Energy from opp's Active
+  | { kind: "multiCoinFlipDiscardOppEnergy"; coins: number } // Flip N coins; per heads, discard 1 Energy
+  | { kind: "multiCoinFlipMillOpp"; coins: number } // Flip N coins; per heads, mill 1
   | { kind: "healEachOwnPokemon"; amount: number } // Heal N from each of your Pokémon
   | { kind: "discardTopOfOppDeck"; count: number } // Mill the opp deck by N
   | { kind: "discardOppTools" } // "Before doing damage, discard all Tools from opp's Active"
   | { kind: "callForFamily"; max: number } // "Search your deck for up to N Basic Pokémon and put them onto your Bench."
   | { kind: "flipUntilTailsPerHeads"; perHeads: number } // Geometric damage ("Flip until you get tails")
   | { kind: "placeCountersPerHandCard"; countersPerCard: number } // Alakazam "Powerful Hand"
+  // "Place N damage counters on <target>." Direct damage-counter placement
+  // bypasses Weakness/Resistance. Targets: opp Active / opp Benched / 1 opp Pokémon.
+  | { kind: "placeCounters"; counters: number; target: "oppActive" | "oppBench" | "anyOpp" }
+  // Per-Pokémon-in-play damage scaling, filtered. Generalizes the existing
+  // `perFriendlyBench` etc. so cards like Wigglytuff "Round" work.
+  | { kind: "perPokemonFilter"; side: "friendly" | "opponent"; perCount: number; filter: PokemonFilter; includeActive: boolean }
   | { kind: "fizzleIfNoStadium" } // Fan Rotom "Assault Landing"
   | { kind: "shieldNextTurn"; requiresHeads: boolean } // Dunsparce "Dig" — prevent damage+effects next turn
   | { kind: "searchEnergyAttachBenchType"; pokemonType: EnergyType } // Shaymin DRI "Send Flowers"
   | { kind: "attachNFromDiscardToBench"; energyType: EnergyType; max: number } // Mega Lucario ex "Aura Jab"
+  // "Attach up to N Basic <type> Energy cards from discard to this Pokémon."
+  | { kind: "attachNFromDiscardToSelf"; energyType: EnergyType; max: number }
+  // "Attach a Basic Energy card from discard to 1 of your Benched Pokémon."
+  // (Furfrou Energy Assist / Oricorio.) energyType undefined = any Basic Energy.
+  | { kind: "attachBasicFromDiscardToOneBench"; energyType?: EnergyType; max: number }
+  // "Attach a Basic <type> Energy card from discard to each of your Benched."
+  | { kind: "attachBasicFromDiscardToEachBench"; energyType: EnergyType }
+  // "Put up to N <filter> Pokémon from your discard pile onto your Bench."
+  | { kind: "recoverPokemonFromDiscardToBench"; max: number; filter: PokemonFilter }
+  // "Put up to N Pokémon from your discard pile into your hand."
+  | { kind: "recoverPokemonFromDiscardToHand"; max: number; filter: PokemonFilter }
+  // "Put a Supporter card from your discard pile into your hand."
+  | { kind: "recoverTrainerFromDiscard"; max: number; subtype: "Supporter" | "Item" | "Pokémon Tool" | "any" }
   | { kind: "selfCantUseAttackNextTurn"; attackName: string } // Riolu / Mega Brave — only THIS attack is locked
   | { kind: "multiCoinPerOppPokemon"; damagePerHeads: number } // Mega Zygarde ex "Nullifying Zero"
   | { kind: "fizzleIfNoAlly"; allyName: string } // Solrock Cosmic Beam
-  | { kind: "ignoreWeaknessResistance" } // Cosmic Beam
-  | { kind: "returnSelfToHand" }; // Meowth ex Tuck Tail
+  | { kind: "ignoreWeaknessResistance" } // Cosmic Beam — ignore both
+  | { kind: "ignoreWeaknessOnly" } // "isn't affected by Weakness."
+  | { kind: "ignoreResistanceOnly" } // "isn't affected by Resistance." (Naclstack Rock Hurl)
+  | { kind: "ignoreOppEffects" } // "isn't affected by any effects on opp's Active." (Mega Lopunny Spiky Hopper)
+  | { kind: "returnSelfToHand" } // Meowth ex Tuck Tail
+  // Generic predicate-gated damage modifier. `mode: "bonus"` adds N damage
+  // when the predicate matches; `mode: "fizzleIfNot"` zeros all damage when
+  // the predicate fails. The attack still pays cost either way.
+  | { kind: "conditionalDamage"; bonus: number; mode: "bonus" | "fizzleIfNot"; predicate: AttackPredicate }
+  // Predicate-gated KO: if the predicate matches the defender, the attack
+  // automatically KOs the defender regardless of HP/damage. (Haxorus Axe Blast.)
+  | { kind: "conditionalKoDefender"; predicate: AttackPredicate }
+  // Predicate-gated status on defender — used for Black Kyurem Ice Age etc.
+  | { kind: "conditionalStatus"; status: StatusCondition; target: "defender" | "self"; predicate: AttackPredicate }
+  // Attack-driven deck search. The most common attack template family. The
+  // engine opens a `pendingPick` for human players (auto-picks for AI). Picked
+  // cards go to hand by default; `destination` overrides for attach / bench
+  // targets.
+  | {
+      kind: "searchDeckAttack";
+      filter: AttackSearchFilter;
+      destination: "hand" | "bench" | "attachSelf" | "attachAll";
+      max: number;
+      optional?: boolean; // "you may search..."
+    }
+  // "Search your deck for a card that evolves from this Pokémon and put it
+  // onto this Pokémon to evolve it." (Misdreavus Ascension etc.) Auto-picks
+  // the first eligible evolution from the deck.
+  | { kind: "searchEvolveSelf" }
+  // "For each of your Benched Pokémon, search your deck for a Basic <Type>
+  // Energy card and attach it..." (Mega Gardevoir Overflowing Wishes). Auto-
+  // resolves: one card per benched ally, capped by deck contents.
+  | { kind: "searchEnergyForEachBench"; energyType: EnergyType }
+  // "Choose a random card from opp's hand. They reveal it and shuffle into
+  // their deck." (Aipom Astonish, Rotom etc.)
+  | { kind: "randomOppHandToDeck"; count: number }
+  | { kind: "randomOppHandDiscard"; count: number } // "Discard a random card from opp's hand."
+  | { kind: "multiCoinFlipRandomOppHandDiscard"; coins: number } // "Flip N coins. For each heads, discard random."
+  // "Your opponent reveals their hand. Discard <filter> card(s) you find
+  // there." (Luxray ex Piercing Gaze, Mega Absol ex Claw of Darkness, Rotom
+  // Crushing Pulse.) Auto-picks for AI, opens pendingHandReveal for humans.
+  | { kind: "revealOppHandDiscard"; filter: "any" | "item" | "tool" | "itemOrTool" | "supporter"; max: number; min: number }
+  // "Your opponent reveals their hand. This attack does N damage for each
+  // <filter> card you find there." (Whimsicott ex Wondrous Cotton, Beautifly
+  // Energy Straw.) damagePer × matching cards is added to base damage.
+  | { kind: "damagePerCardClassInOppHand"; damagePer: number; filter: "trainer" | "energy" | "pokemon" | "item" | "supporter" }
+  // "Move an Energy from this Pokémon to 1 of your Benched Pokémon."
+  // count = "all" | number. Auto-picks the first benched ally.
+  | { kind: "moveOwnEnergyToBench"; count: number | "all" }
+  // "You may move an Energy from your opponent's Active Pokémon to 1 of
+  // their Benched Pokémon." (Gengar ex Tricky Steps.)
+  | { kind: "moveOppEnergyToBench"; count: number };
+
+export type PokemonFilter =
+  | { kind: "any" }
+  | { kind: "namePart"; namePart: string }
+  | { kind: "type"; energyType: EnergyType }
+  | { kind: "subtype"; subtype: string }
+  | { kind: "hasAttackNamed"; attackName: string };
+
+export type AttackSearchFilter =
+  | { kind: "any" }
+  | { kind: "pokemon" }
+  | { kind: "basicPokemon" }
+  | { kind: "stage1Pokemon" }
+  | { kind: "stage2Pokemon" }
+  | { kind: "evolutionPokemon" }
+  | { kind: "pokemonOfType"; energyType: EnergyType }
+  | { kind: "basicEnergy" }
+  | { kind: "basicEnergyType"; energyType: EnergyType }
+  | { kind: "supporter" }
+  | { kind: "item" }
+  | { kind: "tool" }
+  | { kind: "trainer" };
+
+// Discriminated union of state predicates evaluated against the current
+// attacker / defender / game-state at attack time.
+export type AttackPredicate =
+  // Defender properties
+  | { kind: "defenderIsEx" }
+  | { kind: "defenderIsExOrV" }
+  | { kind: "defenderIsV" }
+  | { kind: "defenderHasSubtype"; subtype: "Basic" | "Stage 1" | "Stage 2" | "Evolution" }
+  | { kind: "defenderHasStatus"; status: StatusCondition }
+  | { kind: "defenderHasAnyStatus" }
+  | { kind: "defenderHasType"; type: EnergyType }
+  | { kind: "defenderHasTool" }
+  | { kind: "defenderHasSpecialEnergy" }
+  | { kind: "defenderHasDamage" }
+  // Attacker properties
+  | { kind: "selfHasExtraEnergy"; extra: number }
+  | { kind: "selfHasDamage" }
+  | { kind: "selfHasNoDamage" }
+  | { kind: "selfHasTool" }
+  | { kind: "selfEvolvedThisTurn" }
+  | { kind: "selfHasNoEnergy" }
+  | { kind: "selfHasSpecialEnergy" }
+  | { kind: "selfHasEnergyOfType"; energyType: EnergyType }
+  | { kind: "selfHasNamedEnergy"; energyName: string }
+  | { kind: "selfMovedToActiveThisTurn" }
+  | { kind: "selfHasStatus"; status: StatusCondition }
+  // Game-state
+  | { kind: "youHavePokemonNamed"; namePart: string; minCount: number }
+  | { kind: "stadiumInPlayNamed"; stadiumNamePart: string }
+  | { kind: "yourTurnNumberAtLeast"; turn: number }
+  | { kind: "yourPokemonKoedLastOppTurn" }
+  | { kind: "yourPrizesEquals"; count: number }
+  | { kind: "yourPrizesAtMost"; count: number }
+  | { kind: "oppPrizesAtMost"; count: number }
+  | { kind: "yourHandSizeEquals"; count: number }
+  | { kind: "youHaveBenchPokemonOfType"; energyType: EnergyType }
+  | { kind: "allBenchHasDamage" }
+  | { kind: "yourHandSizeEqualsOpp" }
+  | { kind: "yourBenchCountAtMost"; count: number }
+  | { kind: "yourDiscardHasNTypedEnergy"; count: number; energyType: EnergyType }
+  | { kind: "youHavePokemonNamedOnBench"; namePart: string }
+  | { kind: "supporterPlayedThisTurnNamed"; namePart: string };
 
 export type StatusCondition = "asleep" | "burned" | "confused" | "paralyzed" | "poisoned";
 
@@ -143,7 +406,19 @@ export type AbilityEffect =
   | { kind: "shuffleSelfIntoDeck"; oncePerTurn: true } // Abra Teleporter
   | { kind: "peek2Top"; oncePerTurn: true } // Drakloak Recon Directive — look at top 2, take 1
   | { kind: "oppShuffleHandAndDrawN"; drawCount: number; oncePerTurn: true } // Gothitelle Distorted Future
-  | { kind: "attackBonusThisTurnSelfDamage"; selfDamage: number; bonusPerAttack: number; oncePerTurn: true }; // Feraligatr Torrential Heart
+  | { kind: "attackBonusThisTurnSelfDamage"; selfDamage: number; bonusPerAttack: number; oncePerTurn: true } // Feraligatr Torrential Heart
+  // "You must discard a card from your hand. Once during your turn, draw N cards." (N's Zoroark ex Trade)
+  | { kind: "drawNDiscardCost"; count: number; oncePerTurn: true }
+  // "Once during your turn, attach Basic Grass Energy from hand to 1 of your Pokémon. If attached, heal N from that Pokémon." (Hydrapple ex Ripening Charge)
+  | { kind: "attachEnergyFromHandThenHeal"; energyType: EnergyType; healAmount: number; oncePerTurn: true }
+  // "Once during your turn, if this Pokémon is in the Active Spot, draw 2 cards." (Mega Kangaskhan Run Errand)
+  | { kind: "drawNActiveOnly"; count: number; oncePerTurn: true }
+  // "As often as you like during your turn, you may use this Ability. Move a
+  // Basic <Type> Energy from 1 of your Pokémon to another of your Pokémon." (Mega Venusaur Solar Transfer)
+  | { kind: "moveBasicEnergyAnywhere"; energyType: EnergyType }
+  // "As often as you like during your turn, attach a Basic <Type> Energy
+  // card from your hand to 1 of your <NamePart> Pokémon." (Iono's Bellibolt Electric Streamer)
+  | { kind: "attachEnergyFromHandToNamedAsOften"; energyType: EnergyType; namePrefix: string };
 
 // Conditional gates evaluated at activation time. If the condition fails,
 // the button is disabled (or the activation blocked with a reason).
@@ -218,6 +493,14 @@ export interface PokemonInPlay {
   // during the opponent's next turn, all incoming damage and non-damage
   // effects directed at this Pokémon are prevented.
   shieldedUntilTurn?: number;
+  // True only on the turn this Pokémon moved from Bench to Active. Used by
+  // attack predicates like Rayquaza Breakthrough Assault. Cleared at end of
+  // its owner's turn.
+  movedToActiveThisTurn?: boolean;
+  // Set by attacks like Archaludon "Metal Defender" — during the opponent's
+  // upcoming turn, this Pokémon ignores its own Weakness. Cleared at end of
+  // its owner's turn.
+  noWeaknessUntilTurn?: number;
 }
 
 export type PlayerId = "p1" | "p2";
@@ -356,7 +639,10 @@ export interface PendingInPlayTarget {
     | { kind: "nPlanEnergySource"; remaining: number }
     | { kind: "wallysCompassion" }
     | { kind: "energySwitchSource" } // first step: user picks the source Pokémon
-    | { kind: "energySwitchDest"; sourceInstanceId: string }; // second step: user picks destination
+    | { kind: "energySwitchDest"; sourceInstanceId: string } // second step: user picks destination
+    | { kind: "jacintheHeal" } // Jacinthe — heal 150 from a damaged Psychic
+    | { kind: "pokeVitalAHeal" } // Poké Vital A — heal 150 from any damaged ally
+    | { kind: "wondrousPatchAttach" }; // Wondrous Patch — attach Psychic from discard to a Benched Psychic
 }
 
 export interface PendingPick {
@@ -379,6 +665,12 @@ export interface PendingPick {
   // If true, picked Pokémon go straight onto the Bench instead of the hand
   // (Nest Ball, Buddy-Buddy Poffin, Hop's Bag, Lumiose City).
   toBench?: boolean;
+  // If set, picked Energy cards are attached to the in-play Pokémon with this
+  // instanceId (used by attack-driven searches with destination "attachSelf").
+  attachToInstanceId?: string;
+  // If true, picked Energy cards are attached round-robin across all of the
+  // player's Pokémon (active + bench), starting from the Active.
+  attachAll?: boolean;
   // If set, another deck search is opened immediately after this pick
   // resolves. Used by multi-stage search supporters like Dawn (Basic → Stage
   // 1 → Stage 2) where each stage has a different predicate.

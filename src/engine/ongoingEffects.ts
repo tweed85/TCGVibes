@@ -190,7 +190,87 @@ export function effectiveMaxHp(p: PokemonInPlay, state: GameState): number {
       if (e.name === "Growing Grass Energy") hp += 20;
     }
   }
+  // Passive ability HP bonuses (Adrena-Power, Tyrannically Gutsy, etc.).
+  if (abilitiesActiveOn(state, p.card)) {
+    for (const ability of p.card.abilities ?? []) {
+      const rule = PASSIVE_HP_BONUSES[ability.name];
+      if (rule && rule.appliesTo(p, state)) hp += rule.amount;
+    }
+  }
   return Math.max(10, hp);
+}
+
+interface PassiveHpBonus {
+  appliesTo: (holder: PokemonInPlay, state: GameState) => boolean;
+  amount: number;
+}
+
+const PASSIVE_HP_BONUSES: Record<string, PassiveHpBonus> = {
+  // Okidogi Adrena-Power — if any Darkness Energy attached, +100 HP.
+  "Adrena-Power": {
+    appliesTo: (h) => h.attachedEnergy.some((e) => e.provides.includes("Darkness")),
+    amount: 100,
+  },
+  // Tyrantrum — if any Special Energy attached, +150 HP.
+  "Tyrannically Gutsy": {
+    appliesTo: (h) => h.attachedEnergy.some((e) => e.subtypes.includes("Special")),
+    amount: 150,
+  },
+  // Brambleghast — if any Darkness Energy attached, +110 HP.
+  "Cursed Sleep": {
+    appliesTo: (h) => h.attachedEnergy.some((e) => e.provides.includes("Darkness")),
+    amount: 110,
+  },
+};
+
+// --- Passive KO-survival abilities (Focus Sash / Sturdy) -----------------
+//
+// Triggered when a damage hit would push the holder's damage past their HP.
+// Some require full HP at the time of the hit (Pikachu ex Resolute Heart);
+// others flip a coin (Mega Hawlucha ex Tenacious Body).
+interface PassiveKoSurvival {
+  // Predicate: gates the survival check (e.g., requires full HP).
+  appliesTo: (holder: PokemonInPlay, state: GameState) => boolean;
+  // Returns true if the survival fires (may flip a coin).
+  triggers: (holder: PokemonInPlay, state: GameState) => boolean;
+}
+
+const PASSIVE_KO_SURVIVAL: Record<string, PassiveKoSurvival> = {
+  "Resolute Heart": {
+    // Pikachu ex — only when at full HP.
+    appliesTo: (h) => h.damage === 0,
+    triggers: () => true,
+  },
+  "Tenacious Body": {
+    // Mega Hawlucha ex — flip a coin; heads → survive at 10 HP.
+    appliesTo: () => true,
+    triggers: (_h, s) => s.rng.next() < 0.5,
+  },
+};
+
+// Cap the hit if any survival ability fires, leaving the holder at 10 HP.
+// Returns the new (possibly capped) damage value.
+export function applyAbilityKoSurvival(
+  state: GameState,
+  defender: PokemonInPlay,
+  damage: number,
+): number {
+  if (!abilitiesActiveOn(state, defender.card)) return damage;
+  const maxHp = effectiveMaxHp(defender, state);
+  // Will this hit KO?
+  if (defender.damage + damage < maxHp) return damage;
+  for (const ability of defender.card.abilities ?? []) {
+    const rule = PASSIVE_KO_SURVIVAL[ability.name];
+    if (!rule) continue;
+    if (!rule.appliesTo(defender, state)) continue;
+    if (!rule.triggers(defender, state)) continue;
+    // Cap so defender ends with 10 HP remaining.
+    const cap = Math.max(0, maxHp - defender.damage - 10);
+    if (cap < damage) {
+      return cap;
+    }
+  }
+  return damage;
 }
 
 // --- Retreat cost ---------------------------------------------------------
@@ -227,6 +307,24 @@ function stadiumRetreatSurcharge(_stadium: TrainerCard, _card: PokemonCard): num
   return 0;
 }
 
+// Gravity Gemstone Tool — when attached to a Pokémon in the Active Spot,
+// BOTH Active Pokémon have +1 Colorless retreat cost. We surface this as a
+// game-state-aware retreat surcharge: when retreating, walk both Actives.
+function gravityGemstoneSurcharge(
+  state: GameState | undefined,
+  card: PokemonCard,
+): number {
+  if (!state) return 0;
+  void card;
+  // Either side's Active wearing Gravity Gemstone adds +1 to BOTH Actives.
+  for (const pid of ["p1", "p2"] as PlayerId[]) {
+    const active = state.players[pid].active;
+    if (!active) continue;
+    if (active.tools.some((t) => t.name === "Gravity Gemstone")) return 1;
+  }
+  return 0;
+}
+
 export function effectiveRetreatCost(p: PokemonInPlay, state?: GameState): EnergyType[] {
   const cost = p.card.retreatCost ?? [];
   let reduce = 0;
@@ -235,9 +333,42 @@ export function effectiveRetreatCost(p: PokemonInPlay, state?: GameState): Energ
     reduce += stadiumRetreatReduction(state.stadium.card, p.card);
     surcharge += stadiumRetreatSurcharge(state.stadium.card, p.card);
   }
+  surcharge += gravityGemstoneSurcharge(state, p.card);
   if (!state || toolsActive(state)) {
     for (const tool of p.tools) {
       if (toolRetreatGate(tool, p.card)) reduce += toolRetreatReduction(tool);
+    }
+  }
+  // Self-on-card free-retreat ability: "If this Pokémon has no Energy
+  // attached, no Retreat Cost." (Agile / Melt Away).
+  if (state && abilitiesActiveOn(state, p.card)) {
+    for (const ability of p.card.abilities ?? []) {
+      if (
+        (ability.name === "Agile" || ability.name === "Melt Away") &&
+        p.attachedEnergy.length === 0
+      ) {
+        reduce += 99;
+      }
+    }
+  }
+  // Bench-wide free-retreat abilities ("All of your Pokémon with Metal Energy
+  // have no Retreat Cost"). Walk the holder's allies to find a matching ability.
+  if (state) {
+    const owner = Object.values(state.players).find(
+      (pl) => pl.active === p || pl.bench.includes(p),
+    );
+    if (owner) {
+      const allies = [owner.active, ...owner.bench].filter((a): a is PokemonInPlay => !!a);
+      for (const holder of allies) {
+        if (!abilitiesActiveOn(state, holder.card)) continue;
+        for (const ability of holder.card.abilities ?? []) {
+          if (ability.name === "Metal Bridge") {
+            if (p.attachedEnergy.some((e) => e.provides.includes("Metal"))) reduce += 99;
+          } else if (ability.name === "Skyliner") {
+            if ((p.card.subtypes ?? []).includes("Basic")) reduce += 99;
+          }
+        }
+      }
     }
   }
   let out = cost.slice();
@@ -249,6 +380,35 @@ export function effectiveRetreatCost(p: PokemonInPlay, state?: GameState): Energ
   }
   for (let i = 0; i < surcharge; i++) out.push("Colorless");
   return out;
+}
+
+// Item-block / Stadium-block / supporter-block via opponent's Active ability.
+// Returns true if `kind` cannot be played by `player` because the opp has an
+// Active Pokémon whose ability blocks it. (Tyranitar Daunting Gaze blocks
+// Items; Jellicent Oceanic Curse blocks Items + Tools; Copperajah Massive
+// Body blocks Stadiums.)
+export function actionBlockedByOppActive(
+  state: GameState,
+  player: PlayerId,
+  kind: "Item" | "Pokémon Tool" | "Stadium",
+): boolean {
+  const oppPl = Object.values(state.players).find((p) => p.id !== player);
+  if (!oppPl || !oppPl.active) return false;
+  if (!abilitiesActiveOn(state, oppPl.active.card)) return false;
+  for (const ability of oppPl.active.card.abilities ?? []) {
+    switch (ability.name) {
+      case "Daunting Gaze":
+        if (kind === "Item") return true;
+        break;
+      case "Oceanic Curse":
+        if (kind === "Item" || kind === "Pokémon Tool") return true;
+        break;
+      case "Massive Body":
+        if (kind === "Stadium") return true;
+        break;
+    }
+  }
+  return false;
 }
 
 // --- Turn-scoped modifiers ------------------------------------------------
@@ -398,7 +558,187 @@ const PASSIVE_ATTACK_BONUSES: Record<string, PassiveAttackBonus> = {
     appliesTo: () => true,
     bonus: () => 20,
   },
+  "Adrena-Power": {
+    // Okidogi — if this Pokémon has any Darkness Energy attached, its attacks
+    // do +100 damage to opp's Active.
+    appliesTo: (a, h) =>
+      a.instanceId === h.instanceId &&
+      h.attachedEnergy.some((e) => e.provides.includes("Darkness")),
+    bonus: () => 100,
+  },
 };
+
+// --- Passive damage-reduction abilities ----------------------------------
+//
+// Wide-coverage parallel to PASSIVE_ATTACK_BONUSES: defender-side abilities
+// that reduce incoming attack damage. Predicates have access to defender,
+// holder of the ability, attacker, and game state. The reduction does NOT
+// stack with itself (multiple copies of the same ability in play don't
+// double the effect — each entry returns a single number per unique name).
+interface PassiveDamageReduction {
+  appliesTo: (
+    defender: PokemonInPlay,
+    holder: PokemonInPlay,
+    attacker: PokemonInPlay,
+    state: GameState,
+  ) => boolean;
+  amount: (
+    defender: PokemonInPlay,
+    holder: PokemonInPlay,
+    attacker: PokemonInPlay,
+    state: GameState,
+  ) => number;
+}
+
+const PASSIVE_DAMAGE_REDUCTIONS: Record<string, PassiveDamageReduction> = {
+  "Diamond Coat": {
+    // Mega Diancie ex etc. — this Pokémon takes 30 less damage.
+    appliesTo: (d, h) => d.instanceId === h.instanceId,
+    amount: () => 30,
+  },
+  "Solid Shell": {
+    // Turtwig — this Pokémon takes 20 less damage.
+    appliesTo: (d, h) => d.instanceId === h.instanceId,
+    amount: () => 20,
+  },
+  "Fur Coat": {
+    // Furfrou — this Pokémon takes 20 less damage.
+    appliesTo: (d, h) => d.instanceId === h.instanceId,
+    amount: () => 20,
+  },
+  "Thick Fat": {
+    // Dewgong — 30 less from Fire/Water attackers.
+    appliesTo: (d, h, a) =>
+      d.instanceId === h.instanceId &&
+      (hasType(a.card, "Fire") || hasType(a.card, "Water")),
+    amount: () => 30,
+  },
+  "Tundra Wall": {
+    // Aurorus — your Pokémon with any Water Energy take 50 less.
+    appliesTo: (d, _h, _a) => d.attachedEnergy.some((e) => e.provides.includes("Water")),
+    amount: () => 50,
+  },
+  "Gear Coating": {
+    // Klinklang — your Pokémon with any Metal Energy take 20 less.
+    appliesTo: (d) => d.attachedEnergy.some((e) => e.provides.includes("Metal")),
+    amount: () => 20,
+  },
+  "Curly Wall": {
+    // Bouffalant — your Basic Colorless take 60 less if you have ≥1 other
+    // Bouffalant in play.
+    appliesTo: (d, h, _a, s) => {
+      if (!hasSubtype(d.card, "Basic")) return false;
+      if (!hasType(d.card, "Colorless")) return false;
+      const owner = Object.values(s.players).find(
+        (p) => p.active === h || p.bench.includes(h),
+      );
+      if (!owner) return false;
+      const allies = [owner.active, ...owner.bench].filter(
+        (p): p is PokemonInPlay => !!p,
+      );
+      return allies.filter((p) => p.card.name === "Bouffalant").length >= 1;
+    },
+    amount: () => 60,
+  },
+  "Stone Palace": {
+    // Steven's Carbink — Bench-only; your Steven's Pokémon take 30 less.
+    appliesTo: (d, h, _a, s) => {
+      const owner = Object.values(s.players).find(
+        (p) => p.bench.includes(h),
+      );
+      if (!owner) return false;
+      return isNamed(d.card, "Steven's ");
+    },
+    amount: () => 30,
+  },
+  "Protective Bell": {
+    // Bronzong — your Pokémon take 10 less from opp's attacks.
+    appliesTo: () => true,
+    amount: () => 10,
+  },
+  "Rock Armor": {
+    // Regirock — if this Pokémon has any Energy attached, takes 30 less.
+    appliesTo: (d, h) => d.instanceId === h.instanceId && d.attachedEnergy.length > 0,
+    amount: () => 30,
+  },
+  "Intimidating Fang": {
+    // Pyroar — Active-only; opp's Active attacks do 30 less damage. The
+    // damage flows through Pyroar; this is a defender-side reduction gated
+    // on the holder being Active.
+    appliesTo: (d, h, _a, s) => {
+      if (d.instanceId !== h.instanceId) return false;
+      const owner = Object.values(s.players).find(
+        (p) => p.active && p.active.instanceId === h.instanceId,
+      );
+      return !!owner;
+    },
+    amount: () => 30,
+  },
+  "Cornerstone Stance": {
+    // Cornerstone Mask Ogerpon ex — prevent ALL damage from attacks by opp's
+    // Pokémon that have an Ability. Massive reduction (effectively prevents).
+    appliesTo: (d, h, a) => d.instanceId === h.instanceId && (a.card.abilities ?? []).length > 0,
+    amount: () => 9999,
+  },
+  "Bouffer": {
+    // Bouffalant ex — this Pokémon takes 30 less damage.
+    appliesTo: (d, h) => d.instanceId === h.instanceId,
+    amount: () => 30,
+  },
+  "Sparkling Scales": {
+    // Milotic ex — prevent all damage and effects of attacks from opp's
+    // Tera Pokémon done to this Pokémon.
+    appliesTo: (d, h, a) =>
+      d.instanceId === h.instanceId &&
+      (a.card.subtypes ?? []).includes("Tera"),
+    amount: () => 9999,
+  },
+  "Adrena-Pheromone": {
+    // Fezandipiti — if any Darkness Energy attached and damaged by attack,
+    // flip a coin; on heads prevent that damage. We approximate as 50/50
+    // full prevent.
+    appliesTo: (d, h, _a, s) => {
+      if (d.instanceId !== h.instanceId) return false;
+      if (!d.attachedEnergy.some((e) => e.provides.includes("Darkness"))) return false;
+      return s.rng.next() < 0.5;
+    },
+    amount: () => 9999,
+  },
+  "Mysterious Rock Inn": {
+    // Crustle — prevent all damage from attacks from opp's Pokémon ex.
+    appliesTo: (d, h, a) =>
+      d.instanceId === h.instanceId &&
+      (a.card.subtypes ?? []).some((s) => /^(?:ex|EX)$/.test(s)),
+    amount: () => 9999,
+  },
+};
+
+// Sum of passive damage-reduction contributions from the defender's side.
+// Each unique ability name contributes once (no stacking).
+export function passiveDamageReduction(
+  state: GameState,
+  defenderOwner: PlayerId,
+  defender: PokemonInPlay,
+  attacker: PokemonInPlay,
+): number {
+  const pl = state.players[defenderOwner];
+  const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+  const contributions = new Map<string, number>();
+  for (const holder of allies) {
+    if (!abilitiesActiveOn(state, holder.card)) continue;
+    for (const ability of holder.card.abilities ?? []) {
+      const rule = PASSIVE_DAMAGE_REDUCTIONS[ability.name];
+      if (!rule) continue;
+      if (!rule.appliesTo(defender, holder, attacker, state)) continue;
+      const amt = rule.amount(defender, holder, attacker, state);
+      const prev = contributions.get(ability.name) ?? 0;
+      contributions.set(ability.name, Math.max(prev, amt));
+    }
+  }
+  let total = 0;
+  for (const amt of contributions.values()) total += amt;
+  return total;
+}
 
 // Sum of all passive attack-bonus abilities from the attacker's side that
 // apply to the current (attacker, defender) pair. "Extra Helpings" doesn't
@@ -497,6 +837,10 @@ export function stadiumDamageReduction(
     const attackerType = attacker.card.types[0];
     for (const tool of defender.tools) {
       red += toolDamageReduction(tool, attackerType, defender);
+      // Sacred Charm — -30 vs attackers with any Ability.
+      if (tool.name === "Sacred Charm" && (attacker.card.abilities ?? []).length > 0) {
+        red += 30;
+      }
     }
   }
   return red;
@@ -521,6 +865,11 @@ function toolDamageReduction(
       // attacker is Grass/Fire/Water/Lightning.
       if (!hasType(defender.card, "Dragon")) return 0;
       return attackerType && ["Grass", "Fire", "Water", "Lightning"].includes(attackerType) ? 50 : 0;
+    case "Sacred Charm":
+      // -30 vs Pokémon with an Ability.
+      void attackerType;
+      // Cannot reach attacker here without it; see passiveDamageReduction wiring.
+      return 0;
     default: return 0;
   }
 }
@@ -573,13 +922,46 @@ export function effectiveAttackCost(
   state: GameState,
   attacker: PokemonInPlay,
   rawCost: EnergyType[],
+  attackName?: string,
 ): EnergyType[] {
-  if (!toolsActive(state)) return rawCost;
   let reduce = 0;
-  for (const tool of attacker.tools) reduce += toolAttackCostReduction(tool, attacker, state);
+  if (toolsActive(state)) {
+    for (const tool of attacker.tools) reduce += toolAttackCostReduction(tool, attacker, state);
+  }
   // Nighttime Mine: Tera attacks cost Colorless more.
   if (state.stadium?.card.name === "Nighttime Mine" && hasSubtype(attacker.card, "Tera")) {
     reduce -= 1; // negative = surcharge; raises cost by 1 Colorless
+  }
+  // Passive ability cost reductions (Bloodmoon Ursaluna ex Seasoned Skill,
+  // Crabominable / Veluza Food Prep). Predicates and counts vary; we hardcode
+  // a small registry by ability name.
+  if (abilitiesActiveOn(state, attacker.card)) {
+    for (const ab of attacker.card.abilities ?? []) {
+      if (ab.name === "Seasoned Skill" && attackName === "Blood Moon") {
+        // Cost reduced by 1 Colorless per Prize the opponent has taken.
+        const owner = Object.values(state.players).find(
+          (p) => p.active === attacker || p.bench.includes(attacker),
+        );
+        const opp = Object.values(state.players).find((p) => p !== owner);
+        if (opp) reduce += (6 - opp.prizes.length);
+      } else if (ab.name === "Food Prep") {
+        // Reduce by 1 Colorless per Kofu card in your discard pile.
+        const owner = Object.values(state.players).find(
+          (p) => p.active === attacker || p.bench.includes(attacker),
+        );
+        if (owner) {
+          const count = owner.discard.filter((c) => c.name === "Kofu").length;
+          reduce += count;
+        }
+      } else if (ab.name === "Hustle Play") {
+        // Incineroar ex — reduce by 1 Colorless per opp Benched Pokémon.
+        const owner = Object.values(state.players).find(
+          (p) => p.active === attacker || p.bench.includes(attacker),
+        );
+        const opp = Object.values(state.players).find((p) => p !== owner);
+        if (opp) reduce += opp.bench.length;
+      }
+    }
   }
   if (reduce === 0) return rawCost;
   const out = rawCost.slice();

@@ -35,6 +35,8 @@ import {
 import { setDeckSearchPick } from "./pendingPick";
 import {
   applySurvivalBrace,
+  applyAbilityKoSurvival,
+  actionBlockedByOppActive,
   benchPlacementDamage,
   canEvolveOnPlayTurn,
   confusedPersistsOnEvolve,
@@ -46,6 +48,7 @@ import {
   passiveAttackBonus,
   stadiumAttackBonus,
   stadiumDamageReduction,
+  passiveDamageReduction,
   toolOnDamageActions,
   triggeredBerryTools,
   turnAttackBonus,
@@ -124,10 +127,17 @@ export function evolve(
   // Check once-per-turn evolution FIRST so nothing (including Forest of
   // Vitality) can chain Basic → Stage 1 → Stage 2 on the same instance.
   if (target.evolvedThisTurn) return fail("Already evolved this turn.");
-  if (state.turn === 1) return fail("No evolving on the first turn.");
+  // Boosted Evolution (Eevee) / Stimulated Evolution (Shelmet w/ Karrablast)
+  // — let this Pokémon evolve on turn 1 / the turn it was played.
+  const ownerAllies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+  const allowsTurn1 = (target.card.abilities ?? []).some(
+    (a) => a.name === "Boosted Evolution" ||
+      (a.name === "Stimulated Evolution" && ownerAllies.some((p) => p.card.name === "Karrablast")),
+  );
+  if (state.turn === 1 && !allowsTurn1) return fail("No evolving on the first turn.");
   // Forest of Vitality only overrides the played-this-turn rule for a Basic
   // Grass target on its first evolution of the turn.
-  if (target.playedThisTurn && !canEvolveOnPlayTurn(state, target))
+  if (target.playedThisTurn && !canEvolveOnPlayTurn(state, target) && !allowsTurn1)
     return fail("Can't evolve a Pokémon played this turn.");
 
   pl.hand.splice(handIndex, 1);
@@ -265,6 +275,19 @@ export function playTrainer(
   // Budew's Itchy Pollen (and similar) locks the opponent out of Items this turn.
   if (t.subtypes.includes("Item") && pl.itemsBlockedNextTurn) {
     return fail("Can't play Item cards this turn (Itchy Pollen).");
+  }
+
+  // Active-only ability blocks: Tyranitar Daunting Gaze (Items), Jellicent ex
+  // Oceanic Curse (Items + Tools), Copperajah Massive Body (Stadiums).
+  const isToolSub = t.subtypes.includes("Pokémon Tool") || t.subtypes.includes("Tool");
+  if (t.subtypes.includes("Item") && actionBlockedByOppActive(state, player, "Item")) {
+    return fail("Opponent's Active Pokémon prevents playing Item cards.");
+  }
+  if (isToolSub && actionBlockedByOppActive(state, player, "Pokémon Tool")) {
+    return fail("Opponent's Active Pokémon prevents playing Pokémon Tools.");
+  }
+  if (t.subtypes.includes("Stadium") && actionBlockedByOppActive(state, player, "Stadium")) {
+    return fail("Opponent's Active Pokémon prevents playing Stadium cards.");
   }
 
   // Genesect "ACE Nullifier" — "If this Pokémon has a Pokémon Tool attached,
@@ -481,6 +504,17 @@ function executeAttackHit(
   damage += stadiumAttackBonus(state, atk, def);
   damage += passiveAttackBonus(state, player, atk, def);
   damage += turnAttackBonus(state, player, atk, def);
+  // "During your next turn, this Pokémon's <Name> attack does +N damage."
+  // Set by selfNextTurnAttackBonus the previous turn.
+  {
+    const bag = atk as typeof atk & {
+      nextTurnAttackBonuses?: Record<string, { amount: number; turn: number }>;
+    };
+    const slot = bag.nextTurnAttackBonuses?.[move.name];
+    if (slot && state.turn <= slot.turn) {
+      damage += slot.amount;
+    }
+  }
   const result = resolveAttackEffects(state, {
     attacker: atk,
     attackerOwner: player,
@@ -494,7 +528,9 @@ function executeAttackHit(
     const atkType = atk.card.types[0];
     const weak = def.card.weaknesses?.find((w) => w.type === atkType);
     const res = def.card.resistances?.find((w) => w.type === atkType);
-    if (weak && weak.value.startsWith("×")) {
+    const defenderIgnoresWeakness =
+      def.noWeaknessUntilTurn !== undefined && state.turn <= def.noWeaknessUntilTurn;
+    if (!result.ignoreWeakness && !defenderIgnoresWeakness && weak && weak.value.startsWith("×")) {
       const mult = parseInt(weak.value.slice(1), 10) || 2;
       damage *= mult;
       logEvent(
@@ -503,7 +539,7 @@ function executeAttackHit(
         `Weakness: ${def.card.name} takes ×${mult} from ${atkType} attacks.`,
       );
     }
-    if (res && res.value.startsWith("-")) {
+    if (!result.ignoreResistance && res && res.value.startsWith("-")) {
       const red = parseInt(res.value.slice(1), 10) || 30;
       damage = Math.max(0, damage - red);
       logEvent(
@@ -512,10 +548,13 @@ function executeAttackHit(
         `Resistance: ${def.card.name} reduces ${atkType} damage by ${red}.`,
       );
     }
-    const reduction = stadiumDamageReduction(state, atk, def);
-    const turnRed = turnDamageReduction(state, defOwner, def);
-    const total = reduction + turnRed;
-    if (total > 0) damage = Math.max(0, damage - total);
+    if (!result.ignoreOppEffects) {
+      const reduction = stadiumDamageReduction(state, atk, def);
+      const turnRed = turnDamageReduction(state, defOwner, def);
+      const passiveRed = passiveDamageReduction(state, defOwner, def, atk);
+      const total = reduction + turnRed + passiveRed;
+      if (total > 0) damage = Math.max(0, damage - total);
+    }
   }
   // Survival Brace: cap damage so full-HP defender survives with 10 HP; it
   // discards after triggering.
@@ -524,6 +563,12 @@ function executeAttackHit(
     const before = damage;
     damage = applySurvivalBrace(state, def, damage);
     if (damage !== before) survivalBraceTriggered = true;
+  }
+  // Sturdy / Focus Sash equivalents (passive abilities): cap damage so the
+  // defender survives at 10 HP. Predicates handle "only at full HP" or coin
+  // flip variants.
+  if (def && damage > 0) {
+    damage = applyAbilityKoSurvival(state, def, damage);
   }
   logEvent(state, player, `attacks with ${move.name} for ${damage}.`);
   if (damage > 0) applyDamage(state, defOwner, damage);
@@ -536,6 +581,35 @@ function executeAttackHit(
       const counter = spikyCount * 20;
       atk.damage += counter;
       logEvent(state, "system", `${atk.card.name} takes ${counter} damage from Spiky Energy.`);
+    }
+  }
+  // Active-only on-damage abilities: Poison Point / Incandescent Body
+  // (status), Counterattacking Crest (counter damage), Spiteful Swirl
+  // (1 counter on attacker, gated on Active being a Darkness Pokémon).
+  if (def && damage > 0 && state.players[defOwner].active === def) {
+    for (const a of (def.card.abilities ?? [])) {
+      if (a.name === "Poison Point") {
+        if (!atk.statuses.includes("poisoned")) atk.statuses.push("poisoned");
+        logEvent(state, "system", `Poison Point: ${atk.card.name} is now Poisoned.`);
+      } else if (a.name === "Incandescent Body") {
+        if (!atk.statuses.includes("burned")) atk.statuses.push("burned");
+        logEvent(state, "system", `Incandescent Body: ${atk.card.name} is now Burned.`);
+      } else if (a.name === "Counterattacking Crest") {
+        atk.damage += 50;
+        logEvent(state, "system", `Counterattacking Crest: ${atk.card.name} takes 50 counter damage.`);
+      } else if (a.name === "Spiteful Swirl") {
+        if (def.card.types.includes("Darkness")) {
+          atk.damage += 10;
+          logEvent(state, "system", `Spiteful Swirl: ${atk.card.name} takes 10 counter damage.`);
+        }
+      } else if (a.name === "Pummeling Payback") {
+        // Orthworm ex — 2 counters per Metal Energy attached.
+        const metal = def.attachedEnergy.filter((e) => e.provides.includes("Metal")).length;
+        if (metal > 0) {
+          atk.damage += metal * 20;
+          logEvent(state, "system", `Pummeling Payback: ${atk.card.name} takes ${metal * 20} damage.`);
+        }
+      }
     }
   }
   // Tool "on damage" triggers (Lucky Helmet draw, Punk Helmet counter,
@@ -652,14 +726,29 @@ export function attack(
   if (state.phase === "gameOver") return fail("Game is over.");
   if (state.activePlayer !== player) return fail("Not your turn.");
   if (state.phase !== "main") return fail("Not in main phase.");
-  if (state.firstTurnNoAttack) return fail("No attacking on the first turn.");
   const pl = state.players[player];
   const atk = pl.active;
   if (!atk) return fail("No Active Pokémon.");
+  if (state.firstTurnNoAttack) {
+    // Debut Performance (Meloetta ex) — bypasses the first-turn attack ban.
+    const allowsFirstTurn = (atk.card.abilities ?? []).some((a) => a.name === "Debut Performance");
+    if (!allowsFirstTurn) return fail("No attacking on the first turn.");
+  }
   if (hasStatus(atk, "asleep")) return fail("Asleep Pokémon can't attack.");
   if (hasStatus(atk, "paralyzed")) return fail("Paralyzed Pokémon can't attack.");
   if (atk.cantAttackUntilTurn !== undefined && state.turn <= atk.cantAttackUntilTurn) {
     return fail("This Pokémon can't attack this turn.");
+  }
+  // Power Saver / similar — attack restriction with predicate.
+  for (const ab of atk.card.abilities ?? []) {
+    if (ab.name === "Power Saver") {
+      // Need ≥4 Team Rocket's Pokémon in play.
+      const allies = [pl.active, ...pl.bench].filter((p): p is typeof pl.active & {} => !!p);
+      const trCount = allies.filter((p) => p.card.name.startsWith("Team Rocket's ")).length;
+      if (trCount < 4) {
+        return fail(`Power Saver: requires 4 or more Team Rocket's Pokémon in play.`);
+      }
+    }
   }
   const move = effectiveAttacks(atk)[attackIndex];
   if (!move) return fail("No such attack.");
@@ -669,7 +758,7 @@ export function attack(
     return fail(`This Pokémon can't use ${move.name} this turn.`);
   }
   const provided = energyProvidedBy(atk);
-  const effectiveCost = effectiveAttackCost(state, atk, move.cost);
+  const effectiveCost = effectiveAttackCost(state, atk, move.cost, move.name);
   if (!canPayCost(provided, effectiveCost))
     return fail("Not enough Energy for that attack.");
 

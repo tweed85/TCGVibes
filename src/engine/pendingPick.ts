@@ -283,6 +283,31 @@ export function resolvePendingPick(
   const pl = state.players[player];
   pl.hand.push(...picked);
 
+  // Energy-attach destinations (attack-driven deck searches): pull picked
+  // Energy cards back out of the hand and route them onto Pokémon in play.
+  if (pick.attachToInstanceId || pick.attachAll) {
+    const allies = [pl.active, ...pl.bench].filter((p): p is import("./types").PokemonInPlay => !!p);
+    const target = pick.attachToInstanceId
+      ? allies.find((a) => a.instanceId === pick.attachToInstanceId)
+      : null;
+    let i = 0;
+    for (const c of picked) {
+      if (c.supertype !== "Energy") continue;
+      const hi = pl.hand.lastIndexOf(c);
+      if (hi < 0) continue;
+      pl.hand.splice(hi, 1);
+      if (target) {
+        target.attachedEnergy.push(c as import("./types").EnergyCard);
+      } else if (pick.attachAll && allies.length > 0) {
+        allies[i % allies.length].attachedEnergy.push(c as import("./types").EnergyCard);
+        i++;
+      } else {
+        // Fallback: stays in hand.
+        pl.hand.push(c);
+      }
+    }
+  }
+
   switch (pick.unpicked) {
     case "shuffleIntoDeck":
       pl.deck.push(...unpicked);

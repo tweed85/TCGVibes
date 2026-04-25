@@ -196,6 +196,9 @@ export default function App() {
   // When the user initiates an attack that would snipe a benched opponent,
   // we pause to let them pick the target. Holds the pending attack index.
   const [pendingSnipeAttack, setPendingSnipeAttack] = useState<number | null>(null);
+  // Set to true once the mulligan-summary modal has been dismissed for the
+  // current game; prevents reopening on every rerender. Reset by onReset.
+  const [mulliganNoticeDismissed, setMulliganNoticeDismissed] = useState(false);
   // Serialized snapshot of the game state at the start of the viewingPlayer's
   // current turn. Click "Undo" to restore. Invalidated each time a new turn
   // begins for the viewing player. Doesn't rewind the RNG (we preserve the
@@ -637,6 +640,7 @@ export default function App() {
     setPendingHandoff(null);
     setSelected(null);
     setStatusMsg("");
+    setMulliganNoticeDismissed(false);
     rerender();
   };
 
@@ -784,6 +788,51 @@ export default function App() {
     // distinguishable at a glance.
     if (hoveredAbilitySource) own.add(hoveredAbilitySource);
 
+    // Active in-play target prompt (post-play picker for Wally's, Jacinthe,
+    // Wondrous Patch, Poké Vital A, Energy Switch, etc.) — light up the
+    // legal targets so the player can see where to click.
+    const pip = state.pendingInPlayTarget;
+    if (pip && pip.player === viewingPlayer) {
+      const slotOk = (_p: PokemonInPlay, fromActive: boolean): boolean => {
+        if (pip.slot === "active") return fromActive;
+        if (pip.slot === "bench") return !fromActive;
+        return true;
+      };
+      const consider = (p: PokemonInPlay, fromActive: boolean, isOpp: boolean) => {
+        if (pip.scope === "own" && isOpp) return;
+        if (pip.scope === "opp" && !isOpp) return;
+        if (!slotOk(p, fromActive)) return;
+        let pass = true;
+        switch (pip.action.kind) {
+          case "jacintheHeal":
+            pass = p.card.types.includes("Psychic") && p.damage > 0; break;
+          case "pokeVitalAHeal":
+            pass = p.damage > 0; break;
+          case "wondrousPatchAttach":
+            pass = p.card.types.includes("Psychic"); break;
+          case "wallysCompassion": {
+            const subs = p.card.subtypes ?? [];
+            const isMegaEx =
+              subs.some((s) => /^MEGA$/i.test(s) || /^Mega /.test(s)) &&
+              subs.includes("ex");
+            pass = isMegaEx && p.damage > 0;
+            break;
+          }
+          // Other action kinds already have handlers; default to highlighting
+          // any matching slot/scope so the user knows the picker is open.
+          default:
+            pass = true;
+        }
+        if (!pass) return;
+        if (isOpp) opp_.add(p.instanceId);
+        else own.add(p.instanceId);
+      };
+      if (me.active) consider(me.active, true, false);
+      for (const p of me.bench) consider(p, false, false);
+      if (opp.active) consider(opp.active, true, true);
+      for (const p of opp.bench) consider(p, false, true);
+    }
+
     return { own, opp: opp_, benchHint };
   })();
 
@@ -903,6 +952,21 @@ export default function App() {
           }}
         />
       )}
+
+      {!preGameOpen &&
+        !mulliganNoticeDismissed &&
+        state.phase === "setup" &&
+        !pendingHandoff &&
+        (state.players.p1.mulligans > 0 || state.players.p2.mulligans > 0) &&
+        !state.players[viewingPlayer].isAI && (
+          <MulliganNoticeModal
+            myName={me.name}
+            oppName={opp.name}
+            myMulligans={me.mulligans}
+            oppMulligans={opp.mulligans}
+            onContinue={() => setMulliganNoticeDismissed(true)}
+          />
+        )}
 
       {!preGameOpen &&
         state.phase === "coinFlip" &&
@@ -1859,6 +1923,50 @@ function CoinResultBanner({
         <p className="modal-hint">
           You called <b>{guess}</b>. CPU won the toss — they'll choose who goes first.
         </p>
+      </div>
+    </div>
+  );
+}
+
+function MulliganNoticeModal({
+  myName,
+  oppName,
+  myMulligans,
+  oppMulligans,
+  onContinue,
+}: {
+  myName: string;
+  oppName: string;
+  myMulligans: number;
+  oppMulligans: number;
+  onContinue: () => void;
+}) {
+  const lines: string[] = [];
+  const cardsWord = (n: number) => `${n} extra card${n === 1 ? "" : "s"}`;
+  if (myMulligans > 0) {
+    lines.push(
+      `${myName} mulliganed ${myMulligans}× (no Basic Pokémon). ${oppName} drew ${cardsWord(myMulligans)}.`,
+    );
+  }
+  if (oppMulligans > 0) {
+    lines.push(
+      `${oppName} mulliganed ${oppMulligans}× (no Basic Pokémon). ${myName} drew ${cardsWord(oppMulligans)}.`,
+    );
+  }
+  return (
+    <div className="modal-backdrop">
+      <div className="modal mulligan-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Mulligan</h2>
+        </div>
+        <div className="mulligan-body">
+          {lines.map((l, i) => (
+            <p key={i}>{l}</p>
+          ))}
+        </div>
+        <div className="modal-actions">
+          <button className="primary" onClick={onContinue}>Continue</button>
+        </div>
       </div>
     </div>
   );

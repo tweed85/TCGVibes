@@ -1825,6 +1825,20 @@ button.secondary:hover:not(:disabled) {
 .handoff-modal .modal-actions { justify-content: center; }
 .coin-modal { max-width: 420px; width: 100%; }
 .coin-modal .modal-actions { justify-content: center; gap: 12px; }
+.mulligan-modal { max-width: 480px; width: 100%; }
+.mulligan-modal .mulligan-body {
+  padding: 6px 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mulligan-modal .mulligan-body p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.mulligan-modal .modal-actions { justify-content: center; }
 .pregame-grid {
   display: grid;
   /* minmax(0, 1fr) on both flanks so the slots size equally and don't let

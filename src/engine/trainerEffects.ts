@@ -154,7 +154,44 @@ export type TrainerEffectId =
   | "ciphermaniacSearch" // Ciphermaniac's Codebreaking
   | "darkBasicPokemonTopPeek" // Grimsley's Move
   | "healAllMinor" // Caretaker (draw 2 simplified)
-  | "gustConfuseOppBasic"; // Lisia's Appeal
+  | "gustConfuseOppBasic" // Lisia's Appeal
+  // ---- New (this build pass) -----
+  | "boxedOrder" // Search up to 2 Items, end turn
+  | "salvatoreEvolveSearch" // Search for evolution and put on Pokémon
+  | "surferSwitchDraw5" // Switch + draw to 5
+  | "acerolasMischief" // Prevent damage on chosen ally next turn (≤2 prizes)
+  | "briarExtraPrize" // +1 Prize for Tera attack KO this turn
+  | "antheaConcordiaExtraPrize" // +1 Prize for N's attack KO this turn
+  | "energySwatter" // Reveal opp hand → put Energy on bottom
+  | "accompanyingFlute" // Top 5 of opp deck → bench Basics
+  | "janineSecretArt" // Search Basic Darkness Energy for ≤2 Darkness Pokémon
+  | "lucianShuffleFlip" // Both shuffle to bottom, flip → 6/3 each
+  | "tymePokemonGuess" // Guess Pokémon HP — niche, simplified
+  | "larrySkillDiscardSearch" // Discard hand, search Pokémon+Supporter+Energy
+  | "drawPerAncient" // Awakening Drum
+  | "brilliantBlenderMill5" // Search up to 5 cards and discard them
+  | "megatonBlower" // Discard all opp Tools + Special Energy + Stadium
+  | "blowtorch" // Cost: discard Basic Fire Energy → discard opp Tool/Special/Stadium
+  | "chillTeaserToy" // Bounce 1 Energy from opp's Pokémon to opp's hand
+  | "rotoStick" // Top 4 → reveal Supporters → put in hand
+  | "meddlingMemo" // Opp shuffles hand to bottom + redraws same count
+  | "callBell" // First-turn-only Supporter search
+  | "loveBall" // Search a Pokémon with same name as opp's
+  | "strangeTimepieceDevolve" // Devolve own Psychic Pokémon
+  | "cassiopeiaSearch2" // Last-card-only: search 2
+  | "rosaEnergyToStage2" // 2 Basic Energy from discard → Stage 2 (gated on prizes)
+  | "sacredCharmTool" // Tool — passive (handled in ongoingEffects)
+  | "gravityGemstoneTool" // Tool — passive (handled in ongoingEffects)
+  | "handheldFanTool" // Tool — passive trigger handled in actions.ts on-damage
+  | "ltSurgeStrategy" // Lt. Surge's Strategy — placeholder
+  | "perrinSearch" // Reveal Pokémon → search same number Pokémon
+  | "raifortPeek5Discard" // Look top 5, discard any number, return rest in any order
+  | "canariLightningSearch" // Cost: discard 1; search up to 4 Lightning Pokémon
+  | "trGiovanniSwitchGust" // Switch own TR + gust opp
+  | "trArcherShuffleDraw" // Both shuffle, you 5 / opp 3 (gated on KO last turn)
+  | "ogresMaskSwapOgerpon" // Swap Ogerpon ex in discard with Ogerpon ex in play
+  | "redeemableTicketReprize" // Shuffle prizes, take new ones from top of deck
+  | "tmFluoriteTool"; // Tool granting an attack — passive, handled at attach
 
 export interface ApiTrainer {
   name: string;
@@ -423,6 +460,50 @@ export function detectTrainerEffect(t: ApiTrainer): TrainerEffectId | undefined 
   if (t.name === "N's PP Up") return "nsPPUp";
   if (t.name === "Wondrous Patch") return "wondrousPatchPsychic";
   if (t.name === "Glass Trumpet") return "glassTrumpet";
+
+  // ---------------- New (this build pass) ------------------------------
+  if (t.name === "Cheren") return "draw3";
+  if (t.name === "Friends in Paldea") return "draw3";
+  if (t.name === "Urbain") return "draw3";
+  if (t.name === "Amarys") return "draw4";
+  if (t.name === "Boxed Order") return "boxedOrder";
+  if (t.name === "Salvatore") return "salvatoreEvolveSearch";
+  if (t.name === "Surfer") return "surferSwitchDraw5";
+  if (t.name === "Acerola's Mischief") return "acerolasMischief";
+  if (t.name === "Briar") return "briarExtraPrize";
+  if (t.name === "Anthea & Concordia") return "antheaConcordiaExtraPrize";
+  if (t.name === "Energy Swatter") return "energySwatter";
+  if (t.name === "Accompanying Flute") return "accompanyingFlute";
+  if (t.name === "Janine's Secret Art") return "janineSecretArt";
+  if (t.name === "Lucian") return "lucianShuffleFlip";
+  if (t.name === "Tyme") return "tymePokemonGuess";
+  if (t.name === "Larry's Skill") return "larrySkillDiscardSearch";
+  if (t.name === "Awakening Drum") return "drawPerAncient";
+  if (t.name === "Brilliant Blender") return "brilliantBlenderMill5";
+  if (t.name === "Megaton Blower") return "megatonBlower";
+  if (t.name === "Blowtorch") return "blowtorch";
+  if (t.name === "Chill Teaser Toy") return "chillTeaserToy";
+  if (t.name === "Roto-Stick") return "rotoStick";
+  if (t.name === "Meddling Memo") return "meddlingMemo";
+  if (t.name === "Call Bell") return "callBell";
+  if (t.name === "Love Ball") return "loveBall";
+  if (t.name === "Strange Timepiece") return "strangeTimepieceDevolve";
+  if (t.name === "Cassiopeia") return "cassiopeiaSearch2";
+  if (t.name === "Rosa's Encouragement") return "rosaEnergyToStage2";
+  if (t.name === "Sacred Charm") return "sacredCharmTool"; // passive — handled in ongoingEffects
+  if (t.name === "Gravity Gemstone") return "gravityGemstoneTool";
+  if (t.name === "Handheld Fan") return "handheldFanTool";
+  if (t.name === "Lt. Surge's Strategy") return "ltSurgeStrategy"; // (sometimes already named differently)
+  if (t.name === "Perrin") return "perrinSearch";
+  if (t.name === "Raifort") return "raifortPeek5Discard";
+
+  // ---------------- Even more (this build pass) ------------------------
+  if (t.name === "Canari") return "canariLightningSearch";
+  if (t.name === "Team Rocket's Giovanni") return "trGiovanniSwitchGust";
+  if (t.name === "Team Rocket's Archer") return "trArcherShuffleDraw";
+  if (t.name === "Ogre's Mask") return "ogresMaskSwapOgerpon";
+  if (t.name === "Redeemable Ticket") return "redeemableTicketReprize";
+  if (t.name === "Technical Machine: Fluorite") return "tmFluoriteTool";
 
   return undefined;
 }
@@ -729,6 +810,23 @@ export function precheckTrainerEffect(
   if (id === "heal150Psychic") {
     const hit = allies.some((p) => p.card.types.includes("Psychic") && p.damage > 0);
     if (!hit) return "No damaged Psychic Pokémon to heal.";
+  }
+
+  // Poké Vital A "heal150Any" — needs any damaged ally.
+  if (id === "heal150Any") {
+    if (!allies.some((p) => p.damage > 0)) return "No damaged Pokémon to heal.";
+  }
+
+  // Wondrous Patch "wondrousPatchPsychic" — needs a Benched Psychic AND a
+  // Basic Psychic Energy in the discard.
+  if (id === "wondrousPatchPsychic") {
+    const hasBenchedPsychic = pl.bench.some((p) => p.card.types.includes("Psychic"));
+    if (!hasBenchedPsychic) return "No Benched Psychic Pokémon.";
+    const hasEnergy = pl.discard.some(
+      (c) => c.supertype === "Energy" && c.subtypes.includes("Basic") &&
+        (c as EnergyCard).provides.includes("Psychic"),
+    );
+    if (!hasEnergy) return "No Basic Psychic Energy in your discard.";
   }
 
   // Clemont's Quick Wit "heal60EachLightning" — needs a damaged Lightning.
@@ -1688,14 +1786,26 @@ export function applyTrainerEffect(
 
     case "heal150Psychic": {
       const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
-      const target = allies.find((p) => p.card.types.includes("Psychic") && p.damage > 0);
-      if (!target) {
+      const candidates = allies.filter((p) => p.card.types.includes("Psychic") && p.damage > 0);
+      if (candidates.length === 0) {
         logEvent(state, player, "no damaged Psychic Pokémon.");
         return;
       }
-      const before = target.damage;
-      target.damage = Math.max(0, target.damage - 150);
-      logEvent(state, player, `heals ${before - target.damage} from ${target.card.name}.`);
+      if (pl.isAI || candidates.length === 1) {
+        const target = candidates.slice().sort((a, b) => b.damage - a.damage)[0];
+        const before = target.damage;
+        target.damage = Math.max(0, target.damage - 150);
+        logEvent(state, player, `heals ${before - target.damage} from ${target.card.name}.`);
+        return;
+      }
+      state.pendingInPlayTarget = {
+        player,
+        label: "Jacinthe: pick a damaged Psychic Pokémon to heal 150",
+        scope: "own",
+        slot: "anywhere",
+        filter: "anyPokemon",
+        action: { kind: "jacintheHeal" },
+      };
       return;
     }
 
@@ -2181,14 +2291,26 @@ export function applyTrainerEffect(
 
     case "heal150Any": {
       const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
-      const target = allies.sort((a, b) => b.damage - a.damage)[0];
-      if (!target || target.damage === 0) {
+      const candidates = allies.filter((p) => p.damage > 0);
+      if (candidates.length === 0) {
         logEvent(state, player, "no damaged Pokémon.");
         return;
       }
-      const before = target.damage;
-      target.damage = Math.max(0, target.damage - 150);
-      logEvent(state, player, `heals ${before - target.damage} from ${target.card.name}.`);
+      if (pl.isAI || candidates.length === 1) {
+        const target = candidates.slice().sort((a, b) => b.damage - a.damage)[0];
+        const before = target.damage;
+        target.damage = Math.max(0, target.damage - 150);
+        logEvent(state, player, `heals ${before - target.damage} from ${target.card.name}.`);
+        return;
+      }
+      state.pendingInPlayTarget = {
+        player,
+        label: "Poké Vital A: pick a damaged Pokémon to heal 150",
+        scope: "own",
+        slot: "anywhere",
+        filter: "anyPokemon",
+        action: { kind: "pokeVitalAHeal" },
+      };
       return;
     }
 
@@ -2330,15 +2452,33 @@ export function applyTrainerEffect(
     }
 
     case "wondrousPatchPsychic": {
-      const target = pl.bench.find((p) => p.card.types.includes("Psychic"));
-      if (!target) { logEvent(state, player, "no Benched Psychic Pokémon."); return; }
-      const idx = pl.discard.findIndex(
+      const candidates = pl.bench.filter((p) => p.card.types.includes("Psychic"));
+      if (candidates.length === 0) {
+        logEvent(state, player, "no Benched Psychic Pokémon.");
+        return;
+      }
+      const energyIdx = pl.discard.findIndex(
         (c) => isBasicEnergy(c) && c.provides.includes("Psychic"),
       );
-      if (idx < 0) { logEvent(state, player, "no Basic Psychic Energy in discard."); return; }
-      const [e] = pl.discard.splice(idx, 1) as [EnergyCard];
-      target.attachedEnergy.push(e);
-      logEvent(state, player, `attaches ${e.name} to ${target.card.name}.`);
+      if (energyIdx < 0) {
+        logEvent(state, player, "no Basic Psychic Energy in discard.");
+        return;
+      }
+      if (pl.isAI || candidates.length === 1) {
+        const target = candidates[0];
+        const [e] = pl.discard.splice(energyIdx, 1) as [EnergyCard];
+        target.attachedEnergy.push(e);
+        logEvent(state, player, `attaches ${e.name} to ${target.card.name}.`);
+        return;
+      }
+      state.pendingInPlayTarget = {
+        player,
+        label: "Wondrous Patch: pick a Benched Psychic to attach a Basic Psychic Energy from discard",
+        scope: "own",
+        slot: "bench",
+        filter: "anyPokemon",
+        action: { kind: "wondrousPatchAttach" },
+      };
       return;
     }
 
@@ -2357,6 +2497,512 @@ export function applyTrainerEffect(
         attached++;
       }
       logEvent(state, player, `attaches ${attached} basic Energy to Benched Colorless Pokémon.`);
+      return;
+    }
+
+    // ---- New (this build pass) ------------------------------------------
+    case "boxedOrder": {
+      const isItem = (c: Card) =>
+        c.supertype === "Trainer" && (c.subtypes ?? []).includes("Item");
+      if (!setDeckSearchPick(state, player, isItem, 2, "Boxed Order: pick up to 2 Items", { endTurnOnResolve: true } as never)) {
+        logEvent(state, player, "Boxed Order: no Items in deck.");
+      }
+      return;
+    }
+    case "salvatoreEvolveSearch": {
+      // Auto-pick: find any Evolution Pokémon in deck whose evolvesFrom matches
+      // any of your Pokémon. Apply to first match.
+      const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+      const candidatePairs: Array<{ deckIdx: number; ally: PokemonInPlay; evo: PokemonCard }> = [];
+      pl.deck.forEach((c, i) => {
+        if (c.supertype !== "Pokémon") return;
+        if (!(c.abilities ?? []).length || (c.abilities ?? []).length === 0) {
+          // requires no abilities
+          if ((c.abilities ?? []).length > 0) return;
+        }
+        for (const a of allies) {
+          if (c.evolvesFrom === a.card.name && !a.playedThisTurn) {
+            candidatePairs.push({ deckIdx: i, ally: a, evo: c as PokemonCard });
+            break;
+          }
+        }
+      });
+      if (candidatePairs.length === 0) {
+        logEvent(state, player, "Salvatore: no eligible evolution.");
+        shuffleDeck(state, player);
+        return;
+      }
+      const pick = candidatePairs[0];
+      const [evo] = pl.deck.splice(pick.deckIdx, 1) as [PokemonCard];
+      pick.ally.evolvedFrom.push(pick.ally.card);
+      pick.ally.card = evo;
+      pick.ally.evolvedThisTurn = true;
+      shuffleDeck(state, player);
+      logEvent(state, player, `Salvatore: evolves ${pick.ally.card.name}.`);
+      return;
+    }
+    case "surferSwitchDraw5": {
+      if (pl.active && pl.bench.length > 0) {
+        performSwitch(state, player, 0);
+        const need = Math.max(0, 5 - pl.hand.length);
+        if (need > 0) drawUpTo(state, player, need);
+      }
+      return;
+    }
+    case "acerolasMischief": {
+      // "Choose 1 of your Pokémon. During opp's next turn, prevent damage and
+      // effects of attacks done to that Pokémon by opp's Pokémon ex." Auto-
+      // pick: damaged ally with most HP at risk. Approximation: queue a
+      // turn-scoped damage reduction of 999 vs ex on next opp turn (effectively
+      // prevents damage). For simplicity we just apply the reduction to ALL
+      // damage; close enough.
+      const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+      if (allies.length === 0) return;
+      pl.nextOpponentTurnDamageReductions.push({ amount: 999 });
+      logEvent(state, player, "Acerola's Mischief: prevents damage to your Pokémon next turn.");
+      return;
+    }
+    case "briarExtraPrize":
+    case "antheaConcordiaExtraPrize": {
+      // Mark a turn-scoped flag for "+1 Prize on KO this turn". Engine-side
+      // hook needed in knockOut(). Without that hook we'll just log and treat
+      // as cosmetic.
+      logEvent(state, player, `${id === "briarExtraPrize" ? "Briar" : "Anthea & Concordia"}: +1 Prize on KO this turn (visual only).`);
+      return;
+    }
+    case "energySwatter": {
+      // Reveal opp's hand; put 1 Energy on the bottom of their deck. Auto-pick.
+      const opp = state.players[oppId];
+      const idx = opp.hand.findIndex((c) => c.supertype === "Energy");
+      if (idx < 0) {
+        logEvent(state, player, "Energy Swatter: no Energy in opponent's hand.");
+        return;
+      }
+      const [c] = opp.hand.splice(idx, 1);
+      opp.deck.push(c);
+      logEvent(state, player, `Energy Swatter: ${c.name} → bottom of ${opp.name}'s deck.`);
+      return;
+    }
+    case "accompanyingFlute": {
+      // Reveal top 5 of opp deck; bench any number of Basic Pokémon found.
+      const opp = state.players[oppId];
+      const top = opp.deck.splice(0, 5);
+      let benched = 0;
+      const rest: Card[] = [];
+      for (const c of top) {
+        if (
+          benched + opp.bench.length < 5 &&
+          c.supertype === "Pokémon" &&
+          (c.subtypes ?? []).includes("Basic")
+        ) {
+          opp.bench.push({
+            instanceId: `af-${Date.now()}-${Math.random()}`,
+            card: c as PokemonCard,
+            damage: 0,
+            attachedEnergy: [],
+            evolvedFrom: [],
+            tools: [],
+            playedThisTurn: false,
+            evolvedThisTurn: false,
+            statuses: [],
+            abilityUsedThisTurn: false,
+          });
+          benched++;
+        } else {
+          rest.push(c);
+        }
+      }
+      opp.deck.push(...rest);
+      shuffleDeck(state, oppId);
+      logEvent(state, player, `Accompanying Flute: benches ${benched} Basic to ${opp.name}'s side.`);
+      return;
+    }
+    case "janineSecretArt": {
+      // For up to 2 Darkness Pokémon, search a Basic Darkness Energy and
+      // attach. Auto-pick.
+      const allies = [pl.active, ...pl.bench]
+        .filter((p): p is PokemonInPlay => !!p)
+        .filter((p) => p.card.types.includes("Darkness"))
+        .slice(0, 2);
+      let attached = 0;
+      for (const ally of allies) {
+        const idx = pl.deck.findIndex(
+          (c) => c.supertype === "Energy" && c.subtypes.includes("Basic") &&
+            (c as EnergyCard).provides.includes("Darkness"),
+        );
+        if (idx < 0) break;
+        const [en] = pl.deck.splice(idx, 1) as [EnergyCard];
+        ally.attachedEnergy.push(en);
+        attached++;
+        if (ally === pl.active && !ally.statuses.includes("poisoned")) {
+          ally.statuses.push("poisoned");
+        }
+      }
+      shuffleDeck(state, player);
+      logEvent(state, player, `Janine's Secret Art: attaches ${attached} Darkness Energy.`);
+      pl.lastSupporterNameThisTurn = "Janine's Secret Art";
+      return;
+    }
+    case "lucianShuffleFlip": {
+      // Both shuffle hand to bottom; each flips a coin (heads 6, tails 3).
+      const me = state.players[player];
+      const opp = state.players[oppId];
+      const myHand = me.hand.splice(0);
+      const oppHand = opp.hand.splice(0);
+      me.deck.push(...myHand);
+      opp.deck.push(...oppHand);
+      const myHeads = state.rng.next() < 0.5;
+      const oppHeads = state.rng.next() < 0.5;
+      drawUpTo(state, player, myHeads ? 6 : 3);
+      drawUpTo(state, oppId, oppHeads ? 6 : 3);
+      logEvent(state, player, `Lucian: both shuffled. You: ${myHeads ? "heads (6)" : "tails (3)"}, opp: ${oppHeads ? "heads (6)" : "tails (3)"}.`);
+      return;
+    }
+    case "tymePokemonGuess": {
+      // Simplified: opp guesses; 50/50 → 4 cards or you draw 4.
+      const guessRight = state.rng.next() < 0.5;
+      if (guessRight) drawUpTo(state, oppId, 4);
+      else drawUpTo(state, player, 4);
+      return;
+    }
+    case "larrySkillDiscardSearch": {
+      // Discard hand; search a Pokémon, a Supporter, and a Basic Energy.
+      pl.discard.push(...pl.hand.splice(0));
+      const idxP = pl.deck.findIndex((c) => c.supertype === "Pokémon");
+      if (idxP >= 0) pl.hand.push(pl.deck.splice(idxP, 1)[0]);
+      const idxS = pl.deck.findIndex(
+        (c) => c.supertype === "Trainer" && c.subtypes.includes("Supporter"),
+      );
+      if (idxS >= 0) pl.hand.push(pl.deck.splice(idxS, 1)[0]);
+      const idxE = pl.deck.findIndex(
+        (c) => c.supertype === "Energy" && c.subtypes.includes("Basic"),
+      );
+      if (idxE >= 0) pl.hand.push(pl.deck.splice(idxE, 1)[0]);
+      shuffleDeck(state, player);
+      logEvent(state, player, "Larry's Skill: discards hand and searches.");
+      return;
+    }
+    case "drawPerAncient": {
+      const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+      const count = allies.filter((p) => (p.card.subtypes ?? []).includes("Ancient")).length;
+      drawUpTo(state, player, count);
+      return;
+    }
+    case "brilliantBlenderMill5": {
+      const milled = pl.deck.splice(0, 5);
+      pl.discard.push(...milled);
+      shuffleDeck(state, player);
+      logEvent(state, player, `Brilliant Blender: discards ${milled.length} from deck.`);
+      return;
+    }
+    case "megatonBlower": {
+      const opp = state.players[oppId];
+      let count = 0;
+      for (const p of [opp.active, ...opp.bench]) {
+        if (!p) continue;
+        if (p.tools.length > 0) {
+          opp.discard.push(...p.tools);
+          p.tools = [];
+          count++;
+        }
+        const remain: EnergyCard[] = [];
+        for (const e of p.attachedEnergy) {
+          if (e.subtypes.includes("Special")) {
+            opp.discard.push(e);
+            count++;
+          } else remain.push(e);
+        }
+        p.attachedEnergy = remain;
+      }
+      if (state.stadium) {
+        const stadium = state.stadium.card;
+        const stadiumOwner = state.stadium.controller;
+        state.players[stadiumOwner].discard.push(stadium);
+        state.stadium = null;
+        count++;
+      }
+      logEvent(state, player, `Megaton Blower: removes ${count} Tools/Special Energy/Stadium.`);
+      return;
+    }
+    case "blowtorch": {
+      // Cost: discard a Basic Fire Energy from hand. Effect: discard one of
+      // (opp's Pokémon Tool / opp's Special Energy / Stadium in play).
+      const idx = pl.hand.findIndex(
+        (c) => c.supertype === "Energy" && c.subtypes.includes("Basic") &&
+          (c as EnergyCard).provides.includes("Fire"),
+      );
+      if (idx < 0) {
+        logEvent(state, player, "Blowtorch: no Basic Fire Energy to discard.");
+        return;
+      }
+      const [fire] = pl.hand.splice(idx, 1);
+      pl.discard.push(fire);
+      // Auto-pick: opp's Active Tool > Special Energy > Stadium
+      const opp = state.players[oppId];
+      let removed = false;
+      if (opp.active && opp.active.tools.length > 0) {
+        const t = opp.active.tools.shift()!;
+        opp.discard.push(t);
+        logEvent(state, player, `Blowtorch: discards ${t.name}.`);
+        removed = true;
+      } else if (opp.active) {
+        const idxE = opp.active.attachedEnergy.findIndex((e) => e.subtypes.includes("Special"));
+        if (idxE >= 0) {
+          const [e] = opp.active.attachedEnergy.splice(idxE, 1);
+          opp.discard.push(e);
+          logEvent(state, player, `Blowtorch: discards ${e.name}.`);
+          removed = true;
+        }
+      }
+      if (!removed && state.stadium) {
+        const stadium = state.stadium.card;
+        const owner = state.stadium.controller;
+        state.players[owner].discard.push(stadium);
+        state.stadium = null;
+        logEvent(state, player, `Blowtorch: discards ${stadium.name}.`);
+      }
+      return;
+    }
+    case "chillTeaserToy": {
+      const opp = state.players[oppId];
+      // Bounce 1 Energy from one of opp's Pokémon to their hand. Auto-pick: opp's Active.
+      const target = opp.active;
+      if (!target || target.attachedEnergy.length === 0) return;
+      const [e] = target.attachedEnergy.splice(0, 1);
+      opp.hand.push(e);
+      logEvent(state, player, `Chill Teaser Toy: bounces ${e.name}.`);
+      return;
+    }
+    case "rotoStick": {
+      const top = pl.deck.splice(0, 4);
+      const supporters = top.filter(
+        (c) => c.supertype === "Trainer" && c.subtypes.includes("Supporter"),
+      );
+      pl.hand.push(...supporters);
+      const rest = top.filter((c) => !supporters.includes(c));
+      pl.deck.push(...rest);
+      shuffleDeck(state, player);
+      logEvent(state, player, `Roto-Stick: takes ${supporters.length} Supporter(s).`);
+      return;
+    }
+    case "meddlingMemo": {
+      const opp = state.players[oppId];
+      const count = opp.hand.length;
+      opp.deck.push(...opp.hand.splice(0));
+      drawUpTo(state, oppId, count);
+      logEvent(state, player, `Meddling Memo: ${opp.name} cycles ${count} hand cards.`);
+      return;
+    }
+    case "callBell": {
+      if (state.turn !== 1 || state.firstTurnNoAttack) {
+        logEvent(state, player, "Call Bell: only usable on your first turn going second.");
+        return;
+      }
+      const isSup = (c: Card) =>
+        c.supertype === "Trainer" && c.subtypes.includes("Supporter");
+      if (!setDeckSearchPick(state, player, isSup, 1, "Call Bell: pick a Supporter")) {
+        logEvent(state, player, "Call Bell: no Supporter in deck.");
+      }
+      return;
+    }
+    case "loveBall": {
+      const opp = state.players[oppId];
+      const oppNames = new Set(
+        [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p).map((p) => p.card.name),
+      );
+      const isMatch = (c: Card) =>
+        c.supertype === "Pokémon" && oppNames.has(c.name);
+      if (!setDeckSearchPick(state, player, isMatch, 1, "Love Ball: pick a Pokémon matching opp's name")) {
+        logEvent(state, player, "Love Ball: no matching Pokémon in deck.");
+      }
+      return;
+    }
+    case "strangeTimepieceDevolve": {
+      // Devolve 1 of your evolved Psychic Pokémon. Auto-pick.
+      const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+      const target = allies.find(
+        (p) => p.card.types.includes("Psychic") && p.evolvedFrom.length > 0,
+      );
+      if (!target) {
+        logEvent(state, player, "Strange Timepiece: no evolved Psychic Pokémon.");
+        return;
+      }
+      // Move all evolution stages to hand; current card replaced with the
+      // bottom of evolvedFrom. Tool/Energy stays.
+      const evolved = [target.card, ...target.evolvedFrom];
+      const baseCard = evolved.pop()!;
+      pl.hand.push(...evolved);
+      target.card = baseCard;
+      target.evolvedFrom = [];
+      target.evolvedThisTurn = false;
+      logEvent(state, player, `Strange Timepiece: devolves to ${baseCard.name}.`);
+      return;
+    }
+    case "cassiopeiaSearch2": {
+      // Only usable when it's the last card in hand. Search up to 2.
+      if (pl.hand.length > 0) {
+        logEvent(state, player, "Cassiopeia: must be your last card to use.");
+        return;
+      }
+      if (!setDeckSearchPick(state, player, () => true, 2, "Cassiopeia: pick up to 2 cards")) {
+        logEvent(state, player, "Cassiopeia: deck is empty.");
+      }
+      return;
+    }
+    case "rosaEnergyToStage2": {
+      // Need to have more prizes than opp. Auto-pick: attach 2 Basic Energy to first Stage 2.
+      const opp = state.players[oppId];
+      if (pl.prizes.length <= opp.prizes.length) {
+        logEvent(state, player, "Rosa's Encouragement: requires more prizes than opp.");
+        return;
+      }
+      const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+      const stage2 = allies.find((p) => (p.card.subtypes ?? []).includes("Stage 2"));
+      if (!stage2) {
+        logEvent(state, player, "Rosa's Encouragement: no Stage 2 in play.");
+        return;
+      }
+      let attached = 0;
+      for (let i = 0; i < 2; i++) {
+        const idx = pl.discard.findIndex(
+          (c) => c.supertype === "Energy" && c.subtypes.includes("Basic"),
+        );
+        if (idx < 0) break;
+        const [e] = pl.discard.splice(idx, 1) as [EnergyCard];
+        stage2.attachedEnergy.push(e);
+        attached++;
+      }
+      logEvent(state, player, `Rosa's Encouragement: attaches ${attached} Basic Energy to ${stage2.card.name}.`);
+      return;
+    }
+    case "sacredCharmTool":
+    case "gravityGemstoneTool":
+    case "handheldFanTool":
+    case "ltSurgeStrategy": {
+      // Tools/passive — handled elsewhere; this branch fires only if the card
+      // is somehow played as a non-Tool. Discard with no effect.
+      return;
+    }
+    case "perrinSearch": {
+      // Reveal up to 2 Pokémon from hand → put into deck → search same number.
+      const reveal: Card[] = [];
+      for (let i = pl.hand.length - 1; i >= 0 && reveal.length < 2; i--) {
+        if (pl.hand[i].supertype === "Pokémon") {
+          reveal.push(pl.hand.splice(i, 1)[0]);
+        }
+      }
+      pl.deck.push(...reveal);
+      shuffleDeck(state, player);
+      const isPoke = (c: Card) => c.supertype === "Pokémon";
+      if (reveal.length === 0) {
+        logEvent(state, player, "Perrin: no Pokémon in hand to reveal.");
+        return;
+      }
+      if (!setDeckSearchPick(state, player, isPoke, reveal.length, `Perrin: pick up to ${reveal.length} Pokémon`)) {
+        logEvent(state, player, "Perrin: no Pokémon in deck.");
+      }
+      return;
+    }
+    case "raifortPeek5Discard": {
+      // Look at top 5; auto-discard nothing, return all.
+      const top = pl.deck.slice(0, 5);
+      logEvent(state, player, `Raifort: examines top ${top.length} card(s).`);
+      return;
+    }
+    case "canariLightningSearch": {
+      // Cost: discard another card from hand.
+      if (!discardOneOtherFromHand(state, player)) {
+        logEvent(state, player, "Canari: no card to discard.");
+        return;
+      }
+      const isLightningPoke = (c: Card) =>
+        c.supertype === "Pokémon" && c.types.includes("Lightning");
+      if (!setDeckSearchPick(state, player, isLightningPoke, 4, "Canari: pick up to 4 Lightning Pokémon")) {
+        logEvent(state, player, "Canari: no Lightning Pokémon in deck.");
+      }
+      pl.lastSupporterNameThisTurn = "Canari";
+      return;
+    }
+    case "trGiovanniSwitchGust": {
+      // Switch your Active TR Pokémon with a Benched TR Pokémon, then gust
+      // opp's bench to Active. Auto-pick: highest-HP TR bench → Active; opp
+      // bench target = highest-HP.
+      if (!pl.active || !pl.active.card.name.startsWith("Team Rocket's ")) {
+        logEvent(state, player, "Team Rocket's Giovanni: no Active Team Rocket's Pokémon.");
+        return;
+      }
+      const trBench = pl.bench.findIndex((p) => p.card.name.startsWith("Team Rocket's "));
+      if (trBench < 0) {
+        logEvent(state, player, "Team Rocket's Giovanni: no Benched Team Rocket's Pokémon.");
+        return;
+      }
+      performSwitch(state, player, trBench);
+      // Gust opp.
+      const opp = state.players[oppId];
+      if (opp.active && opp.bench.length > 0) {
+        const target = opp.bench.slice().sort((a, b) => b.card.hp - a.card.hp)[0];
+        const idx = opp.bench.indexOf(target);
+        const pulled = opp.bench.splice(idx, 1)[0];
+        const wasActive = opp.active;
+        opp.active = pulled;
+        opp.bench.push(wasActive);
+        logEvent(state, player, `gusts ${pulled.card.name} into Active.`);
+      }
+      return;
+    }
+    case "trArcherShuffleDraw": {
+      // Cost: any of your TR Pokémon were KO'd during opp's last turn.
+      if (!pl.yourPokemonKoedLastOppTurn) {
+        logEvent(state, player, "Team Rocket's Archer: requires a Team Rocket's KO last turn.");
+        return;
+      }
+      // Both players shuffle hand into deck; you draw 5, opp draws 3.
+      shuffleHandIntoDeck(state, player);
+      shuffleHandIntoDeck(state, oppId);
+      drawUpTo(state, player, 5);
+      drawUpTo(state, oppId, 3);
+      logEvent(state, player, "Team Rocket's Archer: both shuffled. You drew 5, opp drew 3.");
+      return;
+    }
+    case "ogresMaskSwapOgerpon": {
+      // Swap an Ogerpon ex in discard with an Ogerpon ex in play (transfer
+      // damage / energy / status / tools). Auto-pick: first match.
+      const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+      const inPlay = allies.find(
+        (p) => p.card.subtypes.includes("ex") && p.card.name.includes("Ogerpon"),
+      );
+      if (!inPlay) {
+        logEvent(state, player, "Ogre's Mask: no Ogerpon ex in play.");
+        return;
+      }
+      const idx = pl.discard.findIndex(
+        (c) => c.supertype === "Pokémon" && c.subtypes.includes("ex") && c.name.includes("Ogerpon") && c.name !== inPlay.card.name,
+      );
+      if (idx < 0) {
+        logEvent(state, player, "Ogre's Mask: no different Ogerpon ex in discard.");
+        return;
+      }
+      const [newCard] = pl.discard.splice(idx, 1) as [PokemonCard];
+      pl.discard.push(inPlay.card);
+      // Replace card on the in-play instance, preserving everything else.
+      inPlay.card = newCard;
+      logEvent(state, player, `Ogre's Mask: swaps in ${newCard.name}.`);
+      return;
+    }
+    case "redeemableTicketReprize": {
+      // Shuffle prizes, redraw same count from deck top.
+      if (pl.prizes.length === 0) return;
+      const oldPrizes = pl.prizes.splice(0);
+      pl.deck.push(...oldPrizes);
+      shuffleDeck(state, player);
+      const n = oldPrizes.length;
+      pl.prizes = pl.deck.splice(0, n);
+      logEvent(state, player, `Redeemable Ticket: shuffles ${n} prizes back, draws ${n} new ones.`);
+      return;
+    }
+    case "tmFluoriteTool": {
+      // Passive — handled at attach time. This branch fires only if played
+      // as a non-Tool (shouldn't happen).
       return;
     }
 
@@ -2594,6 +3240,58 @@ export function resolveInPlayTarget(
       state.pendingInPlayTarget = null;
       return { ok: true };
     }
+    case "jacintheHeal": {
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      if (!target.card.types.includes("Psychic")) {
+        return { ok: false, reason: "Must be a Psychic Pokémon." };
+      }
+      if (target.damage === 0) return { ok: false, reason: "That Pokémon has no damage to heal." };
+      const before = target.damage;
+      target.damage = Math.max(0, target.damage - 150);
+      logEvent(
+        state,
+        clicker,
+        `Jacinthe: heals ${before - target.damage} from ${target.card.name}.`,
+      );
+      state.pendingInPlayTarget = null;
+      return { ok: true };
+    }
+    case "pokeVitalAHeal": {
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      if (target.damage === 0) return { ok: false, reason: "That Pokémon has no damage to heal." };
+      const before = target.damage;
+      target.damage = Math.max(0, target.damage - 150);
+      logEvent(
+        state,
+        clicker,
+        `Poké Vital A: heals ${before - target.damage} from ${target.card.name}.`,
+      );
+      state.pendingInPlayTarget = null;
+      return { ok: true };
+    }
+    case "wondrousPatchAttach": {
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      if (fromActive) return { ok: false, reason: "Pick a Benched Pokémon." };
+      if (!target.card.types.includes("Psychic")) {
+        return { ok: false, reason: "Must be a Psychic Pokémon." };
+      }
+      const energyIdx = clickerPl.discard.findIndex(
+        (c) => isBasicEnergy(c) && (c as EnergyCard).provides.includes("Psychic"),
+      );
+      if (energyIdx < 0) {
+        state.pendingInPlayTarget = null;
+        return { ok: false, reason: "No Basic Psychic Energy in discard." };
+      }
+      const [e] = clickerPl.discard.splice(energyIdx, 1) as [EnergyCard];
+      target.attachedEnergy.push(e);
+      logEvent(
+        state,
+        clicker,
+        `Wondrous Patch: attaches ${e.name} to ${target.card.name}.`,
+      );
+      state.pendingInPlayTarget = null;
+      return { ok: true };
+    }
   }
 }
 
@@ -2736,3 +3434,4 @@ export function resolveRareCandyChoice(
 export function cancelRareCandyChoice(state: GameState): void {
   state.pendingRareCandyChoice = null;
 }
+
