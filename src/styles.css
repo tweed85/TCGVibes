@@ -86,7 +86,13 @@ body {
     "action";
   min-height: 100dvh;
   gap: 6px;
-  padding: 6px;
+  /* Safe-area-aware padding so iPhone notch / Android gesture-bar / iPad
+     home-indicator never clip the playmat or the action bar. */
+  padding:
+    max(6px, env(safe-area-inset-top))
+    max(6px, env(safe-area-inset-right))
+    max(6px, env(safe-area-inset-bottom))
+    max(6px, env(safe-area-inset-left));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -859,6 +865,10 @@ body {
   gap: 2px;
   box-shadow: var(--shadow-card);
   transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+  /* Disable iOS Safari double-tap-to-zoom on individual cards so taps
+     resolve immediately. The bench / hand row containers keep default
+     touch-action so horizontal panning still works. */
+  touch-action: manipulation;
 }
 .card:hover:not(.empty-slot):not(.selected) {
   transform: translateY(-2px);
@@ -1303,11 +1313,61 @@ button.secondary:hover:not(:disabled) {
 
   .action-bar { padding: 4px 6px; }
   .action-bar .action-groups { gap: 4px; }
-  .action-bar button { min-height: 40px; font-size: 12px; padding: 6px 8px; }
+  .action-bar button { min-height: 44px; font-size: 12px; padding: 6px 8px; }
   .action-bar .group .group-label { font-size: 8px; }
   .action-bar .group.end { margin-left: 0; width: 100%; }
   .action-bar .group.end button { width: 100%; }
   .action-bar .status-line .turn-flags { display: none; }
+
+  /* Touch-target floors (44×44 iOS HIG / 48×48dp Android Material). The
+     desktop versions of these elements were sized for mouse precision; on
+     touch devices they need to grow. */
+  button { min-height: 44px; }
+  .header button { min-height: 40px; padding: 6px 10px; }
+  .bsel-btn { width: 44px; height: 44px; min-height: 0; font-size: 18px; }
+  .card-zoom-close { width: 44px; height: 44px; top: 4px; right: 4px; }
+  .log-details summary { min-height: 32px; padding: 6px 0; font-size: 11px; }
+
+  /* The opponent's mini-hand strip is purely informational; the badge in the
+     opp-strip already shows the count. Hide it on phones to reclaim space. */
+  .opp-strip .mini-hand { display: none; }
+
+  /* Hand-strip scroll affordance — a fade gradient on the right edge so
+     players read "swipe horizontally for more cards." Mask works without
+     affecting layout. */
+  .my-hand-row {
+    -webkit-mask-image: linear-gradient(to right, #000, #000 calc(100% - 24px), transparent);
+    mask-image: linear-gradient(to right, #000, #000 calc(100% - 24px), transparent);
+  }
+}
+
+/* Phone (≤480px): action-bar reflow so action-groups never wrap into 4
+   stacked rows. Make the groups horizontally scroll-able and pin End Turn to
+   the right edge so it's always one tap away. */
+@media (max-width: 480px) {
+  .action-bar .action-groups {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .action-bar .group {
+    flex: 0 0 auto;
+  }
+  .action-bar .group.end {
+    margin-left: auto;
+    width: auto;
+    position: sticky;
+    right: 0;
+    background: linear-gradient(to left, var(--panel) 60%, transparent);
+    padding-left: 8px;
+  }
+  .action-bar .group.end button {
+    width: auto;
+    min-width: 88px;
+  }
+  /* Tighten header buttons too — at 480px we reclaim every pixel. */
+  .header h1 { font-size: 12px; }
+  .kofi-link { padding: 4px 6px; font-size: 10px; }
 }
 
 /* Extra small (≤360px): further tightening. */
@@ -1318,6 +1378,37 @@ button.secondary:hover:not(:disabled) {
     --hand-card-w: 60px;
     --hand-card-h: 82px;
   }
+}
+
+/* Tablet portrait (768–1024px wide, portrait orientation): the existing
+   ≤900px block over-shrinks cards on iPad mini / iPad Air. Bump them back
+   up since portrait tablets have plenty of width vs. phones. */
+@media (min-width: 600px) and (max-width: 1024px) and (orientation: portrait) {
+  :root {
+    --card-w: 96px;
+    --card-h: 130px;
+    --hand-card-w: 80px;
+    --hand-card-h: 110px;
+  }
+}
+
+/* Phone landscape — short viewports. Vertical density is critical. Shrink
+   active/bench cards heavily so opp row + my row + hand + action bar all
+   fit in a sub-500px-tall viewport. */
+@media (max-height: 500px) and (max-width: 900px) and (orientation: landscape) {
+  :root {
+    --card-w: 70px;
+    --card-h: 92px;
+    --hand-card-w: 56px;
+    --hand-card-h: 76px;
+  }
+  .header { padding: 2px 6px; }
+  .header h1 { font-size: 12px; }
+  .header .meta { font-size: 9px; }
+  .opp-strip { padding: 2px 4px; }
+  .action-bar { padding: 2px 4px; }
+  .action-bar button { min-height: 36px; padding: 4px 8px; font-size: 11px; }
+  .log-details { font-size: 10px; }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1333,7 +1424,13 @@ button.secondary:hover:not(:disabled) {
   align-items: center;
   justify-content: center;
   z-index: 50;
-  padding: 16px;
+  /* Safe-area-aware padding so modals on devices with notches / gesture
+     bars don't bleed into the system UI. */
+  padding:
+    max(16px, env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
   animation: tcg-fade-in 0.15s ease-out;
 }
 @keyframes tcg-fade-in {
@@ -1345,7 +1442,7 @@ button.secondary:hover:not(:disabled) {
   border-radius: 12px;
   padding: 18px;
   width: min(720px, 100%);
-  max-height: 90vh;
+  max-height: 90dvh;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1458,7 +1555,7 @@ button.secondary:hover:not(:disabled) {
 .deck-builder-modal {
   max-width: 95vw;
   width: min(1200px, 100%);
-  max-height: 92vh;
+  max-height: 92dvh;
 }
 
 /* Compact "skipped stage" notice modal (Dawn intermediates). */
@@ -1630,6 +1727,39 @@ button.secondary:hover:not(:disabled) {
   .builder-toolbar .builder-search { grid-column: 1 / 3; }
 }
 
+/* Mobile-only deck-builder tab control: hides on desktop where both panes
+   fit side-by-side. At ≤768px we collapse `.builder-body` into a single
+   pane and switch the visible child via `.mobile-tab--<which>`. */
+.builder-mobile-tabs {
+  display: none;
+}
+@media (max-width: 768px) {
+  .builder-mobile-tabs {
+    display: flex;
+    gap: 6px;
+    padding: 4px 0;
+  }
+  .builder-mobile-tabs button {
+    flex: 1;
+    min-height: 40px;
+    background: rgba(124, 58, 237, 0.1);
+    color: var(--card-text);
+    border: 1px solid rgba(124, 58, 237, 0.25);
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .builder-mobile-tabs button.active {
+    background: rgba(124, 58, 237, 0.4);
+    border-color: rgba(124, 58, 237, 0.7);
+    color: #fff;
+  }
+  .builder-body.mobile-tab--browse > .builder-selected,
+  .builder-body.mobile-tab--selected > .builder-results {
+    display: none;
+  }
+}
+
 /* Zoom: big card image floating over a dim backdrop. Click anywhere outside
    the card to close. Z-index is pumped above the other modal layer so the
    zoom shows over the deck-builder / pre-game / import / pick modals. */
@@ -1640,14 +1770,14 @@ button.secondary:hover:not(:disabled) {
 .card-zoom {
   position: relative;
   max-width: 90vw;
-  max-height: 92vh;
+  max-height: 92dvh;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .card-zoom img {
   max-width: 90vw;
-  max-height: 92vh;
+  max-height: 92dvh;
   border-radius: 12px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
 }
@@ -1707,7 +1837,7 @@ button.secondary:hover:not(:disabled) {
   gap: 8px;
   flex-wrap: wrap;
   overflow-y: auto;
-  max-height: 55vh;
+  max-height: 55dvh;
   padding: 6px 4px;
   background: var(--panel-2);
   border-radius: 6px;

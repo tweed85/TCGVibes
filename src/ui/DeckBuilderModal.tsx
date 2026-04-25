@@ -72,6 +72,11 @@ export default function DeckBuilderModal({
   });
   const [selected, setSelected] = useState<Map<string, number>>(new Map());
   const [showCount, setShowCount] = useState(80);
+  // Phone-only tab toggle: "browse" shows the search grid, "selected" shows
+  // the picked-list. Hidden on tablet/desktop where both panes fit side-by-
+  // side. The CSS `.mobile-tab--<active>` class on `.builder-body` flips
+  // which child is visible at ≤768px.
+  const [mobileTab, setMobileTab] = useState<"browse" | "selected">("browse");
 
   const selectedCards: Array<{ card: Card; count: number }> = useMemo(() => {
     const out: Array<{ card: Card; count: number }> = [];
@@ -246,7 +251,28 @@ export default function DeckBuilderModal({
           </select>
         </div>
 
-        <div className="builder-body">
+        <div className="builder-mobile-tabs" role="tablist" aria-label="Deck builder panes">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mobileTab === "browse"}
+            className={mobileTab === "browse" ? "active" : ""}
+            onClick={() => setMobileTab("browse")}
+          >
+            Browse
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mobileTab === "selected"}
+            className={mobileTab === "selected" ? "active" : ""}
+            onClick={() => setMobileTab("selected")}
+          >
+            Your deck ({totalCount}/60)
+          </button>
+        </div>
+
+        <div className={`builder-body mobile-tab--${mobileTab}`}>
           <div className="builder-results">
             <div className="builder-results-meta">
               Showing {displayCards.length} of {filteredCards.length} matching ·

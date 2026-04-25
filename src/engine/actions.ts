@@ -124,9 +124,11 @@ export function evolve(
   if (!target) return fail("Target not in play.");
   if (target.card.name !== card.evolvesFrom)
     return fail(`${card.name} evolves from ${card.evolvesFrom}, not ${target.card.name}.`);
-  // Check once-per-turn evolution FIRST so nothing (including Forest of
-  // Vitality) can chain Basic → Stage 1 → Stage 2 on the same instance.
-  if (target.evolvedThisTurn) return fail("Already evolved this turn.");
+  // Forest of Vitality (Grass→Grass) overrides BOTH the played-this-turn
+  // rule and the once-per-instance evolution rule, so Chikorita → Bayleef →
+  // Meganium can chain on a single FoV turn. Compute the override first so
+  // the standard rules below can defer to it.
+  const fovChain = canEvolveOnPlayTurn(state, target, card);
   // Boosted Evolution (Eevee) / Stimulated Evolution (Shelmet w/ Karrablast)
   // — let this Pokémon evolve on turn 1 / the turn it was played.
   const ownerAllies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
@@ -134,10 +136,11 @@ export function evolve(
     (a) => a.name === "Boosted Evolution" ||
       (a.name === "Stimulated Evolution" && ownerAllies.some((p) => p.card.name === "Karrablast")),
   );
+  // Once-per-instance rule — bypassed by FoV's Grass→Grass chain.
+  if (target.evolvedThisTurn && !fovChain) return fail("Already evolved this turn.");
   if (state.turn === 1 && !allowsTurn1) return fail("No evolving on the first turn.");
-  // Forest of Vitality only overrides the played-this-turn rule for a Basic
-  // Grass target on its first evolution of the turn.
-  if (target.playedThisTurn && !canEvolveOnPlayTurn(state, target) && !allowsTurn1)
+  // Played-this-turn rule — bypassed by FoV (Grass→Grass) or turn-1 abilities.
+  if (target.playedThisTurn && !fovChain && !allowsTurn1)
     return fail("Can't evolve a Pokémon played this turn.");
 
   pl.hand.splice(handIndex, 1);

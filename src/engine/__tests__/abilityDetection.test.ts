@@ -153,38 +153,36 @@ describe("detectAbilityEffect — final-sweep coverage", () => {
   });
 });
 
-describe("Forest of Vitality — only first evolution of a Basic Grass this turn", () => {
-  it("blocks chained Basic→Stage 1→Stage 2 in the same turn even under FoV", async () => {
+describe("Forest of Vitality — Grass→Grass evolutions on play / chained turn", () => {
+  it("permits Grass→Grass on the played turn AND chained Grass→Grass→Grass", async () => {
     const { makeRng } = await import("../rng");
     const { setupGame, makePokemonInPlay } = await import("../rules");
-    const { evolve } = await import("../actions");
     const { buildDeck, DECK_SPECS } = await import("../../data/decks");
     const { findByName } = await import("../../data/cards");
     const { canEvolveOnPlayTurn } = await import("../ongoingEffects");
     const rng = makeRng(1);
     const state = setupGame(buildDeck(DECK_SPECS[0]), buildDeck(DECK_SPECS[0]), rng);
-    // Force an established match on turn 3.
     state.phase = "main";
     state.turn = 3;
     state.activePlayer = "p1";
-    // Set up Forest of Vitality.
     const fov = findByName("Forest of Vitality");
     if (!fov || fov.supertype !== "Trainer") return; // rotated out
     state.stadium = { card: fov, controller: "p1" };
-    // Build a Grass evolution line we can probe. If the exact line isn't in
-    // the pool, skip silently.
     const basic = findByName("Fomantis") ?? findByName("Tangela") ?? findByName("Petilil");
     if (!basic || basic.supertype !== "Pokémon" || !basic.types.includes("Grass")) return;
     const inPlay = makePokemonInPlay(basic as import("../types").PokemonCard);
     inPlay.playedThisTurn = true;
     state.players.p1.active = inPlay;
-    // Verify canEvolveOnPlayTurn says YES for a Basic Grass with no prior
-    // evolution; says NO once the Pokémon has already evolved this turn.
+    // Played-turn rule: should allow evolution into a Grass evolution.
     expect(canEvolveOnPlayTurn(state, inPlay)).toBe(true);
+    // Chain rule: even after an evolution, FoV permits another Grass→Grass.
     inPlay.evolvedThisTurn = true;
-    expect(canEvolveOnPlayTurn(state, inPlay)).toBe(false);
-    // The evolve() function's hard guard also blocks second evolutions.
-    const res = evolve(state, "p1", 0, inPlay.instanceId);
-    expect(res.ok).toBe(false);
+    expect(canEvolveOnPlayTurn(state, inPlay)).toBe(true);
+    // But it must remain Grass→Grass — a non-Grass evolution card is NOT
+    // covered by FoV, so canEvolveOnPlayTurn returns false.
+    const nonGrass = findByName("Charmander") ?? findByName("Squirtle");
+    if (nonGrass && nonGrass.supertype === "Pokémon") {
+      expect(canEvolveOnPlayTurn(state, inPlay, nonGrass as import("../types").PokemonCard)).toBe(false);
+    }
   });
 });

@@ -118,21 +118,28 @@ export function confusedPersistsOnEvolve(state: GameState): boolean {
 // NOT override "can't evolve the same Pokémon more than once per turn" —
 // that guard stays in place via target.evolvedThisTurn.
 //
-// The type check runs against the Pokémon currently in play (target), not
-// against the evolution card in hand. If a Grass Basic evolves into a non-
-// Grass Stage 1 this turn via FoV, the new Stage 1 can't re-evolve this turn
-// regardless (evolvedThisTurn blocks), so we don't need to check the
-// evolution card's type.
+// Forest of Vitality says: "Each player's Grass Pokémon can evolve into
+// Grass Pokémon during the turn they play those Pokémon." We treat this
+// as enabling two distinct cases:
+//   (a) "Played this turn" — a Grass Basic (or already-evolved Grass Stage)
+//       placed on the bench this turn can evolve into a Grass evolution.
+//   (b) "Just evolved this turn" — a Grass Pokémon that already evolved
+//       this turn can chain into another Grass evolution (Chikorita →
+//       Bayleef → Meganium on a single FoV turn).
+// Both require the EVOLUTION card to be Grass too, since the rule is
+// Grass→Grass. `newCard` is the card being played from hand (the evolution).
 export function canEvolveOnPlayTurn(
   state: GameState,
   target: PokemonInPlay,
+  newCard?: PokemonCard,
 ): boolean {
   if (state.stadium?.card.name !== "Forest of Vitality") return false;
   if (state.turn === 1) return false;
-  // Must be a Basic (not already evolved) and a Grass Pokémon.
-  if (!target.card.subtypes.includes("Basic")) return false;
-  if (target.evolvedThisTurn) return false;
-  return target.card.types.includes("Grass");
+  // Source must be Grass (the Pokémon currently in play).
+  if (!target.card.types.includes("Grass")) return false;
+  // Target evolution must also be Grass — Grass→Grass only.
+  if (newCard && !newCard.types.includes("Grass")) return false;
+  return true;
 }
 
 // Risky Ruins: when a Basic non-Darkness is placed on the bench, it takes

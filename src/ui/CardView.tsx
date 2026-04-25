@@ -1,4 +1,4 @@
-import { useState, type MouseEvent } from "react";
+import { useRef, useState, type MouseEvent, type PointerEvent } from "react";
 import type { Card, PokemonCard, PokemonInPlay } from "../engine/types";
 
 // Shared "zoom" subscriber — the top-level App wires a listener that
@@ -25,6 +25,65 @@ function maybeZoom(card: Card, ev: MouseEvent): boolean {
     return true;
   }
   return false;
+}
+
+// Long-press → zoom for touch devices (mobile / tablet have no right-click).
+// Returns the props to spread onto the card element. `setSuppressClick` is a
+// flag the click handler reads to skip the trailing tap when long-press
+// fired. Cancels on pointer-move >10px so swipe-scrolling the hand strip
+// doesn't trigger zoom.
+function useCardLongPress(card: Card): {
+  pointerProps: {
+    onPointerDown: (ev: PointerEvent<HTMLElement>) => void;
+    onPointerUp: () => void;
+    onPointerCancel: () => void;
+    onPointerLeave: () => void;
+    onPointerMove: (ev: PointerEvent<HTMLElement>) => void;
+  };
+  consumeNextClick: () => boolean;
+} {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startPos = useRef<{ x: number; y: number } | null>(null);
+  const fired = useRef(false);
+  const clear = () => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+    startPos.current = null;
+  };
+  const consumeNextClick = () => {
+    if (fired.current) {
+      fired.current = false;
+      return true;
+    }
+    return false;
+  };
+  return {
+    pointerProps: {
+      onPointerDown: (ev) => {
+        // Only react to primary touch / pen / mouse-left so right-click
+        // still routes through `onContextMenu`.
+        if (ev.button !== 0 && ev.pointerType === "mouse") return;
+        startPos.current = { x: ev.clientX, y: ev.clientY };
+        fired.current = false;
+        timer.current = setTimeout(() => {
+          fired.current = true;
+          if (zoomHandler) zoomHandler(card);
+        }, 500);
+      },
+      onPointerUp: clear,
+      onPointerCancel: clear,
+      onPointerLeave: clear,
+      onPointerMove: (ev) => {
+        if (!startPos.current) return;
+        const dx = ev.clientX - startPos.current.x;
+        const dy = ev.clientY - startPos.current.y;
+        if (dx * dx + dy * dy > 100) clear(); // ~10px threshold
+      },
+    },
+    consumeNextClick,
+  };
 }
 
 interface Props {
@@ -152,17 +211,20 @@ function CardTextBody({ card }: { card: Card }) {
 
 export function CardView({ card, selected, onClick }: Props) {
   const cls = `card card-imaged${selected ? " selected" : ""}`;
-  const tip = cardTooltip(card) + "\n\nShift+click to zoom";
+  const tip = cardTooltip(card) + "\n\nShift+click (or long-press) to zoom";
+  const { pointerProps, consumeNextClick } = useCardLongPress(card);
   return (
     <div
       className={cls}
       onClick={(ev) => {
+        if (consumeNextClick()) return;
         if (maybeZoom(card, ev)) return;
         onClick?.();
       }}
       onContextMenu={(ev) => {
         if (maybeZoom(card, ev)) return;
       }}
+      {...pointerProps}
       title={tip}
     >
       <CardImage src={card.imageLarge} alt={card.name}>
@@ -228,17 +290,20 @@ export function PokemonInPlayView({
 
   const effMax = maxHp ?? p.card.hp;
   const currentHp = Math.max(0, effMax - p.damage);
+  const longPress = useCardLongPress(p.card);
   return (
     <div
       className={cls}
       onClick={(ev) => {
+        if (longPress.consumeNextClick()) return;
         if (maybeZoom(p.card, ev)) return;
         onClick?.();
       }}
       onContextMenu={(ev) => {
         if (maybeZoom(p.card, ev)) return;
       }}
-      title={tip + "\n\nShift+click to zoom"}
+      {...longPress.pointerProps}
+      title={tip + "\n\nShift+click (or long-press) to zoom"}
     >
       <CardImage src={p.card.imageLarge} alt={p.card.name}>
         <CardTextBody card={p.card} />

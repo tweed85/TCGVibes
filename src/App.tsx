@@ -432,13 +432,46 @@ export default function App() {
         }
       }
     };
+    // Android back-button → close any open modal instead of leaving the page.
+    // We listen to popstate; if a modal is open we just close it. The modal
+    // open-handlers below push a sentinel history entry so the browser's
+    // built-in back navigation lands on this listener.
+    const onPop = () => {
+      if (zoomCard) { setZoomCard(null); return; }
+      if (discardViewer) { setDiscardViewer(null); return; }
+      if (importOpen) { setImportOpen(false); return; }
+      if (buildOpen) { setBuildOpen(false); return; }
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("popstate", onPop);
+    };
   });
+
+  // Push a history entry whenever a dismissible modal opens, so Android's
+  // hardware/gesture back button lands on a popstate event (handled above)
+  // rather than leaving the page entirely. The sentinel state is just a
+  // marker — we never read it back. Closing the modal via Esc/click triggers
+  // a normal `history.back()` so the entry doesn't accumulate.
+  useEffect(() => {
+    const anyModalOpen = !!(zoomCard || discardViewer || importOpen || buildOpen);
+    if (!anyModalOpen) return;
+    history.pushState({ tcgModal: true }, "");
+  }, [zoomCard, discardViewer, importOpen, buildOpen]);
 
   const handle = (r: ActionResult, successMsg?: string) => {
     if (!r.ok) setStatusMsg(r.reason);
-    else setStatusMsg(successMsg ?? "");
+    else {
+      setStatusMsg(successMsg ?? "");
+      // Subtle haptic on a successful action — only on devices that support
+      // the Vibration API (Android Chrome, some Android browsers; silent
+      // no-op on iOS Safari, which is fine).
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        navigator.vibrate(12);
+      }
+    }
     setSelected(null);
     rerender();
   };
