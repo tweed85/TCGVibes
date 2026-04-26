@@ -112,7 +112,8 @@ export type TrainerEffectId =
   | "draytonTop7" // Drayton — look at top 7, grab a Pokémon + Trainer
   // Supporters — gust / switch / disrupt
   | "gustOppBenched" // Boss's Orders
-  | "switchActive" // Kieran (switch branch)
+  | "switchActive" // generic switch
+  | "kieranChoice" // Kieran — switch OR +30 vs ex/V this turn
   | "eriDiscardOppItems" // Eri — discard up to 2 Items from opp hand
   // Supporters — search
   | "searchBasicEnergyN" // Firebreather (up to 7 Fire Energy) / Energy Search+
@@ -367,9 +368,10 @@ export function detectTrainerEffect(t: ApiTrainer): TrainerEffectId | undefined 
       /switch .*benched pok[eé]mon (with (your|their) active|to the active spot)/i.test(text))
     return "gustOppBenched";
 
-  // Kieran — choice of switch or +30; we take the switch branch.
+  // Kieran — Choose 1: switch your Active, OR +30 vs Active ex/V this turn.
+  // Branch is picked at resolve time based on the board state.
   if (t.name === "Kieran")
-    return "switchActive";
+    return "kieranChoice";
 
   // Colress's Tenacity — search Stadium + Energy.
   if (t.name === "Colress's Tenacity" ||
@@ -815,6 +817,21 @@ export function precheckTrainerEffect(
   // Poké Vital A "heal150Any" — needs any damaged ally.
   if (id === "heal150Any") {
     if (!allies.some((p) => p.damage > 0)) return "No damaged Pokémon to heal.";
+  }
+
+  // Dawn — needs at least one of Basic / Stage 1 / Stage 2 in deck. The
+  // chained picker would fire the search-notice modal three times if the
+  // deck was empty of all three; reject the play upfront so it doesn't
+  // burn the Supporter slot for nothing.
+  if (id === "dawnSearchBasicStage1Stage2") {
+    const hasAny = pl.deck.some(
+      (c) =>
+        c.supertype === "Pokémon" &&
+        ((c.subtypes ?? []).includes("Basic") ||
+          (c.subtypes ?? []).includes("Stage 1") ||
+          (c.subtypes ?? []).includes("Stage 2")),
+    );
+    if (!hasAny) return "Dawn: no Basic, Stage 1, or Stage 2 Pokémon in your deck.";
   }
 
   // Wondrous Patch "wondrousPatchPsychic" — needs a Benched Psychic AND a
@@ -1544,7 +1561,6 @@ export function applyTrainerEffect(
     }
 
     case "switchActive": {
-      // Kieran: switch your Active with a Benched Pokémon (damage-boost branch skipped).
       if (!pl.active || pl.bench.length === 0) {
         logEvent(state, player, "has no Benched Pokémon to switch to.");
         return;
@@ -1555,6 +1571,42 @@ export function applyTrainerEffect(
       pl.active = incoming;
       pl.bench.push(outgoing);
       logEvent(state, player, `switches ${outgoing.card.name} → ${incoming.card.name}.`);
+      return;
+    }
+
+    case "kieranChoice": {
+      // Kieran — Choose 1:
+      //   • Switch your Active with a Benched Pokémon, OR
+      //   • +30 damage to opponent's Active ex/V from your attacks this turn.
+      // We pick at resolve time: prefer the damage branch when the opponent's
+      // Active is ex/V (so the bonus matters); otherwise fall back to switch.
+      // The bonus is queued on thisTurnAttackBonuses, so it stacks with any
+      // other turn buffs and applies to every attack the rest of the turn.
+      const oppActive = state.players[oppId].active;
+      const oppIsEx = oppActive
+        ? (oppActive.card.subtypes.includes("ex") || oppActive.card.subtypes.includes("EX"))
+        : false;
+      const oppIsV = oppActive
+        ? (oppActive.card.subtypes.includes("V") ||
+           oppActive.card.subtypes.includes("VMAX") ||
+           oppActive.card.subtypes.includes("VSTAR") ||
+           oppActive.card.subtypes.includes("V-UNION"))
+        : false;
+      if (oppIsEx || oppIsV) {
+        pl.thisTurnAttackBonuses.push({ amount: 30, againstEx: true, againstV: true });
+        logEvent(state, player, "queues Kieran +30 damage vs Active ex/V this turn.");
+        return;
+      }
+      if (!pl.active || pl.bench.length === 0) {
+        logEvent(state, player, "Kieran: no Benched Pokémon to switch to and opponent has no ex/V Active.");
+        return;
+      }
+      const incoming = pl.bench.shift()!;
+      const outgoing = pl.active;
+      clearAllStatuses(outgoing);
+      pl.active = incoming;
+      pl.bench.push(outgoing);
+      logEvent(state, player, `Kieran: switches ${outgoing.card.name} → ${incoming.card.name}.`);
       return;
     }
 

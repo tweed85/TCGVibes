@@ -676,6 +676,17 @@ function executeAttackHit(
   if ((state.phase as string) !== "gameOver") {
     result.postDamage?.();
   }
+  // Some post-hooks add damage directly to the defender's Active (e.g.,
+  // Alakazam "Powerful Hand" stacking counters per hand card, or Black
+  // Kyurem's conditional KO). The applyDamage() path only runs the active-KO
+  // check when damage came in via the regular `damage > 0` branch, so we
+  // need an explicit check here too.
+  if ((state.phase as string) !== "gameOver" && def) {
+    const defPl = state.players[defOwner];
+    if (defPl.active === def && def.damage >= effectiveMaxHp(def, state)) {
+      knockOut(state, defOwner);
+    }
+  }
   if ((state.phase as string) !== "gameOver") {
     resolveBenchKOs(state);
   }

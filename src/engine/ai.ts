@@ -971,36 +971,50 @@ function hasEvolutionForInDeckOrHand(pl: import("./types").PlayerState, baseName
 
 // --- Main turn loop --------------------------------------------------------
 
+// One discrete AI decision. Returns true if the AI is still working on its
+// turn and the caller should call again; false when the turn has ended (the
+// AI attacked, ran out of productive moves, or the game ended).
+//
+// Splitting the decision loop into stepwise calls lets the UI animate the
+// turn — render after each step so the player can watch what the CPU is
+// doing — while keeping the engine logic identical to the synchronous
+// takeAiTurn() path.
+export function aiStep(state: GameState, player: PlayerId): boolean {
+  if (state.phase === "gameOver" || state.activePlayer !== player) return false;
+
+  if (state.pendingPromote === player) {
+    resolveAiPendingPromote(state, player);
+    return true;
+  }
+  if (state.pendingPick && state.pendingPick.player === player) {
+    resolveAiPendingPickSmart(state, player);
+    return true;
+  }
+  if (state.pendingHandReveal && state.pendingHandReveal.player === player) {
+    resolveAiHandReveal(state);
+    return true;
+  }
+  if (state.pendingSearchNotice && state.pendingSearchNotice.player === player) {
+    resolvePendingSearchNotice(state, player);
+    return true;
+  }
+
+  if (tryStepAiTurn(state, player)) return true;
+
+  // Nothing productive left — try to attack, then end. Either path ends the
+  // turn (attack() runs end-of-turn flow internally; endTurn explicitly).
+  if (tryAttack(state, player)) return false;
+  endTurn(state, player);
+  return false;
+}
+
 export function takeAiTurn(state: GameState, player: PlayerId): void {
   if (state.pendingPromote === player) resolveAiPendingPromote(state, player);
 
   const MAX_ITERS = 60;
   let safety = MAX_ITERS;
   while (safety-- > 0) {
-    if (state.phase === "gameOver" || state.activePlayer !== player) return;
-    if (state.pendingPromote === player) {
-      resolveAiPendingPromote(state, player);
-      continue;
-    }
-    if (state.pendingPick && state.pendingPick.player === player) {
-      resolveAiPendingPickSmart(state, player);
-      continue;
-    }
-    if (state.pendingHandReveal && state.pendingHandReveal.player === player) {
-      resolveAiHandReveal(state);
-      continue;
-    }
-    if (state.pendingSearchNotice && state.pendingSearchNotice.player === player) {
-      resolvePendingSearchNotice(state, player);
-      continue;
-    }
-
-    if (tryStepAiTurn(state, player)) continue;
-
-    // Nothing productive left — try to attack, then end.
-    if (tryAttack(state, player)) return;
-    endTurn(state, player);
-    return;
+    if (!aiStep(state, player)) return;
   }
   endTurn(state, player);
 }

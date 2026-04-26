@@ -453,9 +453,21 @@ export function turnAttackBonus(
   const pl = state.players[attackerOwner];
   let total = 0;
   const defEx = defender ? (hasSubtype(defender.card, "ex") || hasSubtype(defender.card, "EX")) : false;
+  const defV = defender
+    ? (hasSubtype(defender.card, "V") ||
+       hasSubtype(defender.card, "VMAX") ||
+       hasSubtype(defender.card, "VSTAR") ||
+       hasSubtype(defender.card, "V-UNION"))
+    : false;
   const atkType = attacker.card.types[0];
   for (const b of pl.thisTurnAttackBonuses) {
-    if (b.againstEx && !defEx) continue;
+    // Defender-shape gates OR together: an entry with both againstEx and
+    // againstV (Kieran) fires when the defender matches either.
+    if (b.againstEx || b.againstV) {
+      const exOk = b.againstEx ? defEx : false;
+      const vOk = b.againstV ? defV : false;
+      if (!exOk && !vOk) continue;
+    }
     if (b.attackerType && b.attackerType !== atkType) continue;
     total += b.amount;
   }

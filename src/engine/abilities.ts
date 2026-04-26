@@ -2118,6 +2118,12 @@ export function fireTriggeredOnEvolve(
   player: PlayerId,
   evolved: PokemonInPlay,
 ): void {
+  // Defensive guard: triggered-on-evolve abilities are scoped to the moment
+  // the evolution is played from hand. They MUST NOT fire on subsequent
+  // turns (e.g., if some future code path called us for an already-evolved
+  // Pokémon). The action layer flips evolvedThisTurn = true immediately
+  // before calling us, and end-of-turn cleanup clears it.
+  if (!evolved.evolvedThisTurn) return;
   const abilities = evolved.card.abilities ?? [];
   for (const ab of abilities) {
     const trig = TRIGGERED_ON_EVOLVE[ab.name];
@@ -2288,6 +2294,12 @@ export function fireTriggeredOnBench(
   player: PlayerId,
   benched: PokemonInPlay,
 ): void {
+  // Defensive guard: triggered-on-bench abilities ("when you play this
+  // Pokémon from your hand onto your Bench") only fire on the turn the
+  // Pokémon was played from hand. They MUST NOT fire on subsequent turns
+  // when the same Pokémon is sitting on the bench. `playedThisTurn` is set
+  // by makePokemonInPlay and cleared by end-of-turn cleanup.
+  if (!benched.playedThisTurn) return;
   const abilities = benched.card.abilities ?? [];
   for (const ab of abilities) {
     const trig = TRIGGERED_ON_BENCH[ab.name];
@@ -2419,6 +2431,10 @@ export function fireTriggeredOnMoveToActive(
   // "Once during your turn" — these abilities only fire on the owner's turn.
   // A gust that forces a move on the opponent's turn doesn't trigger.
   if (state.activePlayer !== player) return;
+  // Once-per-turn-per-instance gate: if this Pokémon already used its
+  // triggered ability this turn (e.g., it retreated and re-promoted in the
+  // same turn), the trigger doesn't re-fire.
+  if (promoted.abilityUsedThisTurn) return;
   const abilities = promoted.card.abilities ?? [];
   for (const ab of abilities) {
     const trig = TRIGGERED_ON_MOVE_TO_ACTIVE[ab.name];
@@ -2473,6 +2489,9 @@ export function fireTriggeredOnMoveToBench(
     }
   }
   if (state.activePlayer !== player) return;
+  // Once-per-turn-per-instance gate: a Pokémon that already used its triggered
+  // ability this turn (e.g., bench → active → bench in one turn) doesn't re-fire.
+  if (moved.abilityUsedThisTurn) return;
   const abilities = moved.card.abilities ?? [];
   for (const ab of abilities) {
     const trig = TRIGGERED_ON_MOVE_TO_BENCH[ab.name];

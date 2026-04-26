@@ -67,7 +67,7 @@ describe("detectTrainerEffect — staples", () => {
       ["Billy & O'Nare", "draw2Plus2IfHandBig"],
       ["Drayton", "draytonTop7"],
       ["Eri", "eriDiscardOppItems"],
-      ["Kieran", "switchActive"],
+      ["Kieran", "kieranChoice"],
       ["Colress's Tenacity", "searchStadiumAndEnergy"],
       ["Cook", "heal70Active"],
       ["Pokémon Center Lady", "heal60ActiveAndCure"],

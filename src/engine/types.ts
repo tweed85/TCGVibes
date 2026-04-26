@@ -554,8 +554,11 @@ export interface PlayerState {
 
 export interface TurnAttackBonus {
   amount: number;
-  // Optional gates — all must match for the bonus to apply.
+  // Optional gates. attackerType must match. The defender-shape gates
+  // (againstEx, againstV) are OR-ed when both are set on one entry — e.g.
+  // Kieran's "+30 vs ex AND V" fires if the defender is ex OR V.
   againstEx?: boolean; // only vs opponent's Active Pokémon ex
+  againstV?: boolean; // only vs opponent's Active Pokémon V (V/VMAX/VSTAR/V-UNION)
   attackerType?: EnergyType; // only attacks from this type
 }
 

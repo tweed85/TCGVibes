@@ -125,9 +125,11 @@ function applyChainStep(
 ): void {
   switch (step.kind) {
     case "dawn-stage1": {
+      // Dawn rules: each stage is INDEPENDENT — Stage 1 doesn't have to
+      // evolve from the Basic picked. Predicate matches any Stage 1.
       const pred = (c: Card) =>
         c.supertype === "Pokémon" && (c.subtypes ?? []).includes("Stage 1");
-      if (!setDeckSearchPick(state, player, pred, 1, "Dawn (2 of 3): pick 1 Stage 1 Pokémon", {
+      if (!setDeckSearchPick(state, player, pred, 1, "Dawn (2 of 3): pick any Stage 1 Pokémon", {
         postResolveChain: { kind: "dawn-stage2" },
       })) {
         logEvent(state, player, "Dawn: no Stage 1 Pokémon in deck.");
@@ -135,9 +137,11 @@ function applyChainStep(
       break;
     }
     case "dawn-stage2": {
+      // Dawn rules: Stage 2 doesn't have to evolve from the Stage 1 picked.
+      // Predicate matches any Stage 2 in the deck.
       const pred = (c: Card) =>
         c.supertype === "Pokémon" && (c.subtypes ?? []).includes("Stage 2");
-      if (!setDeckSearchPick(state, player, pred, 1, "Dawn (3 of 3): pick 1 Stage 2 Pokémon")) {
+      if (!setDeckSearchPick(state, player, pred, 1, "Dawn (3 of 3): pick any Stage 2 Pokémon")) {
         logEvent(state, player, "Dawn: no Stage 2 Pokémon in deck.");
       }
       break;

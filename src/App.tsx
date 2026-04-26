@@ -11,7 +11,7 @@ import {
 } from "./engine/actions";
 import type { TrainerTarget } from "./engine/actions";
 import { activateAbility } from "./engine/abilities";
-import { resolveAiCoinChoice, resolveAiPendingPromote, resolveAiSetup, takeAiTurn } from "./engine/ai";
+import { aiStep, resolveAiCoinChoice, resolveAiPendingPromote, resolveAiSetup } from "./engine/ai";
 import { resolvePendingPick, resolvePendingSearchNotice } from "./engine/pendingPick";
 import {
   resolveSwitchTarget,
@@ -73,12 +73,25 @@ interface ImportedDeck {
 const IMPORTS_STORAGE_KEY = "tcgvibes.imports.v1";
 const SETTINGS_STORAGE_KEY = "tcgvibes.settings.v1";
 
+type AiSpeed = "instant" | "fast" | "normal" | "slow";
+
 interface PersistedSettings {
   openHands?: boolean;
   gameMode?: "vsCPU" | "local";
   myDeckId?: string;
   oppDeckId?: string;
+  aiSpeed?: AiSpeed;
 }
+
+// Per-step delay (ms) between AI decisions. "instant" runs the whole turn
+// synchronously (no animation). The other tiers leave enough time to read
+// the latest-action banner before the next play resolves.
+const AI_STEP_DELAY_MS: Record<AiSpeed, number> = {
+  instant: 0,
+  fast: 500,
+  normal: 1200,
+  slow: 2200,
+};
 
 function loadSettings(): PersistedSettings {
   try {
@@ -224,6 +237,18 @@ export default function App() {
   // Game mode: "vsCPU" leaves p2 as AI; "local" makes both sides human and
   // enables hotseat device-handoff between turns.
   const [gameMode, setGameMode] = useState<"vsCPU" | "local">(savedSettings.gameMode ?? "vsCPU");
+  // CPU-turn pacing. The AI loop in App.tsx now runs one decision at a time
+  // (see aiStep below) so the user can watch the turn unfold; this controls
+  // the inter-step delay.
+  const [aiSpeed, setAiSpeed] = useState<AiSpeed>(savedSettings.aiSpeed ?? "normal");
+  // Per-turn safety counter for the step-paced AI loop. If aiStep ever fails
+  // to make progress (shouldn't happen, but defensive against engine bugs),
+  // we cap the loop and force-end the turn instead of spinning forever.
+  const aiStepCountRef = useRef<{ turn: number; player: PlayerId | null; count: number }>({
+    turn: -1,
+    player: null,
+    count: 0,
+  });
   // Who's currently holding the device. Determines which side shows as "me"
   // at the bottom of the playmat. Always "p1" in vs-CPU mode.
   const [viewingPlayer, setViewingPlayer] = useState<PlayerId>("p1");
@@ -244,8 +269,8 @@ export default function App() {
 
   // Persist UI settings (gameMode, openHands, last-selected decks).
   useEffect(() => {
-    saveSettings({ openHands, gameMode, myDeckId, oppDeckId });
-  }, [openHands, gameMode, myDeckId, oppDeckId]);
+    saveSettings({ openHands, gameMode, myDeckId, oppDeckId, aiSpeed });
+  }, [openHands, gameMode, myDeckId, oppDeckId, aiSpeed]);
 
   // Wire the global card-zoom handler (CardView calls it on shift+click).
   useEffect(() => {
@@ -393,12 +418,51 @@ export default function App() {
       }, 300);
       return () => clearTimeout(t);
     }
-    if (state.phase === "main" && state.players[state.activePlayer].isAI) {
+    // The AI is "owed work" any time it's the active player and the engine
+    // is in a state aiStep can resolve. With the synchronous takeAiTurn,
+    // mid-turn pendingPick / pendingHandReveal / pendingSearchNotice were
+    // resolved inside the same call — but now we yield to React between
+    // steps, so phase transitions like main → pick mid-Ultra-Ball would
+    // freeze the AI. We trigger on any of those resolvable states.
+    const aiHasPickWork =
+      state.players[state.activePlayer].isAI &&
+      ((state.pendingPick && state.pendingPick.player === state.activePlayer) ||
+        (state.pendingHandReveal && state.pendingHandReveal.player === state.activePlayer) ||
+        (state.pendingSearchNotice && state.pendingSearchNotice.player === state.activePlayer));
+    const aiHasMainWork =
+      state.phase === "main" && state.players[state.activePlayer].isAI;
+    if (aiHasMainWork || aiHasPickWork) {
       const target = state.activePlayer;
-      const t = setTimeout(() => {
-        takeAiTurn(state, target);
+      const delay = AI_STEP_DELAY_MS[aiSpeed];
+      // Reset the safety counter when a new AI turn begins.
+      const guard = aiStepCountRef.current;
+      if (guard.turn !== state.turn || guard.player !== target) {
+        guard.turn = state.turn;
+        guard.player = target;
+        guard.count = 0;
+      }
+      if (aiSpeed === "instant") {
+        const t = setTimeout(() => {
+          let safety = 60;
+          while (safety-- > 0 && aiStep(state, target)) {
+            // keep stepping
+          }
+          rerender();
+        }, 0);
+        return () => clearTimeout(t);
+      }
+      // Hard cap on step count per AI turn — guards against any pathological
+      // case where aiStep keeps returning true without progress.
+      if (guard.count > 80) {
+        endTurn(state, target);
         rerender();
-      }, 500);
+        return;
+      }
+      guard.count++;
+      const t = setTimeout(() => {
+        aiStep(state, target);
+        rerender();
+      }, delay);
       return () => clearTimeout(t);
     }
   });
@@ -949,6 +1013,18 @@ export default function App() {
             />
             Open hands
           </label>
+          <label className="field" title="How fast the CPU plays its turn">
+            CPU Speed
+            <select
+              value={aiSpeed}
+              onChange={(e) => setAiSpeed(e.target.value as AiSpeed)}
+            >
+              <option value="instant">Instant</option>
+              <option value="fast">Fast</option>
+              <option value="normal">Normal</option>
+              <option value="slow">Slow</option>
+            </select>
+          </label>
           <div className="utility-group" role="group" aria-label="Deck & log utilities">
             <button className="secondary" onClick={() => setBuildOpen(true)}>Build Deck</button>
             <button className="secondary" onClick={() => setImportOpen(true)}>Import Deck</button>
@@ -958,17 +1034,6 @@ export default function App() {
             </button>
           </div>
           <button className="primary" onClick={onReset}>New Game</button>
-          <a
-            className="kofi-link"
-            href="https://ko-fi.com/pandabananas"
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Support PandaBananasTCG on Ko-fi"
-            aria-label="Support on Ko-fi (opens in new tab)"
-          >
-            <span className="kofi-cup" aria-hidden="true" />
-            Tip
-          </a>
         </div>
       </div>
 
@@ -1179,6 +1244,17 @@ export default function App() {
       )}
 
       {/* --------------- Opponent hand strip (thin) --------------- */}
+      <AiActionBanner
+        state={state}
+        active={
+          !preGameOpen &&
+          state.winner === null &&
+          state.players[state.activePlayer].isAI &&
+          (state.phase === "main" || state.phase === "pick") &&
+          aiSpeed !== "instant"
+        }
+      />
+
       <div className="opp-strip">
         <span className="label">{opp.name}</span>
         <span className="badge">Hand {opp.hand.length}</span>
@@ -1343,6 +1419,20 @@ export default function App() {
         }}
       />
 
+      <div className="tip-footer">
+        <a
+          className="kofi-link"
+          href="https://ko-fi.com/pandabananas/tip"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Support PandaBananasTCG on Ko-fi"
+          aria-label="Support on Ko-fi (opens in new tab)"
+        >
+          <span className="kofi-cup" aria-hidden="true" />
+          Tip
+        </a>
+      </div>
+
       {state.winner && (
         <div className="winner">
           <div className="box">
@@ -1365,6 +1455,62 @@ export default function App() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// AiActionBanner — sticky banner that surfaces what the CPU is doing during
+// its turn. Shows the most recent log entry attributed to the CPU player or
+// to the system; turns invisible (but keeps DOM space) outside the AI's turn
+// so the layout doesn't jump.
+// -----------------------------------------------------------------------------
+// Number of recent log entries to surface in the AI action stream. A single
+// aiStep can emit a burst of entries (e.g. Ultra Ball: discard, discard, play,
+// pending-search) — showing the tail lets the user follow the sequence
+// instead of catching only the very last line before the next step renders.
+const AI_BANNER_TAIL = 4;
+
+function AiActionBanner({
+  state,
+  active,
+}: {
+  state: GameState;
+  active: boolean;
+}) {
+  if (!active) return null;
+  const aiPlayer = state.activePlayer;
+  // Walk the log tail, scoped to the current turn, collecting up to
+  // AI_BANNER_TAIL recent AI/system entries. Order: oldest first, newest last.
+  const tail: { player: PlayerId | "system"; text: string }[] = [];
+  for (let i = state.log.length - 1; i >= 0; i--) {
+    const e = state.log[i];
+    if (e.turn !== state.turn) break;
+    if (e.player === aiPlayer || e.player === "system") {
+      tail.push({ player: e.player, text: e.text });
+      if (tail.length >= AI_BANNER_TAIL) break;
+    }
+  }
+  tail.reverse();
+  const aiName = state.players[aiPlayer].name;
+  return (
+    <div className="ai-banner" role="status" aria-live="polite">
+      <span className="ai-banner-label">{aiName} is thinking…</span>
+      {tail.length > 0 && (
+        <div className="ai-banner-stream">
+          {tail.map((e, i) => {
+            const isLatest = i === tail.length - 1;
+            return (
+              <div
+                key={`${state.log.length}-${i}`}
+                className={`ai-banner-line ${e.player === aiPlayer ? "ai" : "sys"}${isLatest ? " latest" : ""}`}
+              >
+                {e.text}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
