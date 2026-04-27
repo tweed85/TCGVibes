@@ -49,6 +49,9 @@ export function evaluatePredicate(
       if (pred.subtype === "Evolution") {
         return subs.includes("Stage 1") || subs.includes("Stage 2");
       }
+      if (pred.subtype === "Mega") {
+        return subs.some((s) => /^Mega/i.test(s));
+      }
       return subs.includes(pred.subtype);
     }
     case "defenderHasStatus":
@@ -192,6 +195,66 @@ export function evaluatePredicate(
     case "supporterPlayedThisTurnNameContains": {
       const last = state.players[ctx.attackerOwner].lastSupporterNameThisTurn;
       return !!last && last.toLowerCase().includes(pred.namePart.toLowerCase());
+    }
+    case "defenderRetreatCostAtLeast":
+      return !!def && (def.card.retreatCost ?? []).length >= pred.count;
+    case "yourDeckSizeAtMost":
+      return state.players[ctx.attackerOwner].deck.length <= pred.count;
+    case "oppHandSizeAtMost":
+      return state.players[ctx.defenderOwner].hand.length <= pred.count;
+    case "youHaveBenchPokemonOfTypeAndSubtype":
+      return state.players[ctx.attackerOwner].bench.some(
+        (p) =>
+          p.card.types.includes(pred.energyType) &&
+          (p.card.subtypes ?? []).includes(pred.subtype),
+      );
+    case "oppHasPokemonOfType": {
+      const opp = state.players[ctx.defenderOwner];
+      const allies = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+      return allies.some((p) => p.card.types.includes(pred.energyType));
+    }
+    case "oppHasPokemonOfSubtype": {
+      const opp = state.players[ctx.defenderOwner];
+      const allies = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+      return allies.some((p) => (p.card.subtypes ?? []).includes(pred.subtype));
+    }
+    case "youHaveBenchPokemonOfSubtype":
+      return state.players[ctx.attackerOwner].bench.some(
+        (p) => (p.card.subtypes ?? []).includes(pred.subtype),
+      );
+    case "selfHasMoreEnergyThanDefender":
+      return !!def && atk.attachedEnergy.length > def.attachedEnergy.length;
+    case "typeMatchesAnyOppPokemon": {
+      const own = [
+        state.players[ctx.attackerOwner].active,
+        ...state.players[ctx.attackerOwner].bench,
+      ].filter((p): p is PokemonInPlay => !!p);
+      const opp = [
+        state.players[ctx.defenderOwner].active,
+        ...state.players[ctx.defenderOwner].bench,
+      ].filter((p): p is PokemonInPlay => !!p);
+      const ownTypes = new Set(own.flatMap((p) => p.card.types));
+      return opp.some((p) => p.card.types.some((t) => ownTypes.has(t)));
+    }
+    case "hasBothNamedOnBench": {
+      const bench = state.players[ctx.attackerOwner].bench;
+      const a = pred.nameA.toLowerCase();
+      const b = pred.nameB.toLowerCase();
+      const hasA = bench.some((p) => p.card.name.toLowerCase().includes(a));
+      const hasB = bench.some((p) => p.card.name.toLowerCase().includes(b));
+      return hasA && hasB;
+    }
+    case "oppBenchAtLeast":
+      return state.players[ctx.defenderOwner].bench.length >= pred.count;
+    case "anyAllyOfSubtypeUsedAttackLastTurn": {
+      const pl = state.players[ctx.attackerOwner];
+      const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+      return allies.some(
+        (p) =>
+          p !== ctx.attacker &&
+          (p.card.subtypes ?? []).includes(pred.subtype) &&
+          p.lastAttackUsedNamePriorTurn !== undefined,
+      );
     }
   }
 }
@@ -3871,6 +3934,1059 @@ export function resolveAttackEffects(
             shuffleArr(state, pl.deck);
             logEvent(state, ctx.attackerOwner, `${ctx.move.name}: benches ${placed} ${e.namePart}.`);
           }
+        });
+        break;
+      }
+
+      case "useAttackFromOppDeckTop": {
+        // Reveal top N of opp's deck; pick the highest-damage attack from
+        // a Pokémon found in those cards; copy its damage and effects.
+        const opp = state.players[ctx.defenderOwner];
+        const top = opp.deck.splice(0, Math.min(e.revealCount, opp.deck.length));
+        let best: { atk: import("./types").Attack; from: string } | null = null;
+        for (const c of top) {
+          if (c.supertype !== "Pokémon") continue;
+          for (const a of (c as import("./types").PokemonCard).attacks ?? []) {
+            if (a.name === ctx.move.name) continue;
+            if (!best || a.damage > best.atk.damage) best = { atk: a, from: c.name };
+          }
+        }
+        // Shuffle the revealed cards back into opp's deck.
+        opp.deck.push(...top);
+        shuffleArr(state, opp.deck);
+        if (best) {
+          damage += best.atk.damage;
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: copies ${best.atk.name} from ${best.from} (revealed).`);
+          const innerCtx: AttackContext = { ...ctx, move: best.atk, damage: 0 };
+          const inner = resolveAttackEffects(state, innerCtx);
+          damage += inner.damage;
+          if (inner.postDamage) postHooks.push(inner.postDamage);
+          if (inner.ignoreWeakness) ignoreWeakness = true;
+          if (inner.ignoreResistance) ignoreResistance = true;
+          if (inner.ignoreOppEffects) ignoreOppEffects = true;
+        } else {
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: no copyable attack found.`);
+        }
+        break;
+      }
+
+      case "blockOppSupportersNextTurn": {
+        const opp = state.players[ctx.defenderOwner];
+        (opp as typeof opp & { supportersBlockedNextTurn?: boolean }).supportersBlockedNextTurn = true;
+        logEvent(state, "system", `${ctx.move.name}: opp can't play Supporters next turn.`);
+        break;
+      }
+
+      case "topNAttachAnyEnergyToOwn": {
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          const top = pl.deck.splice(0, Math.min(e.count, pl.deck.length));
+          const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+          if (allies.length === 0) {
+            pl.deck.push(...top);
+            shuffleArr(state, pl.deck);
+            return;
+          }
+          let attached = 0;
+          const remaining: import("./types").Card[] = [];
+          for (const c of top) {
+            if (c.supertype === "Energy") {
+              // Auto-attach to allies in round-robin, prioritizing the
+              // attacker first.
+              const target = attached === 0 ? ctx.attacker : allies[attached % allies.length];
+              target.attachedEnergy.push(c as import("./types").EnergyCard);
+              attached++;
+            } else {
+              remaining.push(c);
+            }
+          }
+          pl.deck.push(...remaining);
+          shuffleArr(state, pl.deck);
+          if (attached > 0) {
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: attaches ${attached} Energy from top ${e.count}.`);
+          }
+        });
+        break;
+      }
+
+      case "fillOppBenchUntilHpN": {
+        postHooks.push(() => {
+          const opp = state.players[ctx.defenderOwner];
+          for (const b of opp.bench) {
+            // Resolve effective max HP via the existing helper requires an
+            // import we don't have here — use base hp as a close proxy.
+            const max = b.card.hp;
+            const targetDmg = Math.max(0, max - e.targetHp);
+            if (b.damage < targetDmg) {
+              const added = targetDmg - b.damage;
+              b.damage = targetDmg;
+              logEvent(state, "system", `${ctx.move.name}: ${b.card.name} takes ${added} damage.`);
+            }
+          }
+        });
+        break;
+      }
+
+      case "flipKoOppActiveOrBenchedBasic": {
+        const heads = flipCoin(state, `${ctx.move.name} coin`);
+        const opp = state.players[ctx.defenderOwner];
+        postHooks.push(() => {
+          if (heads) {
+            if (opp.active && (opp.active.card.subtypes ?? []).includes("Basic")) {
+              opp.active.damage = 9999;
+              logEvent(state, ctx.attackerOwner, `${ctx.move.name}: KOs opp Active.`);
+            }
+          } else {
+            // Pick a benched Basic with the most damage (most likely to be a tactical KO).
+            const benched = opp.bench.filter((p) => (p.card.subtypes ?? []).includes("Basic"));
+            if (benched.length > 0) {
+              const target = [...benched].sort((a, b) => b.damage - a.damage)[0];
+              target.damage = 9999;
+              logEvent(state, ctx.attackerOwner, `${ctx.move.name}: KOs benched ${target.card.name}.`);
+            }
+          }
+        });
+        break;
+      }
+
+      case "healEachOwnBench": {
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          for (const b of pl.bench) {
+            if (b.damage > 0) {
+              const healed = Math.min(e.amount, b.damage);
+              b.damage -= healed;
+              b.healedThisTurn = true;
+            }
+          }
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: heals ${e.amount} from each Benched.`);
+        });
+        break;
+      }
+
+      case "searchBasicEnergyAttachOneN": {
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          let attached = 0;
+          for (let i = 0; i < pl.deck.length && attached < e.max; ) {
+            const c = pl.deck[i];
+            if (c.supertype === "Energy" && (c.subtypes ?? []).includes("Basic")) {
+              pl.deck.splice(i, 1);
+              ctx.attacker.attachedEnergy.push(c as import("./types").EnergyCard);
+              attached++;
+            } else i++;
+          }
+          if (attached > 0) {
+            shuffleArr(state, pl.deck);
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: attaches ${attached} Basic Energy to self.`);
+          }
+        });
+        break;
+      }
+
+      case "koOppAnyWithExactlyDamageCounters": {
+        postHooks.push(() => {
+          const opp = state.players[ctx.defenderOwner];
+          const allies = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+          for (const p of allies) {
+            const counters = Math.floor(p.damage / 10);
+            if (counters === e.counters) {
+              p.damage = 9999;
+              logEvent(state, ctx.attackerOwner, `${ctx.move.name}: KOs ${p.card.name} (exactly ${e.counters} counters).`);
+              return; // KO 1 only.
+            }
+          }
+        });
+        break;
+      }
+
+      case "devolveAllOppEvolvedToDeck": {
+        postHooks.push(() => {
+          const opp = state.players[ctx.defenderOwner];
+          const allies = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+          let devolved = 0;
+          for (const p of allies) {
+            if (p.evolvedFrom.length === 0) continue;
+            // The "highest stage" is the current p.card. Shuffle it into deck.
+            opp.deck.push(p.card);
+            // Pop the previous form to become the new card.
+            p.card = p.evolvedFrom.pop()!;
+            devolved++;
+          }
+          if (devolved > 0) {
+            shuffleArr(state, opp.deck);
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: devolves ${devolved} opp Pokémon.`);
+          }
+        });
+        break;
+      }
+
+      case "optionalDiscardHandForBonus": {
+        const pl = state.players[ctx.attackerOwner];
+        if (pl.hand.length > 0) {
+          pl.discard.push(...pl.hand.splice(0));
+          damage += e.bonus;
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: discards hand → +${e.bonus}.`);
+        }
+        break;
+      }
+
+      case "placeCountersOnNOpp": {
+        postHooks.push(() => {
+          const opp = state.players[ctx.defenderOwner];
+          const allies = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+          if (allies.length === 0) return;
+          // Auto-target: pick the most-damaged first, then descending HP.
+          const sorted = [...allies].sort(
+            (a, b) =>
+              b.damage - a.damage ||
+              Math.max(0, a.card.hp - a.damage) - Math.max(0, b.card.hp - b.damage),
+          );
+          const targets = sorted.slice(0, e.targetCount);
+          for (const t of targets) {
+            t.damage += e.counters * 10;
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: ${e.counters} counters on ${t.card.name}.`);
+          }
+        });
+        break;
+      }
+
+      case "perOppPokemonEx": {
+        const opp = state.players[ctx.defenderOwner];
+        const allies = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+        const count = allies.filter((a) =>
+          (a.card.subtypes ?? []).some((s) => /^(?:ex|EX)$/.test(s)),
+        ).length;
+        damage += count * e.perCount;
+        break;
+      }
+
+      case "perOwnBenchSubtype": {
+        const pl = state.players[ctx.attackerOwner];
+        const count = pl.bench.filter((b) => (b.card.subtypes ?? []).includes(e.subtype)).length;
+        damage += count * e.perCount;
+        break;
+      }
+
+      case "perSupporterInOwnDiscardNamed": {
+        const part = e.namePart.toLowerCase();
+        const count = state.players[ctx.attackerOwner].discard.filter(
+          (c) =>
+            c.supertype === "Trainer" &&
+            (c.subtypes ?? []).includes("Supporter") &&
+            c.name.toLowerCase().includes(part),
+        ).length;
+        damage += count * e.perCount;
+        break;
+      }
+
+      case "tieredFlipDamage": {
+        let heads = 0;
+        for (let i = 0; i < e.coins; i++) {
+          if (flipCoin(state, `${ctx.move.name} coin ${i + 1}`)) heads++;
+        }
+        // tiers[0] = bonus for 1 head, tiers[1] = for 2, etc. heads === 0 → no bonus.
+        if (heads > 0 && heads <= e.tiers.length) {
+          damage += e.tiers[heads - 1];
+        }
+        logEvent(state, "system", `${ctx.move.name}: ${heads}/${e.coins} heads.`);
+        break;
+      }
+
+      case "searchAnyEnergyToHand": {
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          let pulled = 0;
+          for (let i = 0; i < pl.deck.length && pulled < e.max; ) {
+            if (pl.deck[i].supertype === "Energy") {
+              pl.hand.push(pl.deck.splice(i, 1)[0]);
+              pulled++;
+            } else i++;
+          }
+          if (pulled > 0) {
+            shuffleArr(state, pl.deck);
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: searches deck for ${pulled} Energy.`);
+          }
+        });
+        break;
+      }
+
+      case "rewriteDefenderWeaknessNextTurn": {
+        if (ctx.defender) {
+          (ctx.defender as PokemonInPlay & {
+            weaknessOverrideUntilTurn?: number;
+            weaknessOverrideType?: import("./types").EnergyType;
+          }).weaknessOverrideUntilTurn = state.turn + 1;
+          (ctx.defender as PokemonInPlay & { weaknessOverrideType?: import("./types").EnergyType })
+            .weaknessOverrideType = e.toType;
+          logEvent(state, "system", `${ctx.move.name}: ${ctx.defender.card.name}'s Weakness becomes ${e.toType} next turn.`);
+        }
+        break;
+      }
+
+      case "fizzleUnlessUsedAttackLastTurn": {
+        if (ctx.attacker.lastAttackUsedNamePriorTurn !== e.attackName) {
+          damage = 0;
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: requires ${e.attackName} last turn — fizzles.`);
+        }
+        break;
+      }
+
+      case "bothActiveNowStatus": {
+        postHooks.push(() => {
+          if (ctx.attacker && !ctx.attacker.statuses.includes(e.status)) {
+            ctx.attacker.statuses.push(e.status);
+          }
+          if (ctx.defender && !ctx.defender.statuses.includes(e.status)) {
+            ctx.defender.statuses.push(e.status);
+          }
+          logEvent(state, "system", `${ctx.move.name}: both Active Pokémon are now ${e.status}.`);
+        });
+        break;
+      }
+
+      case "perPokemonInDiscardWithAttack": {
+        const count = state.players[ctx.attackerOwner].discard.filter(
+          (c) =>
+            c.supertype === "Pokémon" &&
+            (c.attacks ?? []).some((a) => a.name === e.attackName),
+        ).length;
+        damage += count * e.perCount;
+        break;
+      }
+
+      case "discardAllOppToolsAndSpecialEnergy": {
+        if (ctx.defender) {
+          const opp = state.players[ctx.defenderOwner];
+          if (ctx.defender.tools.length > 0) {
+            opp.discard.push(...ctx.defender.tools);
+            ctx.defender.tools = [];
+          }
+          const remain: import("./types").EnergyCard[] = [];
+          let discarded = 0;
+          for (const en of ctx.defender.attachedEnergy) {
+            if ((en.subtypes ?? []).includes("Special")) {
+              opp.discard.push(en);
+              discarded++;
+            } else {
+              remain.push(en);
+            }
+          }
+          ctx.defender.attachedEnergy = remain;
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: discards opp Tools + ${discarded} Special Energy.`);
+        }
+        break;
+      }
+
+      case "optionalSelfEnergyToHandForBonus": {
+        if (ctx.attacker.attachedEnergy.length > 0) {
+          const pl = state.players[ctx.attackerOwner];
+          pl.hand.push(...ctx.attacker.attachedEnergy);
+          ctx.attacker.attachedEnergy = [];
+          damage += e.bonus;
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: returns Energy to hand → +${e.bonus}.`);
+        }
+        break;
+      }
+
+      case "winGameIfPrizesEquals": {
+        const own = state.players[ctx.attackerOwner];
+        if (own.prizes.length === e.prizes) {
+          state.winner = ctx.attackerOwner;
+          state.phase = "gameOver";
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: wins the game!`);
+        }
+        break;
+      }
+      case "bothActiveKnockedOut": {
+        postHooks.push(() => {
+          if (ctx.attacker) ctx.attacker.damage = 9999;
+          if (ctx.defender) ctx.defender.damage = 9999;
+          logEvent(state, "system", `${ctx.move.name}: both Active Pokémon are KO'd.`);
+        });
+        break;
+      }
+      case "peekOwnDeckTop": {
+        // Information-only; logged.
+        logEvent(state, ctx.attackerOwner, `${ctx.move.name}: peeks top ${e.count} of own deck.`);
+        break;
+      }
+      case "searchStadiumToHand": {
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          const idx = pl.deck.findIndex(
+            (c) => c.supertype === "Trainer" && (c.subtypes ?? []).includes("Stadium"),
+          );
+          if (idx >= 0) {
+            const [c] = pl.deck.splice(idx, 1);
+            pl.hand.push(c);
+            shuffleArr(state, pl.deck);
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: searches deck for ${c.name}.`);
+          }
+        });
+        break;
+      }
+      case "recoverTrainerFromDiscardToHand": {
+        const pl = state.players[ctx.attackerOwner];
+        const idx = pl.discard.findIndex((c) => c.supertype === "Trainer");
+        if (idx >= 0) {
+          const [c] = pl.discard.splice(idx, 1);
+          pl.hand.push(c);
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: recovers ${c.name} from discard.`);
+        }
+        break;
+      }
+      case "shuffleBasicEnergyDiscardToDeck": {
+        const pl = state.players[ctx.attackerOwner];
+        let moved = 0;
+        const remain: import("./types").Card[] = [];
+        for (const c of pl.discard) {
+          if (
+            moved < e.max &&
+            c.supertype === "Energy" &&
+            (c.subtypes ?? []).includes("Basic") &&
+            (c as import("./types").EnergyCard).provides.includes(e.energyType)
+          ) {
+            pl.deck.push(c);
+            moved++;
+          } else {
+            remain.push(c);
+          }
+        }
+        pl.discard = remain;
+        if (moved > 0) {
+          shuffleArr(state, pl.deck);
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: shuffles ${moved} ${e.energyType} Energy back to deck.`);
+        }
+        break;
+      }
+      case "millOwnDeck": {
+        const pl = state.players[ctx.attackerOwner];
+        const milled = pl.deck.splice(0, Math.min(e.count, pl.deck.length));
+        pl.discard.push(...milled);
+        logEvent(state, ctx.attackerOwner, `${ctx.move.name}: discards top ${milled.length} from own deck.`);
+        break;
+      }
+      case "discardTopNAndDamagePerEnergy": {
+        const pl = state.players[ctx.attackerOwner];
+        const top = pl.deck.splice(0, Math.min(e.topN, pl.deck.length));
+        const matched = top.filter((c) => c.supertype === "Energy").length;
+        pl.discard.push(...top);
+        damage += matched * e.perCount;
+        logEvent(state, ctx.attackerOwner, `${ctx.move.name}: ${matched} Energy in top ${top.length} → +${matched * e.perCount}.`);
+        break;
+      }
+      case "countersOnEachDamagedOpp": {
+        postHooks.push(() => {
+          const opp = state.players[ctx.defenderOwner];
+          const allies = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+          for (const p of allies) {
+            if (p.damage > 0) p.damage += e.counters * 10;
+          }
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: ${e.counters} counters on each damaged opp Pokémon.`);
+        });
+        break;
+      }
+      case "countersOnEachOpp": {
+        postHooks.push(() => {
+          const opp = state.players[ctx.defenderOwner];
+          const allies = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+          for (const p of allies) p.damage += e.counters * 10;
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: ${e.counters} counters on each opp Pokémon.`);
+        });
+        break;
+      }
+      case "countersOnEachWithAbility": {
+        postHooks.push(() => {
+          for (const pl of Object.values(state.players)) {
+            const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+            for (const p of allies) {
+              if ((p.card.abilities ?? []).length > 0) p.damage += e.counters * 10;
+            }
+          }
+          logEvent(state, "system", `${ctx.move.name}: ${e.counters} counters on each Pokémon with an Ability.`);
+        });
+        break;
+      }
+      case "searchAndEvolveOne": {
+        // Pick one in-play ally, find a card whose evolvesFrom matches, evolve.
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+          for (const ally of allies) {
+            const idx = pl.deck.findIndex(
+              (c) =>
+                c.supertype === "Pokémon" &&
+                (c as import("./types").PokemonCard).evolvesFrom === ally.card.name,
+            );
+            if (idx >= 0) {
+              const [evo] = pl.deck.splice(idx, 1);
+              ally.evolvedFrom.push(ally.card);
+              ally.card = evo as import("./types").PokemonCard;
+              ally.evolvedThisTurn = true;
+              ally.abilityUsedThisTurn = false;
+              shuffleArr(state, pl.deck);
+              logEvent(state, ctx.attackerOwner, `${ctx.move.name}: evolves ${ally.evolvedFrom[ally.evolvedFrom.length-1].name} → ${ally.card.name}.`);
+              return;
+            }
+          }
+        });
+        break;
+      }
+      case "searchAnyBasicNamedToBench": {
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          if (pl.bench.length >= 5) return;
+          const part = e.namePart.toLowerCase();
+          let placed = 0;
+          for (let i = 0; i < pl.deck.length && pl.bench.length < 5; ) {
+            const c = pl.deck[i];
+            if (
+              c.supertype === "Pokémon" &&
+              (c.subtypes ?? []).includes("Basic") &&
+              c.name.toLowerCase().includes(part)
+            ) {
+              pl.deck.splice(i, 1);
+              pl.bench.push({
+                instanceId: `pp_${Date.now()}_${placed}`,
+                card: c,
+                damage: 0,
+                attachedEnergy: [],
+                evolvedFrom: [],
+                tools: [],
+                playedThisTurn: true,
+                evolvedThisTurn: false,
+                statuses: [],
+                abilityUsedThisTurn: false,
+              });
+              placed++;
+            } else i++;
+          }
+          if (placed > 0) {
+            shuffleArr(state, pl.deck);
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: benches ${placed} ${e.namePart}.`);
+          }
+        });
+        break;
+      }
+      case "searchBasicEnergyTypeAttachOneBench": {
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          if (pl.bench.length === 0) return;
+          let attached = 0;
+          for (let i = 0; i < pl.deck.length && attached < e.max; ) {
+            const c = pl.deck[i];
+            if (
+              c.supertype === "Energy" &&
+              (c.subtypes ?? []).includes("Basic") &&
+              (c as import("./types").EnergyCard).provides.includes(e.energyType)
+            ) {
+              pl.deck.splice(i, 1);
+              // Auto-pick the first benched Pokémon.
+              pl.bench[0].attachedEnergy.push(c as import("./types").EnergyCard);
+              attached++;
+            } else i++;
+          }
+          if (attached > 0) {
+            shuffleArr(state, pl.deck);
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: attaches ${attached} ${e.energyType} to bench.`);
+          }
+        });
+        break;
+      }
+      case "attachBasicEnergyTypeFromHandN": {
+        const pl = state.players[ctx.attackerOwner];
+        const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+        if (allies.length === 0) break;
+        let attached = 0;
+        for (let i = pl.hand.length - 1; i >= 0 && attached < e.max; i--) {
+          const c = pl.hand[i];
+          if (
+            c.supertype === "Energy" &&
+            (c.subtypes ?? []).includes("Basic") &&
+            (c as import("./types").EnergyCard).provides.includes(e.energyType)
+          ) {
+            pl.hand.splice(i, 1);
+            allies[attached % allies.length].attachedEnergy.push(c as import("./types").EnergyCard);
+            attached++;
+          }
+        }
+        if (attached > 0) {
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: attaches ${attached} ${e.energyType} from hand.`);
+        }
+        break;
+      }
+      case "perDamageCounterOnAllOpp": {
+        const opp = state.players[ctx.defenderOwner];
+        const allies = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+        const totalCounters = allies.reduce((acc, p) => acc + Math.floor(p.damage / 10), 0);
+        damage += totalCounters * e.perCount;
+        break;
+      }
+      case "selfNextTurnAllAttacksBonus": {
+        const bag = ctx.attacker as PokemonInPlay & { allAttackBonusUntilTurn?: { turn: number; bonus: number } };
+        bag.allAttackBonusUntilTurn = { turn: state.turn + 2, bonus: e.bonus };
+        logEvent(state, "system", `${ctx.move.name}: ${ctx.attacker.card.name} attacks +${e.bonus} next turn.`);
+        break;
+      }
+      case "oppEnergyAttachEndsTurn": {
+        if (ctx.defender) {
+          (ctx.defender as PokemonInPlay & { energyAttachEndsTurnUntilTurn?: number }).energyAttachEndsTurnUntilTurn = state.turn + 1;
+        }
+        break;
+      }
+      case "defenderTakesMoreNextTurn": {
+        if (ctx.defender) {
+          (ctx.defender as PokemonInPlay & { takesMoreNextTurn?: { turn: number; bonus: number } }).takesMoreNextTurn = { turn: state.turn + 2, bonus: e.bonus };
+          logEvent(state, "system", `${ctx.move.name}: ${ctx.defender.card.name} takes +${e.bonus} damage next turn.`);
+        }
+        break;
+      }
+      case "lockOwnAttackersNextTurn": {
+        const pl = state.players[ctx.attackerOwner];
+        (pl as typeof pl & { ownAttackBlockedNextTurn?: boolean }).ownAttackBlockedNextTurn = true;
+        logEvent(state, "system", `${ctx.move.name}: your Pokémon can't attack next turn.`);
+        break;
+      }
+      case "lockOppLowEnergyAttackersNextTurn": {
+        const opp = state.players[ctx.defenderOwner];
+        (opp as typeof opp & { lockLowEnergyNextTurn?: number }).lockLowEnergyNextTurn = e.maxEnergy;
+        logEvent(state, "system", `${ctx.move.name}: opp Pokémon with ≤${e.maxEnergy} Energy can't attack next turn.`);
+        break;
+      }
+      case "damageReducedPerColorlessOnDefenderRetreat": {
+        if (ctx.defender) {
+          const cl = (ctx.defender.card.retreatCost ?? []).filter((t) => t === "Colorless").length;
+          damage = Math.max(0, damage - cl * e.perCount);
+        }
+        break;
+      }
+      case "protectSubtypeFromExNextTurn": {
+        const pl = state.players[ctx.attackerOwner];
+        (pl as typeof pl & { protectSubtypeFromExUntilTurn?: { turn: number; subtype: string } }).protectSubtypeFromExUntilTurn = { turn: state.turn + 1, subtype: e.subtype };
+        logEvent(state, "system", `${ctx.move.name}: opp's ex attacks won't damage your ${e.subtype} Pokémon next turn.`);
+        break;
+      }
+      case "bonusPrizesIfDefenderKoNextTurn": {
+        if (ctx.defender) {
+          (ctx.defender as PokemonInPlay & { bonusPrizesIfKoUntilTurn?: { turn: number; bonus: number } }).bonusPrizesIfKoUntilTurn = { turn: state.turn + 1, bonus: e.bonus };
+          logEvent(state, "system", `${ctx.move.name}: KO'ing ${ctx.defender.card.name} next turn awards +${e.bonus} prizes.`);
+        }
+        break;
+      }
+      case "perItemInOppDiscard": {
+        const opp = state.players[ctx.defenderOwner];
+        const count = opp.discard.filter(
+          (c) => c.supertype === "Trainer" && (c.subtypes ?? []).includes("Item"),
+        ).length;
+        damage += count * e.perCount;
+        break;
+      }
+      case "bounceOppActiveEnergyToOppHand": {
+        const opp = state.players[ctx.defenderOwner];
+        if (!opp.active) break;
+        if (e.defenderSubtype && !(opp.active.card.subtypes ?? []).includes(e.defenderSubtype)) break;
+        let bounced = 0;
+        for (let i = 0; i < e.count && opp.active.attachedEnergy.length > 0; i++) {
+          const en = opp.active.attachedEnergy.shift()!;
+          opp.hand.push(en);
+          bounced++;
+        }
+        if (bounced > 0) {
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: bounces ${bounced} Energy to opp hand.`);
+        }
+        break;
+      }
+      case "devolveOneOppToHand": {
+        postHooks.push(() => {
+          const opp = state.players[ctx.defenderOwner];
+          const allies = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+          for (const p of allies) {
+            if (p.evolvedFrom.length > 0) {
+              opp.hand.push(p.card);
+              p.card = p.evolvedFrom.pop()!;
+              logEvent(state, ctx.attackerOwner, `${ctx.move.name}: devolves opp's ${p.card.name}.`);
+              return;
+            }
+          }
+        });
+        break;
+      }
+      case "moveAllBenchDamageBySubtypeToOppActive": {
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          const source = pl.bench.find(
+            (b) => (b.card.subtypes ?? []).includes(e.subtype) && b.damage > 0,
+          );
+          if (!source || !ctx.defender) return;
+          const moved = source.damage;
+          source.damage = 0;
+          ctx.defender.damage += moved;
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: moves ${moved} damage from ${source.card.name} to opp Active.`);
+        });
+        break;
+      }
+      case "defenderOfSubtypeCantAttackNextTurn": {
+        if (ctx.defender && (ctx.defender.card.subtypes ?? []).includes(e.subtype)) {
+          ctx.defender.cantAttackUntilTurn = state.turn + 1;
+          logEvent(state, "system", `${ctx.move.name}: ${ctx.defender.card.name} can't attack next turn.`);
+        }
+        break;
+      }
+      case "perOppPokemonExOrV": {
+        const opp = state.players[ctx.defenderOwner];
+        const allies = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+        const count = allies.filter((a) =>
+          (a.card.subtypes ?? []).some((s) => /^(?:ex|EX|V|VMAX|VSTAR|V-UNION)$/.test(s)),
+        ).length;
+        damage += count * e.perCount;
+        break;
+      }
+      case "discardAllOppSpecialEnergy": {
+        const opp = state.players[ctx.defenderOwner];
+        const allies = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+        let total = 0;
+        for (const p of allies) {
+          const remain: import("./types").EnergyCard[] = [];
+          for (const en of p.attachedEnergy) {
+            if ((en.subtypes ?? []).includes("Special")) {
+              opp.discard.push(en);
+              total++;
+            } else remain.push(en);
+          }
+          p.attachedEnergy = remain;
+        }
+        logEvent(state, ctx.attackerOwner, `${ctx.move.name}: discards ${total} Special Energy from opp.`);
+        break;
+      }
+      case "discardOwnToolsOrFizzle": {
+        if (ctx.attacker.tools.length === 0) {
+          damage = 0;
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: no Tools to discard — fizzles.`);
+          break;
+        }
+        const pl = state.players[ctx.attackerOwner];
+        pl.discard.push(...ctx.attacker.tools);
+        ctx.attacker.tools = [];
+        break;
+      }
+      case "attachOppDiscardEnergyToOpp": {
+        postHooks.push(() => {
+          const opp = state.players[ctx.defenderOwner];
+          const oppAllies = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+          if (oppAllies.length === 0) return;
+          let attached = 0;
+          for (let i = 0; i < opp.discard.length && attached < e.max; ) {
+            const c = opp.discard[i];
+            if (c.supertype === "Energy") {
+              opp.discard.splice(i, 1);
+              oppAllies[attached % oppAllies.length].attachedEnergy.push(c as import("./types").EnergyCard);
+              attached++;
+            } else i++;
+          }
+          if (attached > 0) {
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: attaches ${attached} from opp's discard to opp Pokémon.`);
+          }
+        });
+        break;
+      }
+      case "eachPlayerDrawsN": {
+        for (const pl of Object.values(state.players)) {
+          for (let i = 0; i < e.count; i++) {
+            const c = pl.deck.shift();
+            if (!c) break;
+            pl.hand.push(c);
+          }
+        }
+        logEvent(state, "system", `${ctx.move.name}: each player draws ${e.count}.`);
+        break;
+      }
+      case "flipUntilTailsSearchToHand": {
+        let heads = 0;
+        while (flipCoin(state, `${ctx.move.name} coin`)) heads++;
+        if (heads > 0) {
+          postHooks.push(() => {
+            const pl = state.players[ctx.attackerOwner];
+            let pulled = 0;
+            for (let i = 0; i < pl.deck.length && pulled < heads; ) {
+              pl.hand.push(pl.deck.splice(i, 1)[0]);
+              pulled++;
+            }
+            shuffleArr(state, pl.deck);
+            if (pulled > 0) logEvent(state, ctx.attackerOwner, `${ctx.move.name}: searches ${pulled} cards.`);
+          });
+        }
+        break;
+      }
+      case "useOppActiveAttackOfSubtype": {
+        if (!ctx.defender) break;
+        if (!(ctx.defender.card.subtypes ?? []).includes(e.subtype)) break;
+        const sorted = [...(ctx.defender.card.attacks ?? [])].sort((a, b) => b.damage - a.damage);
+        if (sorted.length === 0) break;
+        const pick = sorted[0];
+        damage += pick.damage;
+        const innerCtx: AttackContext = { ...ctx, move: pick, damage: 0 };
+        const inner = resolveAttackEffects(state, innerCtx);
+        damage += inner.damage;
+        if (inner.postDamage) postHooks.push(inner.postDamage);
+        logEvent(state, ctx.attackerOwner, `${ctx.move.name}: copies ${pick.name}.`);
+        break;
+      }
+      case "searchAndEvolveNamedTypePokemon": {
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+          let evolved = 0;
+          for (const ally of allies) {
+            if (evolved >= e.max) break;
+            if (!ally.card.types.includes(e.energyType)) continue;
+            const idx = pl.deck.findIndex(
+              (c) =>
+                c.supertype === "Pokémon" &&
+                (c as import("./types").PokemonCard).evolvesFrom === ally.card.name,
+            );
+            if (idx >= 0) {
+              const [evo] = pl.deck.splice(idx, 1);
+              ally.evolvedFrom.push(ally.card);
+              ally.card = evo as import("./types").PokemonCard;
+              ally.evolvedThisTurn = true;
+              ally.abilityUsedThisTurn = false;
+              evolved++;
+            }
+          }
+          if (evolved > 0) {
+            shuffleArr(state, pl.deck);
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: evolves ${evolved} of your ${e.energyType} Pokémon.`);
+          }
+        });
+        break;
+      }
+      case "counterAttackerEqualToTakenNextTurn": {
+        if (ctx.defender) {
+          // Mark the attacker (this Pokémon) so during opp's next turn, when
+          // it's damaged, the engine puts an equal amount on the attacker.
+          (ctx.attacker as PokemonInPlay & { mirrorCounterUntilTurn?: number }).mirrorCounterUntilTurn = state.turn + 1;
+        }
+        break;
+      }
+      case "searchAndTopdeckTwo": {
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          // Auto-pick: top 2 most-impactful cards (any 2 — heuristic: pick
+          // first 2 Trainers, then Pokémon, then Energy).
+          shuffleArr(state, pl.deck);
+          const pick = pl.deck.splice(0, 2);
+          // Place the picks on top.
+          pl.deck.unshift(...pick);
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: shuffles + tops 2.`);
+        });
+        break;
+      }
+      case "attachAnyEnergyDiscardToSelf": {
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          const idx = pl.discard.findIndex((c) => c.supertype === "Energy");
+          if (idx >= 0) {
+            const [c] = pl.discard.splice(idx, 1);
+            ctx.attacker.attachedEnergy.push(c as import("./types").EnergyCard);
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: attaches ${c.name}.`);
+          }
+        });
+        break;
+      }
+      case "attachBasicEnergyDiscardToTypePokemon": {
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+          const target = allies.find((a) => a.card.types.includes(e.pokemonType));
+          if (!target) return;
+          const idx = pl.discard.findIndex(
+            (c) =>
+              c.supertype === "Energy" &&
+              (c.subtypes ?? []).includes("Basic") &&
+              (c as import("./types").EnergyCard).provides.includes(e.energyType),
+          );
+          if (idx >= 0) {
+            const [c] = pl.discard.splice(idx, 1);
+            target.attachedEnergy.push(c as import("./types").EnergyCard);
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: attaches ${c.name} to ${target.card.name}.`);
+          }
+        });
+        break;
+      }
+      case "damageEachWithCountersExceptSelf": {
+        postHooks.push(() => {
+          for (const pl of Object.values(state.players)) {
+            const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+            for (const p of allies) {
+              if (p === ctx.attacker) continue;
+              if (p.damage > 0) p.damage += e.damage;
+            }
+          }
+          logEvent(state, "system", `${ctx.move.name}: ${e.damage} damage to each damaged Pokémon (except self).`);
+        });
+        break;
+      }
+      case "perNamedInPlayWithSelfDamage": {
+        const part = e.namePart.toLowerCase();
+        let count = 0;
+        const pl = state.players[ctx.attackerOwner];
+        const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+        for (const a of allies) {
+          if (a.card.name.toLowerCase().includes(part)) {
+            count++;
+          }
+        }
+        damage += count * e.perCount;
+        // Self-damage to each named-in-play.
+        postHooks.push(() => {
+          for (const a of allies) {
+            if (a.card.name.toLowerCase().includes(part)) a.damage += e.selfDamage;
+          }
+        });
+        break;
+      }
+      case "flipChooseStatusOpp": {
+        const heads = flipCoin(state, `${ctx.move.name} coin`);
+        if (heads && ctx.defender) {
+          // Auto-pick: Asleep (most disruptive of the no-cure-on-checkup statuses).
+          if (!ctx.defender.statuses.includes("asleep")) {
+            ctx.defender.statuses.push("asleep");
+            logEvent(state, "system", `${ctx.move.name}: ${ctx.defender.card.name} is now Asleep.`);
+          }
+        }
+        break;
+      }
+      case "discardTopUsePokemonNoRuleBoxAttack": {
+        const pl = state.players[ctx.attackerOwner];
+        const c = pl.deck.shift();
+        if (!c) break;
+        pl.discard.push(c);
+        if (c.supertype !== "Pokémon") break;
+        const isRuleBox = (c.subtypes ?? []).some((s) =>
+          /^(?:ex|EX|V|VMAX|VSTAR|V-UNION|GX|Radiant)$/.test(s),
+        );
+        if (isRuleBox) break;
+        const sorted = [...(c.attacks ?? [])].sort((a, b) => b.damage - a.damage);
+        if (sorted.length === 0) break;
+        const pick = sorted[0];
+        damage += pick.damage;
+        const innerCtx: AttackContext = { ...ctx, move: pick, damage: 0 };
+        const inner = resolveAttackEffects(state, innerCtx);
+        damage += inner.damage;
+        if (inner.postDamage) postHooks.push(inner.postDamage);
+        logEvent(state, ctx.attackerOwner, `${ctx.move.name}: copies ${pick.name} from milled ${c.name}.`);
+        break;
+      }
+      case "searchAnyNamedTrainerToHand": {
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          const part = e.namePart.toLowerCase();
+          let pulled = 0;
+          for (let i = 0; i < pl.deck.length; ) {
+            const c = pl.deck[i];
+            if (c.supertype === "Trainer" && c.name.toLowerCase().includes(part)) {
+              pl.deck.splice(i, 1);
+              pl.hand.push(c);
+              pulled++;
+            } else i++;
+          }
+          if (pulled > 0) {
+            shuffleArr(state, pl.deck);
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: searches deck for ${pulled} ${e.namePart} card(s).`);
+          }
+        });
+        break;
+      }
+      case "flipNAttachBasicTypeFromDiscardToBench": {
+        let heads = 0;
+        for (let i = 0; i < e.coins; i++) {
+          if (flipCoin(state, `${ctx.move.name} coin ${i + 1}`)) heads++;
+        }
+        if (heads > 0) {
+          postHooks.push(() => {
+            const pl = state.players[ctx.attackerOwner];
+            const benchAllies = pl.bench;
+            if (benchAllies.length === 0) return;
+            let attached = 0;
+            for (let i = 0; i < pl.discard.length && attached < heads; ) {
+              const c = pl.discard[i];
+              if (
+                c.supertype === "Energy" &&
+                (c.subtypes ?? []).includes("Basic") &&
+                (c as import("./types").EnergyCard).provides.includes(e.energyType)
+              ) {
+                pl.discard.splice(i, 1);
+                benchAllies[attached % benchAllies.length].attachedEnergy.push(c as import("./types").EnergyCard);
+                attached++;
+              } else i++;
+            }
+            if (attached > 0) {
+              logEvent(state, ctx.attackerOwner, `${ctx.move.name}: attaches ${attached} ${e.energyType} from discard.`);
+            }
+          });
+        }
+        break;
+      }
+
+      case "searchBasicEnergyAttachSubtype": {
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+          const eligible = allies.filter((a) => (a.card.subtypes ?? []).includes(e.subtype));
+          if (eligible.length === 0) return;
+          let attached = 0;
+          for (let i = 0; i < pl.deck.length && attached < e.max; ) {
+            const c = pl.deck[i];
+            if (c.supertype === "Energy" && (c.subtypes ?? []).includes("Basic")) {
+              pl.deck.splice(i, 1);
+              eligible[attached % eligible.length].attachedEnergy.push(c as import("./types").EnergyCard);
+              attached++;
+            } else i++;
+          }
+          if (attached > 0) {
+            shuffleArr(state, pl.deck);
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: attaches ${attached} Basic Energy to ${e.subtype} Pokémon.`);
+          }
+        });
+        break;
+      }
+
+      case "moveOppEnergyAcrossOpp": {
+        postHooks.push(() => {
+          const opp = state.players[ctx.defenderOwner];
+          const allies = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+          if (allies.length < 2) return;
+          // Move from most-energized to least.
+          const source = [...allies].sort((a, b) => b.attachedEnergy.length - a.attachedEnergy.length)[0];
+          const target = [...allies].sort((a, b) => a.attachedEnergy.length - b.attachedEnergy.length)[0];
+          if (source === target || source.attachedEnergy.length === 0) return;
+          const en = source.attachedEnergy.shift()!;
+          target.attachedEnergy.push(en);
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: moves ${en.name} from ${source.card.name} to ${target.card.name}.`);
+        });
+        break;
+      }
+
+      case "shuffleOppBenchedIntoDeck": {
+        postHooks.push(() => {
+          const opp = state.players[ctx.defenderOwner];
+          if (opp.bench.length === 0) return;
+          // Auto-target: shuffle the lowest-HP benched (most likely to be a
+          // setup piece they want to keep).
+          const target = [...opp.bench].sort(
+            (a, b) =>
+              Math.max(0, a.card.hp - a.damage) - Math.max(0, b.card.hp - b.damage),
+          )[0];
+          opp.bench = opp.bench.filter((p) => p !== target);
+          opp.deck.push(
+            target.card,
+            ...target.evolvedFrom,
+            ...target.attachedEnergy,
+            ...(target.tools ?? []),
+          );
+          shuffleArr(state, opp.deck);
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: shuffles ${target.card.name} into ${opp.name}'s deck.`);
         });
         break;
       }

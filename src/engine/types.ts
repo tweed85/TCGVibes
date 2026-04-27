@@ -512,6 +512,216 @@ export type AttackEffect =
   // already have searchDeckNamedPokemonToBench but not the "up to N"
   // variant; we add the bounded version.)
   | { kind: "searchDeckNamedToBenchN"; namePart: string; max: number }
+  // Pokémon ex bespoke effects ----------------------------------------------
+  // Persian ex Haughty Order: reveal top N of opp deck, choose one attack
+  // from a Pokémon found there and use it as this attack. Auto-pick the
+  // highest-damage attack; shuffle revealed back into opp's deck.
+  | { kind: "useAttackFromOppDeckTop"; revealCount: number }
+  // Scream Tail ex Scream: block opp from playing Supporter cards next turn.
+  | { kind: "blockOppSupportersNextTurn" }
+  // Lapras ex Larimar Rain: look at top N of YOUR deck, attach any number
+  // of Energy cards from those to your Pokémon, shuffle the rest back.
+  | { kind: "topNAttachAnyEnergyToOwn"; count: number }
+  // Palossand ex Barite Jail: put damage counters on each opp Bench until
+  // its remaining HP is N.
+  | { kind: "fillOppBenchUntilHpN"; targetHp: number }
+  // Alolan Exeggutor ex Swinging Sphene: coin flip → KO opp Active Basic
+  // (heads) or KO 1 opp Benched Basic (tails).
+  | { kind: "flipKoOppActiveOrBenchedBasic" }
+  // Leafeon ex Moss Agate: heal N from each of your Benched Pokémon.
+  // Variant of healEachOwnPokemon limited to bench.
+  | { kind: "healEachOwnBench"; amount: number }
+  // Flareon ex Burning Charge: search up to N Basic Energy and attach to
+  // 1 of your Pokémon (auto-target attacker).
+  | { kind: "searchBasicEnergyAttachOneN"; max: number }
+  // Glaceon ex Euclase: KO ANY opp Pokémon with exactly N damage counters.
+  | { kind: "koOppAnyWithExactlyDamageCounters"; counters: number }
+  // Espeon ex Amazez: devolve each opp evolved Pokémon by shuffling its
+  // highest-stage card into the opponent's deck.
+  | { kind: "devolveAllOppEvolvedToDeck" }
+  // Veluza ex Purging Strike: optionally discard your hand for +N damage.
+  // Auto-discards (always opt-in) since the bonus typically wins.
+  | { kind: "optionalDiscardHandForBonus"; bonus: number }
+  // Mimikyu ex Mischievous Hands: place N damage counters on each of M opp
+  // Pokémon (auto-pick most-damaged among Active+Bench).
+  | { kind: "placeCountersOnNOpp"; counters: number; targetCount: number }
+  // Dudunsparce ex Tenacious Tail: +N per opp Pokémon ex in play.
+  | { kind: "perOppPokemonEx"; perCount: number }
+  // Mamoswine ex Rumbling March: +N per Stage 2 on your Bench.
+  | { kind: "perOwnBenchSubtype"; subtype: string; perCount: number }
+  // Per-Supporter-named in own discard. (TR Porygon2/Porygon-Z R Command)
+  | { kind: "perSupporterInOwnDiscardNamed"; namePart: string; perCount: number }
+  // Per-Pokémon-in-own-discard that has a specific attack name. (Dartrix
+  // United Wings — "20 damage for each Pokémon in your discard pile that
+  // has the <Name> attack.")
+  | { kind: "perPokemonInDiscardWithAttack"; attackName: string; perCount: number }
+  // Discard all opp Tools AND opp Active Special Energy. (Mow Rotom
+  // Reaping Dash) — bundles two existing one-off effects.
+  | { kind: "discardAllOppToolsAndSpecialEnergy" }
+  // Optional self-energy-to-hand for damage bonus. (Zarude Jungle Whip)
+  // Distinct from optionalShuffleSelfEnergyForBonus (which sends to deck).
+  | { kind: "optionalSelfEnergyToHandForBonus"; bonus: number }
+  // Shuffle 1 of opp's Benched Pokémon into their deck. (Illumise Slowing
+  // Perfume — has its own go-second-T1 gate via fizzleIfNot.)
+  | { kind: "shuffleOppBenchedIntoDeck" }
+  // Win the game outright if a prize-count condition is met.
+  // (N's Sigilyph Victory Symbol — exactly 1 Prize remaining)
+  | { kind: "winGameIfPrizesEquals"; prizes: number }
+  // Both Active Pokémon are KO'd. (Annihilape Destined Fight)
+  | { kind: "bothActiveKnockedOut" }
+  // Look at top N of your own deck (info-only). (Iron Valiant Calculation)
+  | { kind: "peekOwnDeckTop"; count: number }
+  // Search deck for a single Stadium card and put it into hand.
+  // (Hop's Silicobra Turf Maker)
+  | { kind: "searchStadiumToHand" }
+  // Put a Trainer card from your discard pile into your hand.
+  // (Dedenne Electromagnetic Sonar)
+  | { kind: "recoverTrainerFromDiscardToHand" }
+  // Shuffle up to N Basic <Type> Energy cards from discard back to deck.
+  // (Wooper Scoop Water)
+  | { kind: "shuffleBasicEnergyDiscardToDeck"; max: number; energyType: EnergyType }
+  // Discard the top N cards of your deck. (Fraxure Dragon Pulse — simple
+  // mill-self.)
+  | { kind: "millOwnDeck"; count: number }
+  // Discard top N + N damage per energy card discarded. (Quagsire
+  // Drenched Headbutt)
+  | { kind: "discardTopNAndDamagePerEnergy"; topN: number; perCount: number }
+  // 2 damage counters on each opp Pokémon that has any damage counters.
+  // (Yveltal Corrosive Winds)
+  | { kind: "countersOnEachDamagedOpp"; counters: number }
+  // N damage counters on each opp Pokémon. (Uxie Painful Memories)
+  | { kind: "countersOnEachOpp"; counters: number }
+  // N damage counters on each Pokémon (both sides) that has an Ability.
+  // (Cofagrigus Law of the Underworld)
+  | { kind: "countersOnEachWithAbility"; counters: number }
+  // Search deck for a Pokémon that evolves from one of your Pokémon and
+  // put it on. (Duosion Cellular Evolution)
+  | { kind: "searchAndEvolveOne" }
+  // Search deck for any number of Basic <Name> Pokémon and bench them.
+  // (Lillie's Comfey Inviting Flowers)
+  | { kind: "searchAnyBasicNamedToBench"; namePart: string }
+  // Search deck for up to N Basic <Type> Energy and attach to one of your
+  // Benched Pokémon. (Smoochum Delightful Kiss)
+  | { kind: "searchBasicEnergyTypeAttachOneBench"; energyType: EnergyType; max: number }
+  // Attach up to N Basic <Type> Energy from your hand to your Pokémon in
+  // any way you like. (Mesprit Full Heart)
+  | { kind: "attachBasicEnergyTypeFromHandN"; energyType: EnergyType; max: number }
+  // N more damage per damage counter on all opp Pokémon (sum across all).
+  // (Azelf Neurokinesis)
+  | { kind: "perDamageCounterOnAllOpp"; perCount: number }
+  // Self gets +N attack damage during your next turn (broad — applies to
+  // all attacks). (Kilowattrel Wind Power Charge — modeled by tracking on
+  // the Pokémon and consulting in actions.ts.)
+  | { kind: "selfNextTurnAllAttacksBonus"; bonus: number }
+  // During opp's next turn, if they attach an Energy from hand to the
+  // Defending Pokémon, their turn ends. (Hypno Daydream)
+  | { kind: "oppEnergyAttachEndsTurn" }
+  // The Defending Pokémon takes N more damage from attacks during your
+  // next turn. (Vibrava Screech)
+  | { kind: "defenderTakesMoreNextTurn"; bonus: number }
+  // Lock your own Pokémon from attacking next turn. (Electivire Unleash
+  // Lightning)
+  | { kind: "lockOwnAttackersNextTurn" }
+  // During opp's next turn, Pokémon with N or fewer Energy attached can't
+  // attack. (Walrein Frigid Fangs)
+  | { kind: "lockOppLowEnergyAttackersNextTurn"; maxEnergy: number }
+  // Damage reduced per Colorless in opp's retreat. (Iron Bundle Gusting
+  // Collision — opposite direction of perColorlessOnDefenderRetreat.)
+  | { kind: "damageReducedPerColorlessOnDefenderRetreat"; perCount: number }
+  // Prevent damage to your <Subtype> Pokémon from attacks by opp's ex
+  // during opp's next turn. (Miraidon C.O.D.E.: Protect)
+  | { kind: "protectSubtypeFromExNextTurn"; subtype: string }
+  // +N Prize cards if the Defending Pokémon is KO'd during your next
+  // turn. (Ribombee Plentiful Pollen)
+  | { kind: "bonusPrizesIfDefenderKoNextTurn"; bonus: number }
+  // N damage per Item card in opp's discard pile. (Tirtouga Ancient
+  // Seaweed)
+  | { kind: "perItemInOppDiscard"; perCount: number }
+  // Move 1 attached Energy from opp's Active to opp's hand. (Octillery
+  // Aqua Wash, Paldean Tauros Upthrusting Horns variants)
+  | { kind: "bounceOppActiveEnergyToOppHand"; count: number; defenderSubtype?: string }
+  // Devolve 1 opp Pokémon (highest stage to opp's hand). (Espathra
+  // Mystical Eyes)
+  | { kind: "devolveOneOppToHand" }
+  // Move all damage counters from 1 of your Benched <Subtype> Pokémon to
+  // opp Active. (Flutter Mane Perplexing Transfer — Ancient subtype)
+  | { kind: "moveAllBenchDamageBySubtypeToOppActive"; subtype: string }
+  // Defender of <Subtype> can't attack next turn. (Paldean Tauros
+  // Blocking Stomp — Basic subtype only)
+  | { kind: "defenderOfSubtypeCantAttackNextTurn"; subtype: string }
+  // 60 per opp Pokémon ex OR Pokémon V in play. (Zoroark Illusory
+  // Hijacking)
+  | { kind: "perOppPokemonExOrV"; perCount: number }
+  // Discard all Special Energy from all opp's Pokémon. (Ceruledge Cursed
+  // Edge)
+  | { kind: "discardAllOppSpecialEnergy" }
+  // Discard own Tools or fizzle. (Melmetal Reforged Axe — discard all
+  // Pokémon Tools from this Pokémon; if can't, attack does nothing.)
+  | { kind: "discardOwnToolsOrFizzle" }
+  // Search opp's discard for up to N Energy cards and attach to opp's
+  // Pokémon. (Grafaiai Mischievous Painting)
+  | { kind: "attachOppDiscardEnergyToOpp"; max: number }
+  // Each player draws N. (Comfey Flower Shower)
+  | { kind: "eachPlayerDrawsN"; count: number }
+  // Flip until tails, search up-to-heads cards from deck to hand.
+  // (Gholdengo All-You-Can-Grab)
+  | { kind: "flipUntilTailsSearchToHand" }
+  // Use opp's Active <Subtype> Pokémon's attack. (TR Mimikyu Gemstone
+  // Mimicry — Tera subtype.)
+  | { kind: "useOppActiveAttackOfSubtype"; subtype: string }
+  // Search and evolve up to N of your Pokémon (TR Nidorina Dark Awakening)
+  // — picks up to N <Type> Pokémon, finds an evolution for each.
+  | { kind: "searchAndEvolveNamedTypePokemon"; energyType: EnergyType; max: number }
+  // Counter damage equal to damage taken next turn. (Zamazenta Strong
+  // Bash) — equivalent to Counterattacking Crest sized to incoming damage.
+  | { kind: "counterAttackerEqualToTakenNextTurn" }
+  // Search 2 cards, then put on top of deck in any order. (Dialga Time
+  // Manipulation)
+  | { kind: "searchAndTopdeckTwo" }
+  // Attach an Energy card from discard to this Pokémon (any type).
+  // (Landorus Fist of Focus)
+  | { kind: "attachAnyEnergyDiscardToSelf" }
+  // Attach a Basic <Type> Energy from your discard pile to one of your
+  // <Type-of-Pokémon> Pokémon. (Druddigon Dragon's Fury — Fire to Dragon)
+  | { kind: "attachBasicEnergyDiscardToTypePokemon"; energyType: EnergyType; pokemonType: EnergyType }
+  // Place damage counters that deal 50 to each Pokémon in play with damage
+  // counters except this Pokémon. (Raichu Collateral Bolts)
+  | { kind: "damageEachWithCountersExceptSelf"; damage: number }
+  // Drifblim Everyone Explode Now: 50 damage per X-named in play, plus 30
+  // self-damage to each X-named in play.
+  | { kind: "perNamedInPlayWithSelfDamage"; namePart: string; perCount: number; selfDamage: number }
+  // Flip a coin; if heads, choose a Special Condition for opp Active.
+  // (Grafaiai Miraculous Paint — auto-pick the most-impactful: Asleep.)
+  | { kind: "flipChooseStatusOpp" }
+  // Slowking Seek Inspiration: discard top of deck; if Pokémon w/o Rule
+  // Box, copy one of its attacks. Auto-pick the highest-damage attack.
+  | { kind: "discardTopUsePokemonNoRuleBoxAttack" }
+  // Musharna Dream Calling: search any number of "Fennel" cards and put
+  // into hand. Variant of named-trainer-search.
+  | { kind: "searchAnyNamedTrainerToHand"; namePart: string }
+  // Move 1 Energy from one opp Pokémon to another (auto-pick: from the
+  // most-energized to a Pokémon with the least). (Elgyem Slight Shift)
+  | { kind: "moveOppEnergyAcrossOpp" }
+  // Flip N coins, attach <count> Basic <Type> Energy from discard to bench.
+  // (Pachirisu Crackling Charge — typed variant of flipNAttachBasicFromDiscardToBench)
+  | { kind: "flipNAttachBasicTypeFromDiscardToBench"; coins: number; energyType: EnergyType }
+  // Search deck for up to N Basic Energy and attach to <Subtype> Pokémon.
+  // (Miraidon Peak Acceleration — Future)
+  | { kind: "searchBasicEnergyAttachSubtype"; max: number; subtype: string }
+  // Tiered coin flip damage. (Zangoose Fury Cutter — different bonus per
+  // heads-count after N coins.)
+  | { kind: "tieredFlipDamage"; coins: number; tiers: number[] }
+  // Search deck for any Energy cards (basic AND special) to hand.
+  // (Heliolisk Parabolic Charge)
+  | { kind: "searchAnyEnergyToHand"; max: number }
+  // Rewrite the Defending Pokémon's Weakness type for opp's next turn.
+  // (Oranguru "Now You're in My Power")
+  | { kind: "rewriteDefenderWeaknessNextTurn"; toType: EnergyType }
+  // Status-only "only if this used <attack> last turn" gate (Miltank
+  // Moomoo Rolling). Implemented as a fizzle predicate.
+  | { kind: "fizzleUnlessUsedAttackLastTurn"; attackName: string }
+  // Both Active Pokémon are now <Status>. (Komala Slumbering Smack)
+  | { kind: "bothActiveNowStatus"; status: StatusCondition }
   | { kind: "multiCoinPerOppPokemon"; damagePerHeads: number } // Mega Zygarde ex "Nullifying Zero"
   | { kind: "fizzleIfNoAlly"; allyName: string } // Solrock Cosmic Beam
   | { kind: "ignoreWeaknessResistance" } // Cosmic Beam — ignore both
@@ -596,7 +806,7 @@ export type AttackPredicate =
   | { kind: "defenderIsEx" }
   | { kind: "defenderIsExOrV" }
   | { kind: "defenderIsV" }
-  | { kind: "defenderHasSubtype"; subtype: "Basic" | "Stage 1" | "Stage 2" | "Evolution" }
+  | { kind: "defenderHasSubtype"; subtype: "Basic" | "Stage 1" | "Stage 2" | "Evolution" | "Tera" | "Future" | "Ancient" | "Mega" }
   | { kind: "defenderHasStatus"; status: StatusCondition }
   | { kind: "defenderHasAnyStatus" }
   | { kind: "defenderHasType"; type: EnergyType }
@@ -659,7 +869,35 @@ export type AttackPredicate =
   | { kind: "yourNamedPokemonKoedLastOppTurn"; namePart: string }
   // "If you played a <named> Supporter card during this turn, ..." (Team
   // Rocket's Kangaskhan ex)
-  | { kind: "supporterPlayedThisTurnNameContains"; namePart: string };
+  | { kind: "supporterPlayedThisTurnNameContains"; namePart: string }
+  // "If the Retreat Cost of your opponent's Active Pokémon is N or more, ..."
+  // (Talonflame Aero Chase) — measured in Colorless count.
+  | { kind: "defenderRetreatCostAtLeast"; count: number }
+  // "If there are N or fewer cards in your deck, ..." (Rabsca Counterturn)
+  | { kind: "yourDeckSizeAtMost"; count: number }
+  // Opp hand size predicates.
+  | { kind: "oppHandSizeAtMost"; count: number }
+  // "If you have any Stage 2 <Type> Pokémon on your Bench, ..." (Sableye)
+  | { kind: "youHaveBenchPokemonOfTypeAndSubtype"; energyType: EnergyType; subtype: string }
+  // "If your opponent has any <Type> Pokémon in play, ..." (Electivire, Slither Wing variants)
+  | { kind: "oppHasPokemonOfType"; energyType: EnergyType }
+  // "If your opponent has any <Subtype> Pokémon in play, ..." (Future / Ancient / Tera)
+  | { kind: "oppHasPokemonOfSubtype"; subtype: string }
+  // "If you have any Tera Pokémon on your Bench, ..." (Ho-Oh)
+  | { kind: "youHaveBenchPokemonOfSubtype"; subtype: string }
+  // "If this Pokémon has more Energy attached than your opponent's Active
+  // Pokémon, ..." (Swalot)
+  | { kind: "selfHasMoreEnergyThanDefender" }
+  // "If any of your Pokémon in play are the same type as any of your
+  // opponent's Pokémon in play, ..." (Enamorus)
+  | { kind: "typeMatchesAnyOppPokemon" }
+  // "If <Name1> and <Name2> are on your Bench, ..." (Metagross — Beldum + Metang)
+  | { kind: "hasBothNamedOnBench"; nameA: string; nameB: string }
+  // "If your opponent has N or more Benched Pokémon, ..." (Iron Crown)
+  | { kind: "oppBenchAtLeast"; count: number }
+  // "If 1 of your other <Subtype> Pokémon used an attack during your last
+  // turn, ..." (Koraidon — gates on the team's last-turn activity)
+  | { kind: "anyAllyOfSubtypeUsedAttackLastTurn"; subtype: string };
 
 export type StatusCondition = "asleep" | "burned" | "confused" | "paralyzed" | "poisoned";
 

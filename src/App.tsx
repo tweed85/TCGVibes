@@ -577,7 +577,32 @@ export default function App() {
       rerender();
       return;
     }
-    if (!myTurn) return;
+    // A pendingPick (deck-search picker, top-peek, etc.) makes phase="pick"
+    // so myTurn would be false and the click would silently no-op. Surface
+    // an explicit hint instead.
+    if (state.pendingPick?.player === viewingPlayer) {
+      setStatusMsg("Resolve the pick modal first (Skip / Confirm) before playing more cards.");
+      return;
+    }
+    if (state.pendingSearchNotice?.player === viewingPlayer) {
+      setStatusMsg("Acknowledge the search notice first.");
+      return;
+    }
+    // Read myTurn from LIVE state, not the captured `myTurn` closure value.
+    // CardView's onClick is a closure preserved by my memo across re-renders,
+    // so a captured `myTurn` from an earlier render can be stale (e.g.,
+    // false from when it was the AI's turn) even after activePlayer flips
+    // back to the user. stateRef-backed reads always see the current values.
+    const liveMyTurn =
+      state.activePlayer === viewingPlayer && state.phase === "main";
+    if (!liveMyTurn) {
+      if (state.activePlayer !== viewingPlayer) {
+        setStatusMsg(`Wait — it's ${state.players[state.activePlayer].name}'s turn.`);
+      } else {
+        setStatusMsg(`Action paused (phase: ${state.phase}). Resolve any open prompt first.`);
+      }
+      return;
+    }
     const card = me.hand[i];
     if (!card) return;
 
