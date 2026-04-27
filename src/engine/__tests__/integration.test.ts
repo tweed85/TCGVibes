@@ -231,6 +231,85 @@ describe("Per-Pokemon lock flags (selfCantAttack / cantRetreat)", () => {
   });
 });
 
+describe("Phantom Dive — 200 to active, 60 spread on bench", () => {
+  it("AI delivers full base damage to the defender and 6 counters on bench", () => {
+    const state = bootGameToMain(33);
+    const ap = state.activePlayer;
+    const opp = ap === "p1" ? "p2" : "p1";
+    // Mark attacker's player as AI so the auto-distribute path runs.
+    state.players[ap].isAI = true;
+    // Build a Phantom-Dive-style attacker with the wired effect.
+    state.players[ap].active!.card = {
+      id: "dragapult-test",
+      name: "Dragapult ex",
+      supertype: "Pokémon",
+      subtypes: ["Stage 2", "ex"],
+      hp: 320,
+      types: ["Dragon"],
+      attacks: [
+        {
+          name: "Phantom Dive",
+          cost: ["Fire", "Psychic"],
+          damage: 200,
+          effects: [{ kind: "distributeDamage", times: 6, perHit: 10, ignoreWR: true, benchOnly: true }],
+        },
+      ],
+      retreatCost: ["Colorless", "Colorless"],
+    };
+    state.players[ap].active!.attachedEnergy = [
+      { id: "e-fire", name: "Basic Fire Energy", supertype: "Energy", subtypes: ["Basic"], provides: ["Fire"] },
+      { id: "e-psy", name: "Basic Psychic Energy", supertype: "Energy", subtypes: ["Basic"], provides: ["Psychic"] },
+    ];
+    // Give opp a known Active and three Bench targets so we can verify the
+    // distribution.
+    const dummyHp200: PokemonCard = {
+      id: "opp-active-test",
+      name: "Opp Active",
+      supertype: "Pokémon",
+      subtypes: ["Basic"],
+      hp: 300,
+      types: ["Colorless"],
+      attacks: [],
+      retreatCost: [],
+    };
+    state.players[opp].active!.card = dummyHp200;
+    state.players[opp].active!.damage = 0;
+    const benchTemplate: PokemonCard = {
+      id: "opp-bench-test",
+      name: "Opp Bench",
+      supertype: "Pokémon",
+      subtypes: ["Basic"],
+      hp: 80,
+      types: ["Colorless"],
+      attacks: [],
+      retreatCost: [],
+    };
+    state.players[opp].bench = [
+      {
+        instanceId: "ob1", card: benchTemplate, damage: 0,
+        attachedEnergy: [], evolvedFrom: [], tools: [], playedThisTurn: false,
+        evolvedThisTurn: false, statuses: [], abilityUsedThisTurn: false,
+      },
+      {
+        instanceId: "ob2", card: benchTemplate, damage: 0,
+        attachedEnergy: [], evolvedFrom: [], tools: [], playedThisTurn: false,
+        evolvedThisTurn: false, statuses: [], abilityUsedThisTurn: false,
+      },
+      {
+        instanceId: "ob3", card: benchTemplate, damage: 0,
+        attachedEnergy: [], evolvedFrom: [], tools: [], playedThisTurn: false,
+        evolvedThisTurn: false, statuses: [], abilityUsedThisTurn: false,
+      },
+    ];
+    attack(state, ap, 0);
+    // Active takes the full 200 base.
+    expect(state.players[opp].active?.damage ?? 0).toBe(200);
+    // Bench cumulative damage is 60 (6 counters × 10).
+    const benchDamage = state.players[opp].bench.reduce((s, p) => s + p.damage, 0);
+    expect(benchDamage).toBe(60);
+  });
+});
+
 describe("Run Away Draw + Poké Pad chain", () => {
   it("after Dudunsparce shuffles itself into deck and the player promotes, Poké Pad still searches the deck", async () => {
     const { activateAbility } = await import("../abilities");

@@ -1667,13 +1667,16 @@ export function estimateAttackDamage(
     if (e.kind === "placeCountersPerHandCard") {
       d += e.countersPerCard * 10 * atkPl.hand.length;
     }
-    if (e.kind === "distributeDamage") {
-      // Total potential damage spread across the opp's Pokémon. Bypasses
-      // W/R when ignoreWR is set (Oil Salvo); even otherwise, the per-hit
-      // amount applies separately and may overlap KOs — total is still a
-      // useful upper-bound for the preview.
+    if (e.kind === "distributeDamage" && !e.benchOnly) {
+      // Distributed damage to ANY opp Pokémon: the player can route all
+      // hits at the Active for max single-target damage, so add the full
+      // potential to the "vs current defender" preview (Oil Salvo case).
       d += e.times * e.perHit;
     }
+    // Bench-only distribution (Phantom Dive's 6 counters on Bench) does
+    // NOT contribute to the Active-defender preview — those counters land
+    // elsewhere. The button reflects the base damage (200) only; the 60
+    // bench spread shows up in-game when the attack resolves.
   }
   return Math.max(0, Math.floor(d));
 }
