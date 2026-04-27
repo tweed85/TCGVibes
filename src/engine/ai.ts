@@ -29,6 +29,7 @@ import {
   opponentOf,
 } from "./rules";
 import { activateAbility } from "./abilities";
+import { makeRng } from "./rng";
 import {
   effectiveAttackCost,
   effectiveMaxHp,
@@ -151,25 +152,61 @@ export function resolveAiPendingPromote(state: GameState, player: PlayerId): boo
   const pl = state.players[player];
   if (pl.bench.length === 0) return false;
 
-  const scored = pl.bench.map((p, i) => ({ i, score: scorePromoteCandidate(p, state) }));
+  const scored = pl.bench.map((p, i) => ({ i, score: scorePromoteCandidate(p, state, player) }));
   scored.sort((a, b) => b.score - a.score);
   promoteBenchToActive(state, player, scored[0].i);
   return true;
 }
 
-function scorePromoteCandidate(p: PokemonInPlay, state: GameState): number {
+function scorePromoteCandidate(p: PokemonInPlay, state: GameState, owner: PlayerId): number {
   let s = 0;
   // Can we attack right now from this spot? Huge plus.
   const provided = energyProvidedBy(p);
-  const canAttackNow = p.card.attacks.some((a) =>
+  const usable = p.card.attacks.filter((a) =>
     canPayCost(provided, effectiveAttackCost(state, p, a.cost)),
   );
-  if (canAttackNow) s += 80;
+  if (usable.length > 0) s += 80;
 
   // How "healthy" is this Pokémon?
   const maxHp = effectiveMaxHp(p, state);
   const remaining = maxHp - p.damage;
   s += remaining / 5;
+
+  // 1-ply lookahead: estimate opponent's best swing against this candidate
+  // specifically (their attacker, Stadium/Tool boosts, our resistances).
+  // Reward candidates that survive; heavily punish candidates that hand the
+  // opponent another instant prize.
+  const oppId = opponentOf(owner);
+  const opp = state.players[oppId];
+  if (opp.active) {
+    const oppProvided = energyProvidedBy(opp.active);
+    let threat = 0;
+    for (const move of opp.active.card.attacks) {
+      if (!canPayCost(oppProvided, effectiveAttackCost(state, opp.active, move.cost))) continue;
+      const d = estimateDamage(state, oppId, opp.active, move, p);
+      if (d > threat) threat = d;
+    }
+    if (threat > 0) {
+      if (threat >= remaining) {
+        // We'd die immediately. Penalize heavily — and even more if it's a
+        // multi-prizer (don't feed an ex into a punching bag).
+        s -= 80;
+        if (isRuleBox(p.card)) s -= 60;
+      } else if (threat >= remaining * 0.7) {
+        s -= 25;
+      }
+    }
+    // Bonus: if we can OHKO their Active back, this is a counter-promote.
+    if (usable.length > 0) {
+      const oppMax = effectiveMaxHp(opp.active, state);
+      const dmg = Math.max(...usable.map((m) =>
+        estimateDamage(state, owner, p, m, opp.active!),
+      ));
+      if (opp.active.damage + dmg >= oppMax) {
+        s += 60 + prizeValue(opp.active.card) * 30;
+      }
+    }
+  }
 
   // Avoid walling up a 2-prizer that's going to get traded for a 1-prizer.
   if (isRuleBox(p.card)) s -= 15;
@@ -307,8 +344,12 @@ function attackValue(
   // Self-damage / self-discard / self-locks are negatives — opening value lost.
   let hasSelfLock = false;
   let hasSetupEffect = false;
+  let selfDamageDealt = 0;
   for (const e of getAttackEffects(move)) {
-    if (e.kind === "selfDamage") v -= e.damage * 0.7;
+    if (e.kind === "selfDamage") {
+      v -= e.damage * 0.7;
+      selfDamageDealt += e.damage;
+    }
     if (e.kind === "discardOwnEnergy") v -= e.count * 15; // losing setup hurts
     if (e.kind === "drawCards") v += e.count * 8; // free card draw is nice
     if (e.kind === "benchSnipe") v += e.damage * 1.5;
@@ -322,15 +363,40 @@ function attackValue(
     if (e.kind === "searchEnergyAttachBenchType") hasSetupEffect = true;
     if (e.kind === "callForFamily") hasSetupEffect = true;
   }
-  // OHKO scales hugely because it ends the defender's next turn of offense
-  // and takes prizes. Self-locks don't matter much on a KO (defender's gone).
+
+  // 1-ply lookahead context: do we expect to survive into next turn? If our
+  // Active is already in OHKO range from the opponent's expected hit, then:
+  //   - the cost of self-damage / energy discard is irrelevant (we're dying
+  //     anyway), so wash those penalties; and
+  //   - taking the prize this turn is more valuable than chipping (since we
+  //     won't be here to capitalize).
+  const ourMax = effectiveMaxHp(attacker, state);
+  const ourRemaining = ourMax - attacker.damage - selfDamageDealt;
+  // Approximate opponent's next-turn swing using the cached helper.
+  const expectedThreat = opponentMaxDamageNextTurn(state, owner);
+  const dyingNextTurn = expectedThreat >= ourRemaining;
+
+  // Prize race: if the opponent is on their last 1–2 prizes, OHKOs are
+  // disproportionately valuable (game-winning), and chip is nearly worthless.
+  const oppPrizesLeft = state.players[opponentOf(owner)].prizes.length;
+  const ourPrizesLeft = state.players[owner].prizes.length;
+
   if (isOHKO) {
     v += 200 + prizeValue(defender!.card) * 80;
+    if (oppPrizesLeft <= prizeValue(defender!.card)) v += 300; // game-winning
+    if (dyingNextTurn) v += 60; // we'd lose value-trade by NOT taking the KO
+    // Among multiple OHKOs, prefer the cheaper one (preserves energy for
+    // next turn / the bench attacker after we get traded).
+    v -= cost * 3;
     return v;
   }
   // Non-KO path: self-lock is a real cost because we used this turn to deal
   // partial damage AND can't follow up with this attack next turn.
   if (hasSelfLock) v -= Math.max(40, dmg * 0.4);
+  // If we're dying next turn anyway, undo half of the self-cost penalty —
+  // those drawbacks don't apply if we're not here to feel them.
+  if (dyingNextTurn) v += selfDamageDealt * 0.4;
+
   // "Setup-KO line": if this attack doesn't OHKO but chips the defender
   // below the OHKO threshold for a typical 120-damage follow-up swing, give
   // it a moderate bonus — matches the Aura Jab → Mega Brave flow.
@@ -339,7 +405,16 @@ function attackValue(
     const remaining = defMax - damageAfter;
     if (remaining <= 150) v += 40;  // clearly in one-shot range next turn
     else if (remaining <= 220) v += 20; // Mega Brave / Wild Press range
+    // If we'll be dead before we can follow up, the "setup the next KO"
+    // bonus is mostly wasted — the bench attacker would need to inherit
+    // the chip damage.
+    if (dyingNextTurn) v -= 20;
   }
+  // Late game: chip damage is worth less than reliable prize taking.
+  if (oppPrizesLeft <= 2 && !isOHKO) v -= 20;
+  // Behind on prizes — be aggressive even if it costs us. (You're losing if
+  // you don't.)
+  if (ourPrizesLeft > oppPrizesLeft + 1 && dmg > 0) v += 10;
   // Setup effects (attach-from-discard etc.) have lasting value beyond damage.
   if (hasSetupEffect) v += 35;
   return v;
@@ -1030,6 +1105,19 @@ export function takeAiTurn(state: GameState, player: PlayerId): void {
   const MAX_ITERS = 60;
   let safety = MAX_ITERS;
   while (safety-- > 0) {
+    // Mid-turn ability/attack KOs (Adrena-Brain, Cursed Blast, bench snipes)
+    // can put pendingPromote on the OPPONENT while it's still our turn. We
+    // can't proceed (phase is "promoteActive") until it's resolved. For AI
+    // opponents, drive the promote so we can keep playing. For human
+    // opponents in vsCPU, just bail — App.tsx will surface the picker and
+    // re-invoke us once the human picks.
+    if (state.pendingPromote && state.pendingPromote !== player) {
+      if (state.players[state.pendingPromote].isAI) {
+        resolveAiPendingPromote(state, state.pendingPromote);
+        continue;
+      }
+      return;
+    }
     if (!aiStep(state, player)) return;
   }
   endTurn(state, player);
@@ -1124,6 +1212,10 @@ function tryStepAiTurn(state: GameState, player: PlayerId): boolean {
   // Step 8b: retreat if our Active can't attack but a benched one can.
   if (tryRetreat(state, player)) return true;
 
+  // Step 8c: OFFENSIVE switch — Active can attack but a Bench attacker has
+  // a clean OHKO that the Active doesn't. Trade tempo for the prize.
+  if (tryOffensiveSwitch(state, player)) return true;
+
   return false;
 }
 
@@ -1175,33 +1267,277 @@ function scoreAbility(
   effect: import("./types").AbilityEffect,
 ): number {
   const pl = state.players[player];
+  const opp = state.players[opponentOf(player)];
+  const hasBasicEnergyInHand = (et: import("./types").EnergyType): boolean =>
+    pl.hand.some((c) => isBasicEnergy(c) && c.provides.includes(et));
+  const hasBasicEnergyInDiscard = (et?: import("./types").EnergyType): boolean =>
+    pl.discard.some(
+      (c) => isBasicEnergy(c) && (et === undefined || c.provides.includes(et)),
+    );
+  const allies = (): PokemonInPlay[] =>
+    [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+  const mostHurt = (): number =>
+    Math.max(0, ...allies().map((p) => p.damage));
+
   switch (effect.kind) {
     case "drawOne": return pl.hand.length < 7 ? 50 : 20;
     case "drawTwo": return pl.hand.length < 8 ? 65 : 25;
     case "drawN": return pl.hand.length < 8 ? 60 + effect.count * 5 : 25;
+    case "drawNActiveOnly":
+      return pl.active && pl.active.instanceId === holder.instanceId &&
+        pl.hand.length < 7 ? 60 : 0;
+    case "drawNDiscardCost":
+      return pl.hand.length >= 2 && pl.hand.length < 7 ? 60 : 10;
     case "healSelf": return holder.damage >= effect.amount ? 50 : 10;
-    case "healAny": {
-      const mostHurt = Math.max(...[pl.active, ...pl.bench].map((p) => p?.damage ?? 0));
-      return mostHurt >= effect.amount ? 55 : 10;
-    }
+    case "healAny":
+    case "healEachOwn": return mostHurt() >= effect.amount ? 55 : 10;
+
+    // Energy ramp from hand ---------------------------------------------------
     case "searchBasicEnergy": return weNeedEnergy(state, player) ? 70 : 40;
-    case "attachEnergyFromHand": {
-      const hasThat = pl.hand.some((c) =>
-        isBasicEnergy(c) && c.provides.includes(effect.energyType));
-      return hasThat ? 75 : 0;
-    }
+    case "attachEnergyFromHand":
+      return hasBasicEnergyInHand(effect.energyType) ? 75 : 0;
+    case "attachEnergyFromHandThenDraw":
+      // Teal Dance: attach + draw — strict upgrade over plain attach. Always
+      // fire when a matching Energy is in hand.
+      return hasBasicEnergyInHand(effect.energyType) ? 85 : 0;
+    case "attachEnergyFromHandThenHeal":
+      return hasBasicEnergyInHand(effect.energyType) ? 78 : 0;
+    case "attachEnergyFromHandToBenchNameN":
+      return hasBasicEnergyInHand(effect.energyType) &&
+        pl.bench.some((p) => p.card.name.startsWith(effect.namePrefix))
+        ? 80 : 0;
+    case "attachEnergyFromHandToNamedAsOften":
+      return hasBasicEnergyInHand(effect.energyType) &&
+        allies().some((p) => p.card.name.includes(effect.namePrefix))
+        ? 80 : 0;
+    case "attachEnergyFromHandToActiveNamePrefix":
+      return pl.active && pl.active.card.name.startsWith(effect.namePrefix) &&
+        pl.hand.some(isBasicEnergy) ? 75 : 0;
+    case "attachMixedFromHand":
+      return (hasBasicEnergyInHand(effect.typeA) || hasBasicEnergyInHand(effect.typeB))
+        ? 75 : 0;
+
+    // Energy ramp from discard / deck ----------------------------------------
     case "attachEnergyFromDiscardToSelf": {
-      const has = pl.discard.some(isBasicEnergy);
+      const has = hasBasicEnergyInDiscard();
       return has && holder.card.attacks.some((a) => a.cost.length > energyProvidedBy(holder).length) ? 70 : 10;
     }
-    case "searchDeckAnyCard": return 55;
-    case "searchDeckPokemon": return 50;
-    case "switchWithBench": {
-      // Skip if Active can attack; use if it can't and bench can.
+    case "attachEnergyFromDiscardToBench":
+      return hasBasicEnergyInDiscard(effect.energyType) && pl.bench.length > 0 ? 75 : 0;
+    case "top4AttachEnergyType":
+      return weNeedEnergy(state, player) ? 60 : 35;
+
+    // Movement / repositioning -----------------------------------------------
+    case "moveBasicEnergyAnywhere":
+    case "moveOwnBasicEnergyBetween": {
+      // Only worthwhile when a basic Energy of the right type is on the
+      // bench AND the Active needs more energy. Otherwise skip — we'd just
+      // be re-shuffling for no gain.
+      const sourceEnergyType = effect.kind === "moveBasicEnergyAnywhere" ? effect.energyType : undefined;
+      const benchHasIt = pl.bench.some((p) =>
+        p.attachedEnergy.some((e) =>
+          isBasicEnergy(e) && (sourceEnergyType === undefined || e.provides.includes(sourceEnergyType))));
+      const activeNeedsMore = !!pl.active &&
+        pl.active.card.attacks.some((a) => a.cost.length > pl.active!.attachedEnergy.length);
+      return benchHasIt && activeNeedsMore ? 55 : 0;
+    }
+    case "moveDamageOwnToOpp": {
+      // Munkidori Adrena-Brain et al. — score by the prize/value swing of
+      // landing N counters on the best opp target.
+      if (effect.energyConditionType) {
+        const hasCond = holder.attachedEnergy.some((en) =>
+          en.provides.includes(effect.energyConditionType!),
+        );
+        if (!hasCond) return 0;
+      }
+      const damagedAllies = allies().filter((a) => a.damage > 0);
+      if (damagedAllies.length === 0) return 0;
+      const sourceMax = Math.max(...damagedAllies.map((a) => a.damage));
+      const moved = Math.min(effect.counters, Math.floor(sourceMax / 10));
+      if (moved === 0) return 0;
+      const added = moved * 10;
+      const oppTargets = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+      let best = 0;
+      for (const t of oppTargets) {
+        const remaining = effectiveMaxHp(t, state) - t.damage;
+        if (added >= remaining) {
+          // Free KO via counter movement — directly gain prizes.
+          const score = 90 + prizeValue(t.card) * 30;
+          if (score > best) best = score;
+        } else {
+          // Chip toward a follow-up KO. The closer this gets to lethal, the
+          // more value the chip carries.
+          const chipScore = 25 + Math.max(0, 60 - (remaining - added) / 2);
+          if (chipScore > best) best = chipScore;
+        }
+      }
+      // Also pull damage off our own — useful even without a KO if our
+      // Active is in OHKO range from the opponent's expected hit.
+      const ourMostHurt = damagedAllies.reduce((a, b) => a.damage > b.damage ? a : b);
+      const ourRemaining = effectiveMaxHp(ourMostHurt, state) - ourMostHurt.damage;
+      const threat = opponentMaxDamageNextTurn(state, player);
+      if (threat >= ourRemaining && threat < ourRemaining + added) {
+        // We save a Pokémon by removing the damage that'd OHKO it.
+        best = Math.max(best, 70 + prizeValue(ourMostHurt.card) * 20);
+      }
+      return best;
+    }
+    case "switchToActiveFromBench": return 0;
+    case "switchWithActiveIfMegaExInPlay": {
       const active = pl.active;
-      if (!active || active.instanceId !== holder.instanceId) return 0; // only matters for Active
+      if (!active || active.instanceId !== holder.instanceId) return 0;
+      return activeCantAttack(state, player) ? 60 : 0;
+    }
+    case "switchBenchedTypeToActiveWithStatus":
+    case "swapWithBenchAndForceOppPromote": return 0;
+    case "switchWithBench": {
+      const active = pl.active;
+      if (!active || active.instanceId !== holder.instanceId) return 0;
       if (!activeCantAttack(state, player)) return 0;
       return pl.bench.some((p) => benchCanAttack(state, p)) ? 60 : 0;
+    }
+    case "shuffleSelfIntoDeck": {
+      // Pulls this Pokémon back into deck. From the Active spot, this
+      // forces a promote — only sane if there's a Bench Pokémon to take
+      // its place. From the Bench, it's mostly a tempo loss unless the
+      // Pokémon is damaged enough to risk getting KO'd next turn.
+      const fromActive = pl.active?.instanceId === holder.instanceId;
+      if (fromActive) {
+        return pl.bench.length > 0 && holder.damage > 0 ? 30 : 0;
+      }
+      return holder.damage >= holder.card.hp - 30 ? 25 : 0;
+    }
+
+    // Searches ---------------------------------------------------------------
+    case "searchDeckAnyCard": return 55;
+    case "searchDeckPokemon": return 50;
+    case "searchDeckPokemonNamePrefix": return 55;
+    case "searchDeckStadium": return state.stadium ? 25 : 50;
+    case "searchDeckTrainerByName": return 55;
+    case "searchEvolutionPokemonGated": return 65;
+    case "searchEvolutionPokemonOfType": return 60;
+    case "fanCallFirstTurn": return state.turn === 1 ? 80 : 0;
+    case "benchFromDiscardHpMax":
+      // Recovery: pull a small Basic out of discard onto the bench.
+      return pl.discard.some((c) =>
+        c.supertype === "Pokémon" &&
+        c.subtypes.includes("Basic") &&
+        c.hp <= effect.hpMax) && pl.bench.length < 5 ? 55 : 0;
+    case "emergencyRotationFromHand":
+      // Activated from hand — gated by predicate; safe to score positive.
+      return 50;
+
+    // Disruption / opponent-facing ------------------------------------------
+    case "applyStatusToOppActive":
+      return opp.active ? 50 : 0;
+    case "flipReturnOppActiveEnergyToHand":
+      return (opp.active?.attachedEnergy.length ?? 0) > 0 ? 45 : 0;
+    case "flipGustOppWithStatus":
+      return opp.bench.length > 0 ? 35 : 0;
+    case "flipDiscardRandomFromOppHand":
+      return opp.hand.length > 0 ? 35 : 0;
+    case "flipChooseStatusOpp":
+      return opp.active ? 45 : 0;
+    case "discardHandEnergyStatusOppActive":
+      return opp.active && pl.hand.some((c) =>
+        isBasicEnergy(c) && c.provides.includes(effect.energyType)) ? 50 : 0;
+    case "devolveOppEvolution":
+      return opp.active && opp.active.evolvedFrom.length > 0 ? 55 : 0;
+    case "discardToolFromHandGustOpp":
+      return opp.bench.length > 0 &&
+        pl.hand.some((c) => c.name === effect.toolName) ? 60 : 0;
+    case "revealOppHandPutOnOppBench":
+      return opp.bench.length < 5 ? 25 : 0;
+
+    // Healing variants -------------------------------------------------------
+    case "healAnyIfMegaExTypeInPlay":
+    case "healAnyIfEnergyAttached":
+      return mostHurt() >= effect.amount ? 50 : 0;
+
+    // Hand / deck shaping ----------------------------------------------------
+    case "discardSelfEnergyDrawToN":
+      return holder.attachedEnergy.some((e) => e.provides.includes(effect.energyType)) &&
+        pl.hand.length < effect.targetHand ? 50 : 0;
+    case "putHandToBottomDrawToN":
+      return pl.hand.length <= 2 ? 50 : 10;
+    case "drawToNIfSupporterPlayedName":
+      return pl.lastSupporterNameThisTurn === effect.supporterName &&
+        pl.hand.length < effect.targetHand ? 70 : 0;
+    case "searchEnergyIfSupporterPlayedName":
+      return pl.lastSupporterNameThisTurn === effect.supporterName &&
+        weNeedEnergy(state, player) ? 70 : 0;
+    case "swapHandCardWithDeckTop":
+      return pl.hand.length > 0 ? 25 : 0;
+    case "discardBottomDeckSelfToTop": return 0;
+    case "lunarCycleDrawN":
+      return pl.hand.length < 7 && hasBasicEnergyInHand(effect.costEnergyType) ? 55 : 0;
+    case "oppShuffleHandAndDrawN":
+      return effect.drawCount >= 4 ? 60 : 35;
+    case "oppShuffleToBottomDrawN":
+      return pl.hand.length < 7 ? 55 : 25;
+    case "bothPlayersDrawOne":
+      return pl.hand.length < 5 ? 30 : 0;
+
+    // Peeks ------------------------------------------------------------------
+    case "peek2Top": return 35;
+    case "peekTopMayDiscard": return 25;
+    case "top6RevealSupporter": return 25;
+
+    // Attack-shape buff ------------------------------------------------------
+    case "attackBonusThisTurnSelfDamage":
+      return holder.damage + effect.selfDamage * 10 < holder.card.hp ? 55 : 0;
+
+    // Self-KO abilities: trade our holder for prizes. Worth it when the prize
+    // gain outweighs the prize loss, OR when the holder is going to die
+    // anyway (terminal value). ----------------------------------------------
+    case "putCountersOnOppThenSelfKO": {
+      const oppTargets = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+      if (oppTargets.length === 0) return 0;
+      const added = effect.counters * 10;
+      // Best KO we can land.
+      let prizesGained = 0;
+      let chipBest = 0;
+      for (const t of oppTargets) {
+        const remaining = effectiveMaxHp(t, state) - t.damage;
+        if (added >= remaining) {
+          const p = prizeValue(t.card);
+          if (p > prizesGained) prizesGained = p;
+        } else {
+          chipBest = Math.max(chipBest, 60 - (remaining - added) / 5);
+        }
+      }
+      const prizesLost = prizeValue(holder.card);
+      // Threat check — is our Dusknoir going to die anyway?
+      const ourRemaining = effectiveMaxHp(holder, state) - holder.damage;
+      const threat = opponentMaxDamageNextTurn(state, player);
+      const dyingAnyway = pl.active?.instanceId === holder.instanceId && threat >= ourRemaining;
+
+      if (prizesGained >= prizesLost) {
+        // Net positive (or even) prize swing. Big payoff — especially in a
+        // tight prize race where the KO ends the game.
+        let s = 70 + (prizesGained - prizesLost) * 60;
+        if (opp.prizes.length <= prizesGained) s += 200; // game-winning
+        if (dyingAnyway) s += 30; // free upside on a terminal Pokémon
+        return s;
+      }
+      if (dyingAnyway && prizesGained > 0) {
+        // Free counters before the inevitable KO — squeeze any value we can.
+        return 50 + prizesGained * 30;
+      }
+      // Pure chip — tempo loss usually too costly.
+      return chipBest > 50 && dyingAnyway ? chipBest : 0;
+    }
+    case "attachNFromDiscardThenSelfKO": {
+      // E.g., Mega Lucario "Aura Jab" hand-side — trade self-KO for energy
+      // ramp. Only sane when the holder is dying anyway and the energy lands
+      // on a meaningful target.
+      const ourRemaining = effectiveMaxHp(holder, state) - holder.damage;
+      const threat = opponentMaxDamageNextTurn(state, player);
+      const dyingAnyway = pl.active?.instanceId === holder.instanceId && threat >= ourRemaining;
+      if (!dyingAnyway) return 0;
+      const benchHasAttacker = pl.bench.some((p) =>
+        p.card.attacks.some((a) => a.cost.length > p.attachedEnergy.length));
+      return benchHasAttacker ? 60 : 0;
     }
   }
   return 0;
@@ -1225,15 +1561,39 @@ function tryEvolve(state: GameState, player: PlayerId): boolean {
       // Score: bigger HP gain is better; pre-evolved already are always a win.
       let s = c.hp - t.card.hp;
       if (c.subtypes.includes("Stage 2")) s += 30;
+      // The evolved form's attack-readiness matters. If the new card has a
+      // useable attack with current energy, prefer it. If it doesn't and the
+      // pre-evo did, this is a tempo loss — penalize.
+      const provided = energyProvidedBy(t);
+      const newCanAttack = c.attacks.some((a) =>
+        canPayCost(provided, a.cost));
+      const oldCanAttack = t.card.attacks.some((a) =>
+        canPayCost(provided, effectiveAttackCost(state, t, a.cost)));
+      if (newCanAttack) s += 25;
+      else if (oldCanAttack && t === pl.active) s -= 30;
+      // Bonus when this evolution is the Active and our current Active will
+      // OHKO the opponent (so we want the upgraded HP/attacks online ASAP).
+      // 1-ply lookahead reuse: opponentMaxDamageNextTurn against the current
+      // active is a poor proxy here, so we skip that check.
       // Mega Evolution ends the turn — only evolve to Mega if we can attack
-      // right after (has energy, the Mega itself can use an attack).
+      // right after AND the attack is meaningful.
       const isMega = (c.subtypes ?? []).some((st) => MEGA_SUBTYPE_RE.test(st));
       if (isMega) {
-        const provided = energyProvidedBy(t);
         const canAttackImmediately = c.attacks.some((a) =>
           canPayCost(provided, a.cost));
         if (!canAttackImmediately) s -= 200;
         else s += 40;
+      }
+      // Don't burn an evolution on a damaged Active that's about to die —
+      // the new card just gets KO'd. Exception: if evolving heals (some
+      // evolutions do via on-evolve abilities), or if HP gain saves it.
+      if (t === pl.active && t.damage > 0) {
+        const newHp = c.hp;
+        const threat = opponentMaxDamageNextTurn(state, player);
+        if (threat >= newHp - t.damage && threat < t.card.hp - t.damage + 9999) {
+          // Both forms die. Slight penalty to discourage feeding the evolution.
+          s -= 20;
+        }
       }
       options.push({ handIdx: i, targetId: t.instanceId, score: s });
     }
@@ -1241,6 +1601,8 @@ function tryEvolve(state: GameState, player: PlayerId): boolean {
   if (options.length === 0) return false;
   options.sort((a, b) => b.score - a.score);
   const pick = options[0];
+  // Reject very-bad evolutions outright (e.g., Mega without immediate attack).
+  if (pick.score <= -100) return false;
   return evolve(state, player, pick.handIdx, pick.targetId).ok;
 }
 
@@ -1426,6 +1788,68 @@ function tryRetreat(state: GameState, player: PlayerId): boolean {
   return retreat(state, player, bestBench).ok;
 }
 
+// Offensive switch: stay-in-place is wasting a turn when a Bench Pokémon has
+// a clean OHKO available that the Active doesn't. Retreats so the next aiStep
+// promotes the bench attacker into position.
+function tryOffensiveSwitch(state: GameState, player: PlayerId): boolean {
+  const pl = state.players[player];
+  if (state.firstTurnNoAttack) return false;
+  if (!pl.active || pl.retreatedThisTurn || pl.bench.length === 0) return false;
+  const defender = state.players[opponentOf(player)].active;
+  if (!defender) return false;
+
+  const cost = effectiveRetreatCost(pl.active, state).length;
+  const currentEnergy = energyProvidedBy(pl.active).length;
+  if (currentEnergy < cost) return false;
+
+  // Active's best damage on the current defender.
+  const provided = energyProvidedBy(pl.active);
+  let activeDmg = 0;
+  for (const a of pl.active.card.attacks) {
+    if (!canPayCost(provided, effectiveAttackCost(state, pl.active, a.cost))) continue;
+    const d = estimateDamage(state, player, pl.active, a, defender);
+    if (d > activeDmg) activeDmg = d;
+  }
+  const defMax = effectiveMaxHp(defender, state);
+  const activeWouldOHKO = defender.damage + activeDmg >= defMax;
+  if (activeWouldOHKO) return false; // Active does the job — no need to switch
+
+  // Find a bench Pokémon that OHKOs.
+  let bestIdx = -1;
+  let bestDmg = 0;
+  for (let i = 0; i < pl.bench.length; i++) {
+    const b = pl.bench[i];
+    const bp = energyProvidedBy(b);
+    let d = 0;
+    for (const a of b.card.attacks) {
+      if (!canPayCost(bp, effectiveAttackCost(state, b, a.cost))) continue;
+      const dmg = estimateDamage(state, player, b, a, defender);
+      if (dmg > d) d = dmg;
+    }
+    if (b.damage + 0 < effectiveMaxHp(b, state) && // alive
+      d > bestDmg && b.damage + d >= 0 && defender.damage + d >= defMax) {
+      bestDmg = d;
+      bestIdx = i;
+    }
+  }
+  if (bestIdx < 0) return false;
+
+  // Don't waste a 2-prizer Active just to switch in a 1-prizer for the same
+  // KO if we're going to lose the 2-prizer next turn anyway. Compare prize
+  // costs vs gain.
+  const switchInPrize = prizeValue(pl.bench[bestIdx].card);
+  const stayPrize = prizeValue(pl.active.card);
+  // If switching costs us a higher-prize Active that's about to die, accept it.
+  // But if our Active is healthy AND swapping just promotes a bigger prize
+  // target, skip.
+  const ourHp = effectiveMaxHp(pl.active, state) - pl.active.damage;
+  const threat = opponentMaxDamageNextTurn(state, player);
+  if (threat < ourHp && switchInPrize > stayPrize) return false;
+
+  logEvent(state, player, `[AI] retreats to set up a Bench OHKO.`);
+  return retreat(state, player, bestIdx).ok;
+}
+
 // Attempt to attack this turn. Returns true if an attack was issued (caller
 // should exit — attack resolves into endTurn).
 function tryAttack(state: GameState, player: PlayerId): boolean {
@@ -1433,7 +1857,11 @@ function tryAttack(state: GameState, player: PlayerId): boolean {
   const pl = state.players[player];
   if (!pl.active) return false;
 
-  const pick = pickBestAttack(state, player);
+  // Use 1-ply lookahead at the top level; fall back to greedy when we're
+  // already inside a simulation (avoids blowing the search budget).
+  const pick = lookaheadActive
+    ? pickBestAttack(state, player)
+    : pickBestAttackWithLookahead(state, player);
   if (!pick) return false;
 
   // Respect the action's return value: if attack() rejects the play (sleep
@@ -1441,4 +1869,199 @@ function tryAttack(state: GameState, player: PlayerId): boolean {
   // must NOT report success or takeAiTurn will exit without ending the turn.
   const result = attack(state, player, pick.index);
   return result.ok;
+}
+
+// --- Multi-ply search ------------------------------------------------------
+//
+// Greedy attack scoring picks the best move based only on the immediate
+// position. The lookahead picks the move that leaves us in the best position
+// AFTER the opponent's expected response. We clone the state, apply our
+// candidate attack, drive the engine forward through any pending* prompts,
+// run the opponent's full turn via `takeAiTurn`, then score the result.
+//
+// Re-entrancy: `takeAiTurn` calls back into `tryAttack` which would call
+// `pickBestAttackWithLookahead` again — we guard with `lookaheadActive` so
+// the recursive call falls back to greedy.
+
+let lookaheadActive = false;
+
+// JSON-clone the parts of GameState that mutate during a turn. The Rng has
+// non-serializable closures (and we don't want simulated coin flips to
+// disturb the real game's RNG sequence anyway), so we strip it and fit a
+// fresh deterministic Rng. The log is also dropped — it's expensive to clone
+// and irrelevant to evaluation.
+//
+// Card objects are immutable in this codebase (deck/hand/etc. just reorder
+// references), so the JSON deep-copy duplicates them but doesn't break
+// anything. Cost is bounded by deck+hand size (~140 cards/state) and is
+// well within budget for ≤3 attack candidates per decision.
+function cloneStateForSearch(state: GameState): GameState {
+  const stripped = { ...state, rng: undefined, log: undefined };
+  const cloned = JSON.parse(JSON.stringify(stripped)) as Omit<GameState, "rng" | "log">;
+  // Force both sides to AI so all auto-pickers fire and the simulation
+  // drives itself without waiting for human input.
+  cloned.players.p1.isAI = true;
+  cloned.players.p2.isAI = true;
+  return {
+    ...cloned,
+    rng: makeRng(0xBADC0FFE),
+    log: [],
+  } as GameState;
+}
+
+// Drive the engine past any pending* state until either (a) a player can
+// take normal main-phase actions, or (b) the game is over / wedged.
+function drainPending(sim: GameState, maxSteps = 30): void {
+  for (let i = 0; i < maxSteps; i++) {
+    if (sim.phase === "gameOver") return;
+    if (sim.pendingPromote) {
+      if (!resolveAiPendingPromote(sim, sim.pendingPromote)) return;
+      continue;
+    }
+    if (sim.pendingPick) {
+      const ok = resolveAiPendingPickSmart(sim, sim.pendingPick.player);
+      if (!ok) return;
+      continue;
+    }
+    if (sim.pendingHandReveal) {
+      const ok = resolveAiHandReveal(sim);
+      if (!ok) return;
+      continue;
+    }
+    if (sim.pendingSearchNotice) {
+      resolvePendingSearchNotice(sim, sim.pendingSearchNotice.player);
+      continue;
+    }
+    return;
+  }
+}
+
+// Heuristic position evaluation from `player`'s perspective. Higher is
+// better. Game-over states get extreme scores so a winning line dominates;
+// otherwise we combine prizes (biggest factor), bench HP, energy on board,
+// and a small penalty for being out-of-actives.
+function scorePosition(state: GameState, player: PlayerId): number {
+  if (state.winner === player) return 1_000_000;
+  if (state.winner !== null) return -1_000_000;
+
+  const me = state.players[player];
+  const opp = state.players[opponentOf(player)];
+  let s = 0;
+
+  // Prize differential — the central currency of the game. Each prize the
+  // opponent owes is worth more than HP or energy.
+  s += (6 - me.prizes.length) * 250;
+  s -= (6 - opp.prizes.length) * 250;
+
+  // Total HP on board (active + bench), proxied by max - damage.
+  const hpSum = (pl: typeof me): number => {
+    let total = pl.active ? effectiveMaxHp(pl.active, state) - pl.active.damage : 0;
+    for (const b of pl.bench) total += effectiveMaxHp(b, state) - b.damage;
+    return total;
+  };
+  s += hpSum(me) / 6;
+  s -= hpSum(opp) / 6;
+
+  // Energy on board — a flat proxy for "tempo." Each energy is one tempo
+  // beat already paid for; losing a powered-up Pokémon costs us this much.
+  const energyOnBoard = (pl: typeof me): number => {
+    let n = pl.active?.attachedEnergy.length ?? 0;
+    for (const b of pl.bench) n += b.attachedEnergy.length;
+    return n;
+  };
+  s += energyOnBoard(me) * 8;
+  s -= energyOnBoard(opp) * 8;
+
+  // Bench depth so we don't tunnel-vision into a state with no follow-up.
+  s += me.bench.length * 6;
+  s -= opp.bench.length * 4;
+
+  // No active = catastrophic if we can't promote.
+  if (!me.active && me.bench.length === 0) s -= 100_000;
+  if (!opp.active && opp.bench.length === 0) s += 100_000;
+
+  // Hand size (mild — too much hand is a Marnie/N/Iono target).
+  s += Math.min(me.hand.length, 7) * 3;
+  s -= Math.min(opp.hand.length, 7) * 2;
+
+  return s;
+}
+
+// 1-ply lookahead variant of pickBestAttack: simulates opp's expected reply.
+function pickBestAttackWithLookahead(
+  state: GameState,
+  player: PlayerId,
+): { index: number; value: number } | null {
+  // Greedy fallback for the candidate enumeration — same legality checks.
+  const greedy = pickBestAttack(state, player);
+  if (!greedy) return null;
+  const pl = state.players[player];
+  if (!pl.active) return greedy;
+  const atk = pl.active;
+  // Confused / asleep / paralyzed-style hard-locks already filtered by
+  // pickBestAttack; if it returned null we'd already have bailed.
+
+  const provided = energyProvidedBy(atk);
+  const perAttackLock = (atk as typeof atk & { cantUseAttacksUntilTurn?: Record<string, number> }).cantUseAttacksUntilTurn;
+
+  // Enumerate legal attack candidates, mirroring pickBestAttack's filters.
+  const candidates: number[] = [];
+  for (let i = 0; i < atk.card.attacks.length; i++) {
+    const move = atk.card.attacks[i];
+    const cost = effectiveAttackCost(state, atk, move.cost);
+    if (!canPayCost(provided, cost)) continue;
+    if (perAttackLock && perAttackLock[move.name] !== undefined && state.turn <= perAttackLock[move.name]) continue;
+    candidates.push(i);
+  }
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return greedy;
+
+  let bestIdx = greedy.index;
+  let bestScore = -Infinity;
+  const oppId = opponentOf(player);
+
+  lookaheadActive = true;
+  try {
+    for (const i of candidates) {
+      const sim = cloneStateForSearch(state);
+      let ok = false;
+      try {
+        ok = attack(sim, player, i).ok;
+      } catch {
+        ok = false;
+      }
+      if (!ok) continue;
+
+      try {
+        drainPending(sim);
+        // Ply 2: opp's expected response.
+        if (sim.phase !== "gameOver" && sim.activePlayer === oppId) {
+          takeAiTurn(sim, oppId);
+        }
+        drainPending(sim);
+        // Ply 3: our follow-up turn (greedy, since lookaheadActive=true).
+        // This evaluates "which attack leaves me in the best position to
+        // continue playing" rather than just "which trade looks best after
+        // opp swings once." Bench-snipe and chip-attacks tend to score
+        // better here when the follow-up KO completes the prize line.
+        if (sim.phase !== "gameOver" && sim.activePlayer === player) {
+          takeAiTurn(sim, player);
+        }
+        drainPending(sim);
+      } catch {
+        // Engine threw mid-simulation — treat as a worst-case score so we
+        // never silently pick a move that breaks invariants.
+        continue;
+      }
+      const score = scorePosition(sim, player);
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = i;
+      }
+    }
+  } finally {
+    lookaheadActive = false;
+  }
+
+  return { index: bestIdx, value: bestScore };
 }

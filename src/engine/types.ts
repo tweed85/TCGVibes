@@ -1237,7 +1237,15 @@ export interface PendingInPlayTarget {
     | { kind: "energySwitchDest"; sourceInstanceId: string } // second step: user picks destination
     | { kind: "jacintheHeal" } // Jacinthe — heal 150 from a damaged Psychic
     | { kind: "pokeVitalAHeal" } // Poké Vital A — heal 150 from any damaged ally
-    | { kind: "wondrousPatchAttach" }; // Wondrous Patch — attach Psychic from discard to a Benched Psychic
+    | { kind: "wondrousPatchAttach" } // Wondrous Patch — attach Psychic from discard to a Benched Psychic
+    // Ability: move N damage counters from `sourceInstanceId` (already
+    // chosen — the most-damaged ally) to whichever opp Pokémon the player
+    // clicks. Resolves any KO triggered by the placement. (Munkidori
+    // Adrena-Brain.)
+    | { kind: "abilityMoveDamage"; counters: number; sourceInstanceId: string; abilityName: string }
+    // Ability: place N counters on the clicked opp Pokémon, then KO the
+    // ability holder. (Dusknoir Cursed Blast.)
+    | { kind: "abilityCursedBlast"; counters: number; holderInstanceId: string; ownerId: PlayerId; abilityName: string };
 }
 
 export interface PendingPick {

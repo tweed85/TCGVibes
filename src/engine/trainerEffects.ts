@@ -16,6 +16,7 @@ import {
   fireTriggeredOnEvolve,
   fireTriggeredOnMoveToActive,
   fireTriggeredOnMoveToBench,
+  knockOutFromAbilityCounters,
 } from "./abilities";
 import { findByName } from "../data/cards";
 import {
@@ -3546,6 +3547,63 @@ export function resolveInPlayTarget(
         `Wondrous Patch: attaches ${e.name} to ${target.card.name}.`,
       );
       state.pendingInPlayTarget = null;
+      return { ok: true };
+    }
+    case "abilityMoveDamage": {
+      // Munkidori-style: source has been pre-picked as the most-damaged ally;
+      // target is whatever opp Pokémon the player just clicked.
+      const counters = pending.action.counters;
+      const sourceId = pending.action.sourceInstanceId;
+      let source: PokemonInPlay | null = null;
+      if (clickerPl.active?.instanceId === sourceId) source = clickerPl.active;
+      else source = clickerPl.bench.find((p) => p.instanceId === sourceId) ?? null;
+      if (!source) {
+        state.pendingInPlayTarget = null;
+        return { ok: false, reason: "Source Pokémon is no longer in play." };
+      }
+      const moved = Math.min(counters, Math.floor(source.damage / 10));
+      if (moved <= 0) {
+        state.pendingInPlayTarget = null;
+        return { ok: false, reason: "No counters left to move." };
+      }
+      source.damage -= moved * 10;
+      target.damage += moved * 10;
+      logEvent(
+        state,
+        clicker,
+        `uses ${pending.action.abilityName}: moves ${moved} damage counter(s) from ${source.card.name} to ${target.card.name}.`,
+      );
+      state.pendingInPlayTarget = null;
+      knockOutFromAbilityCounters(state, targetOwner, target);
+      return { ok: true };
+    }
+    case "abilityCursedBlast": {
+      // Place counters, KO target if applicable, then self-KO the holder.
+      const counters = pending.action.counters;
+      const holderId = pending.action.holderInstanceId;
+      const ownerId = pending.action.ownerId;
+      const ownerPlState = state.players[ownerId];
+      let holder: PokemonInPlay | null = null;
+      if (ownerPlState.active?.instanceId === holderId) holder = ownerPlState.active;
+      else holder = ownerPlState.bench.find((p) => p.instanceId === holderId) ?? null;
+      if (!holder) {
+        state.pendingInPlayTarget = null;
+        return { ok: false, reason: "Ability holder is no longer in play." };
+      }
+      target.damage += counters * 10;
+      logEvent(
+        state,
+        clicker,
+        `uses ${pending.action.abilityName}: puts ${counters} counters on ${target.card.name}.`,
+      );
+      state.pendingInPlayTarget = null;
+      knockOutFromAbilityCounters(state, targetOwner, target);
+      // Self-KO the holder regardless of whether the target's KO ended the
+      // game — checking phase keeps us idempotent.
+      if (state.phase !== "gameOver") {
+        holder.damage = 9999;
+        knockOutFromAbilityCounters(state, ownerId, holder);
+      }
       return { ok: true };
     }
   }

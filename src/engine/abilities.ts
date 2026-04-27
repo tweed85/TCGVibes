@@ -8,8 +8,8 @@
 // generic text patterns and a hand-picked set of common cards where the
 // exact wording is specific (e.g. Thwackey's conditional search).
 
-import { logEvent, makePokemonInPlay } from "./rules";
-import { abilitiesActiveOn } from "./ongoingEffects";
+import { knockOut, logEvent, makePokemonInPlay, prizeValue, resolveBenchKOs } from "./rules";
+import { abilitiesActiveOn, effectiveMaxHp } from "./ongoingEffects";
 import { setDeckSearchPick, setTopPeekPick } from "./pendingPick";
 import type {
   Ability,
@@ -29,6 +29,24 @@ const ENERGY_TYPES: EnergyType[] = [
   "Grass", "Fire", "Water", "Lightning", "Psychic",
   "Fighting", "Darkness", "Metal", "Fairy", "Dragon", "Colorless",
 ];
+
+// Resolve a KO triggered by an ability that places damage counters. Handles
+// either active or bench correctly: active KOs flow through `knockOut`
+// (tools, prizes, promote pause), bench KOs through `resolveBenchKOs`.
+export function knockOutFromAbilityCounters(
+  state: GameState,
+  ownerId: PlayerId,
+  target: PokemonInPlay,
+): void {
+  if (state.phase === "gameOver") return;
+  const owner = state.players[ownerId];
+  if (target.damage < effectiveMaxHp(target, state)) return;
+  if (owner.active && owner.active.instanceId === target.instanceId) {
+    knockOut(state, ownerId);
+  } else {
+    resolveBenchKOs(state);
+  }
+}
 
 // Abilities that need bespoke detection (by name) because their text is
 // more specific than a generic regex would handle cleanly.
@@ -862,18 +880,50 @@ export function activateAbility(
       const opp = state.players[oppId];
       const oppTargets = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
       if (oppTargets.length === 0) return { ok: false, reason: "No opposing Pokémon." };
-      // Pick the opp Pokémon closest to KO to maximize value.
-      const oppTarget = oppTargets.slice().sort((a, b) => (b.damage + (b.card.hp - a.card.hp)) - (a.damage + (a.card.hp - b.card.hp)))[0];
       const moved = Math.min(e.counters, Math.floor(source.damage / 10));
       if (moved === 0) return { ok: false, reason: "No counters to move." };
-      source.damage -= moved * 10;
-      oppTarget.damage += moved * 10;
+      // Human players pick the target. AI auto-picks the highest-value spot.
+      if (!pl.isAI) {
+        state.pendingInPlayTarget = {
+          player,
+          label: `${ability.name}: pick an opp Pokémon to receive ${moved} damage counter(s)`,
+          scope: "opp",
+          slot: "anywhere",
+          filter: "anyPokemon",
+          action: {
+            kind: "abilityMoveDamage",
+            counters: moved,
+            sourceInstanceId: source.instanceId,
+            abilityName: ability.name,
+          },
+        };
+        return { ok: true };
+      }
+      // AI auto-target: prefer a target this places into KO range, weighted
+      // by prize value. Otherwise pick the lowest remaining HP so the
+      // counters chip closer to a future KO.
+      const added = moved * 10;
+      const oppTarget = oppTargets.slice().sort((a, b) => {
+        const aHp = effectiveMaxHp(a, state);
+        const bHp = effectiveMaxHp(b, state);
+        const aKO = a.damage + added >= aHp ? 1 : 0;
+        const bKO = b.damage + added >= bHp ? 1 : 0;
+        if (aKO !== bKO) return bKO - aKO;
+        if (aKO) {
+          const aPrize = prizeValue(a.card);
+          const bPrize = prizeValue(b.card);
+          if (aPrize !== bPrize) return bPrize - aPrize;
+        }
+        return (aHp - a.damage) - (bHp - b.damage);
+      })[0];
+      source.damage -= added;
+      oppTarget.damage += added;
       logEvent(
         state,
         player,
         `uses ${ability.name}: moves ${moved} damage counter(s) from ${source.card.name} to ${oppTarget.card.name}.`,
       );
-      // Resolve any KO from this.
+      knockOutFromAbilityCounters(state, oppId, oppTarget);
       break;
     }
 
@@ -1082,16 +1132,48 @@ export function activateAbility(
       const opp = state.players[oppId];
       const targets = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
       if (targets.length === 0) return { ok: false, reason: "No opposing Pokémon." };
-      const target = targets.slice().sort((a, b) => b.damage - a.damage)[0];
-      target.damage += e.counters * 10;
+      // Human players pick the target Pokémon — Cursed Blast is a one-time
+      // play with a heavy cost (self-KO), so the call is theirs to make.
+      if (!pl.isAI) {
+        state.pendingInPlayTarget = {
+          player,
+          label: `${ability.name}: pick an opp Pokémon to receive ${e.counters} damage counter(s) (this Pokémon will be Knocked Out)`,
+          scope: "opp",
+          slot: "anywhere",
+          filter: "anyPokemon",
+          action: {
+            kind: "abilityCursedBlast",
+            counters: e.counters,
+            holderInstanceId: holder.instanceId,
+            ownerId: player,
+            abilityName: ability.name,
+          },
+        };
+        return { ok: true };
+      }
+      // AI auto-target: prefer a target this places into KO range, weighted
+      // by prize value. Otherwise pick the lowest remaining HP.
+      const added = e.counters * 10;
+      const target = targets.slice().sort((a, b) => {
+        const aHp = effectiveMaxHp(a, state);
+        const bHp = effectiveMaxHp(b, state);
+        const aKO = a.damage + added >= aHp ? 1 : 0;
+        const bKO = b.damage + added >= bHp ? 1 : 0;
+        if (aKO !== bKO) return bKO - aKO;
+        if (aKO) {
+          const aPrize = prizeValue(a.card);
+          const bPrize = prizeValue(b.card);
+          if (aPrize !== bPrize) return bPrize - aPrize;
+        }
+        return (aHp - a.damage) - (bHp - b.damage);
+      })[0];
+      target.damage += added;
       logEvent(state, player, `uses ${ability.name}: puts ${e.counters} counters on ${target.card.name}.`);
-      // Self KO — set holder damage past its max.
+      knockOutFromAbilityCounters(state, oppId, target);
+      // Self KO — run through the standard pipeline (handles tools, prizes,
+      // promote pause).
       holder.damage = 9999;
-      // Caller's flow (bench/KO resolution) runs after the ability returns in
-      // the normal action flow; here we note it and let the next natural
-      // check pick it up. The common path is: after the user triggers the
-      // ability, the UI will show the KO state and a promote/bench resolve
-      // will happen on the next tick.
+      knockOutFromAbilityCounters(state, player, holder);
       break;
     }
 
