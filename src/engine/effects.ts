@@ -1643,9 +1643,9 @@ export function resolveAttackEffects(
 
       case "attachNFromDiscardToBench": {
         // Mega Lucario ex "Aura Jab" — up to N Basic <type> Energy from
-        // discard to your Benched Pokémon in any way. Auto-pick: round-robin
-        // across benched allies. Always log so the player sees what
-        // happened, even if nothing could be attached.
+        // discard to your Benched Pokémon in any way you like. Humans get
+        // an interactive picker that lets them choose each target; the AI
+        // auto-rounds-robin across benched allies for speed.
         postHooks.push(() => {
           const pl = state.players[ctx.attackerOwner];
           if (pl.bench.length === 0) {
@@ -1662,6 +1662,25 @@ export function resolveAttackEffects(
             logEvent(state, ctx.attackerOwner, `${ctx.move.name}: no basic ${e.energyType} Energy in discard to attach.`);
             return;
           }
+          const isHuman = !pl.isAI;
+          if (isHuman) {
+            const remaining = Math.min(e.max, available);
+            state.pendingInPlayTarget = {
+              player: ctx.attackerOwner,
+              label: `${ctx.move.name}: pick a Bench Pokémon to attach a ${e.energyType} Energy from discard (${remaining} left)`,
+              scope: "own",
+              slot: "bench",
+              filter: "anyPokemon",
+              action: {
+                kind: "attachEnergyFromDiscardPicker",
+                remaining,
+                energyType: e.energyType,
+                attackName: ctx.move.name,
+              },
+            };
+            return;
+          }
+          // AI auto-pick: round-robin across bench.
           let attached = 0;
           for (let i = 0; i < e.max; i++) {
             const idx = pl.discard.findIndex(

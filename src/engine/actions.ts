@@ -16,6 +16,7 @@ import {
   flipCoin,
   hasStatus,
   isBasic,
+  isPlayersFirstTurn,
   isPokemon,
   knockOut,
   logEvent,
@@ -179,7 +180,8 @@ export function evolve(
   );
   // Once-per-instance rule — bypassed by FoV's Grass→Grass chain.
   if (target.evolvedThisTurn && !fovChain) return fail("Already evolved this turn.");
-  if (state.turn === 1 && !allowsTurn1) return fail("No evolving on the first turn.");
+  if (isPlayersFirstTurn(state, player) && !allowsTurn1)
+    return fail("No evolving on your first turn.");
   // Played-this-turn rule — bypassed by FoV (Grass→Grass) or turn-1 abilities.
   if (target.playedThisTurn && !fovChain && !allowsTurn1)
     return fail("Can't evolve a Pokémon played this turn.");
@@ -247,21 +249,13 @@ export function evolve(
 
   // Fire any triggered-on-evolve ability the evolved card has (e.g.
   // Noctowl's Jewel Seeker, Alakazam's Psychic Draw, Hariyama's Heave-Ho
-  // Catcher). Happens before the Mega Evolution end-of-turn check so the
-  // triggered effect can still resolve (and open a pendingPick if needed).
+  // Catcher).
   fireTriggeredOnEvolve(state, player, target);
-
-  // Mega Evolution rule: evolving into a Mega Pokémon ends your turn.
-  // Detected via the "Mega Evolution rule" text on the card's rule box.
-  const rules = card.rules ?? [];
-  const isMega =
-    card.subtypes.some((s) => /^Mega/i.test(s)) ||
-    rules.some((r) => /when .* Mega Evolves, your turn ends/i.test(r)) ||
-    rules.some((r) => /Mega Evolution rule/i.test(r));
-  if (isMega) {
-    logEvent(state, "system", `${card.name}'s Mega Evolution ends the turn.`);
-    endTurnRule(state);
-  }
+  // Note: the current Mega Evolution mechanic (Mega Evolution ex set onward)
+  // does NOT end your turn — the only Mega-specific rule on these cards is
+  // "When your Mega Evolution Pokémon ex is Knocked Out, your opponent
+  // takes 3 Prize cards." That's enforced via `prizeValue` in rules.ts.
+  // The XY-era "Mega Evolution ends your turn" rule is no longer in effect.
   return ok;
 }
 

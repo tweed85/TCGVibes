@@ -1572,17 +1572,16 @@ function tryEvolve(state: GameState, player: PlayerId): boolean {
       if (newCanAttack) s += 25;
       else if (oldCanAttack && t === pl.active) s -= 30;
       // Bonus when this evolution is the Active and our current Active will
-      // OHKO the opponent (so we want the upgraded HP/attacks online ASAP).
-      // 1-ply lookahead reuse: opponentMaxDamageNextTurn against the current
-      // active is a poor proxy here, so we skip that check.
-      // Mega Evolution ends the turn — only evolve to Mega if we can attack
-      // right after AND the attack is meaningful.
+      // Mega Evolution ex: 3-prize liability. Slight penalty for evolving
+      // into a Mega when we can't immediately attack so the AI doesn't
+      // commit to a 3-prizer on a defenseless turn. (Pre-2025 the rule was
+      // "Mega evolving ends your turn" — no longer in effect, so no big
+      // penalty.)
       const isMega = (c.subtypes ?? []).some((st) => MEGA_SUBTYPE_RE.test(st));
       if (isMega) {
         const canAttackImmediately = c.attacks.some((a) =>
           canPayCost(provided, a.cost));
-        if (!canAttackImmediately) s -= 200;
-        else s += 40;
+        s += canAttackImmediately ? 30 : -10;
       }
       // Don't burn an evolution on a damaged Active that's about to die —
       // the new card just gets KO'd. Exception: if evolving heals (some

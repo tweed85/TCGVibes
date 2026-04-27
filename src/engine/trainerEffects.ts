@@ -10,7 +10,7 @@
 // "if Community Center is in play") are mostly approximated or skipped; the
 // core draw/search/heal behaviors are correct.
 
-import { enforceSpecialEnergyAttachRules, logEvent, makePokemonInPlay, newInstanceId } from "./rules";
+import { enforceSpecialEnergyAttachRules, isPlayersFirstTurn, logEvent, makePokemonInPlay, newInstanceId } from "./rules";
 import { clearAllStatuses } from "./rules";
 import { benchDamageBlocked, benchDamageBlockedByFlowerCurtain } from "./ongoingEffects";
 import {
@@ -792,8 +792,8 @@ export function precheckTrainerEffect(
     }
   }
   if (id === "rareCandyEvolve") {
-    // Can't use Rare Candy on turn 1 (rulebook).
-    if (state.turn === 1) return "Can't use Rare Candy on the first turn.";
+    // Can't use Rare Candy on either player's first turn (rulebook).
+    if (isPlayersFirstTurn(state, player)) return "Can't use Rare Candy on your first turn.";
     const targetId =
       target?.kind === "inPlay" ? target.instanceId : null;
     if (!targetId) return "Pick the Basic Pokémon to evolve.";
@@ -974,7 +974,7 @@ export function precheckTrainerEffect(
   // Grimsley's Move — first-turn block (already handled in handler, but raise
   // it to precheck so the Supporter slot isn't wasted); also needs bench room.
   if (id === "darkBasicPokemonTopPeek") {
-    if (state.turn === 1) return "Can't use Grimsley's Move on the first turn.";
+    if (isPlayersFirstTurn(state, player)) return "Can't use Grimsley's Move on your first turn.";
     if (pl.bench.length >= 5) return "Your Bench is full.";
   }
 
@@ -2248,8 +2248,8 @@ export function applyTrainerEffect(
 
     case "darkBasicPokemonTopPeek": {
       // Grimsley's Move — top 7, Darkness Pokémon to bench.
-      if (state.turn === 1) {
-        logEvent(state, player, "can't use Grimsley's Move on the first turn.");
+      if (isPlayersFirstTurn(state, player)) {
+        logEvent(state, player, "can't use Grimsley's Move on your first turn.");
         return;
       }
       const top = pl.deck.splice(0, 7);
@@ -3644,6 +3644,47 @@ export function resolveInPlayTarget(
         state.pendingInPlayTarget = null;
       }
       knockOutFromAbilityCounters(state, targetOwner, target);
+      return { ok: true };
+    }
+    case "attachEnergyFromDiscardPicker": {
+      // Aura Jab et al. — pull a matching basic Energy out of discard, attach
+      // to the clicked Bench Pokémon, decrement remaining. Close picker
+      // when the count hits 0 or no matching Energy is left in discard.
+      const action = pending.action;
+      const idx = clickerPl.discard.findIndex(
+        (c) =>
+          c.supertype === "Energy" &&
+          c.subtypes.includes("Basic") &&
+          (c as EnergyCard).provides.includes(action.energyType),
+      );
+      if (idx < 0) {
+        state.pendingInPlayTarget = null;
+        logEvent(state, clicker, `${action.attackName}: no more ${action.energyType} Energy in discard.`);
+        return { ok: true };
+      }
+      const [en] = clickerPl.discard.splice(idx, 1) as [EnergyCard];
+      target.attachedEnergy.push(en);
+      logEvent(
+        state,
+        clicker,
+        `${action.attackName}: attaches ${en.name} to ${target.card.name}.`,
+      );
+      const remaining = action.remaining - 1;
+      const stillAvailable = clickerPl.discard.some(
+        (c) =>
+          c.supertype === "Energy" &&
+          c.subtypes.includes("Basic") &&
+          (c as EnergyCard).provides.includes(action.energyType),
+      );
+      if (remaining > 0 && stillAvailable) {
+        state.pendingInPlayTarget = {
+          ...pending,
+          label: `${action.attackName}: pick a Bench Pokémon to attach a ${action.energyType} Energy from discard (${remaining} left)`,
+          action: { ...action, remaining },
+        };
+      } else {
+        state.pendingInPlayTarget = null;
+      }
       return { ok: true };
     }
     case "abilityCursedBlast": {

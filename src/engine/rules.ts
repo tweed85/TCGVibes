@@ -134,6 +134,7 @@ export function setupGame(
     phase: "coinFlip",
     winner: null,
     log: [],
+    firstPlayer: null,
     firstTurnNoAttack: true,
     stadium: null,
     pendingPromote: null,
@@ -223,6 +224,7 @@ export function chooseFirstPlayer(
   if (state.coinFlip.winner !== chooser) return "Not your choice.";
   const firstPlayer: PlayerId = goFirst ? chooser : (chooser === "p1" ? "p2" : "p1");
   state.activePlayer = firstPlayer;
+  state.firstPlayer = firstPlayer;
   state.coinFlip = null;
   state.phase = "setup";
   logEvent(
@@ -605,10 +607,23 @@ export function applyDamage(
   if (target.damage >= effectiveMaxHp(target, state)) knockOut(state, defenderOwner);
 }
 
-// Prize-card value when KO'd. ex/V/GX give 2; VMAX and V-UNION give 3;
-// VSTAR gives 2; Radiant and everything else give 1.
+// True if `player` is currently on their own first turn of the game.
+// Going-first player's first turn is engine turn 1; going-second's is
+// turn 2. Falls back to legacy turn=1 check if firstPlayer hasn't been
+// recorded (e.g. tests that bypass chooseFirstPlayer).
+export function isPlayersFirstTurn(state: GameState, player: PlayerId): boolean {
+  if (state.firstPlayer === null) return state.turn === 1;
+  return state.firstPlayer === player ? state.turn === 1 : state.turn === 2;
+}
+
+// Prize-card value when KO'd. Mega Evolution ex / VMAX / V-UNION give 3;
+// ex/V/VSTAR/GX give 2; Radiant and everything else give 1.
 export function prizeValue(card: PokemonCard): number {
   const subs = card.subtypes ?? [];
+  // Mega Evolution ex Rule: "When your Mega Evolution Pokémon ex is Knocked
+  // Out, your opponent takes 3 Prize cards." Cards mark this with both "MEGA"
+  // (or "Mega ...") and "ex" subtypes — check Mega first.
+  if (subs.some((s) => /^MEGA$/i.test(s) || /^Mega /.test(s))) return 3;
   if (subs.includes("VMAX")) return 3;
   if (subs.includes("VSTAR")) return 2;
   if (subs.includes("V")) return 2;

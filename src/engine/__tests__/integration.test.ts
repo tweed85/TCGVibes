@@ -231,6 +231,164 @@ describe("Per-Pokemon lock flags (selfCantAttack / cantRetreat)", () => {
   });
 });
 
+describe("First-turn evolve gate — applies to BOTH players' first turn", () => {
+  it("blocks the going-second player from evolving on their first turn (engine T2)", async () => {
+    const { evolve } = await import("../actions");
+    const state = bootGameToMain(444);
+    // Going-first player took turn 1; turn passes to going-second on T2.
+    // Set up so going-second is now active.
+    const goingSecond = state.firstPlayer === "p1" ? "p2" : "p1";
+    state.activePlayer = goingSecond;
+    state.turn = 2;
+    state.firstTurnNoAttack = false;
+    state.phase = "main";
+    const pl = state.players[goingSecond];
+    // Place a Hoothoot on bench (already in play from setup, mark playedThisTurn=false).
+    const hoothoot: PokemonCard = {
+      id: "hoot-test", name: "Hoothoot", supertype: "Pokémon",
+      subtypes: ["Basic"], hp: 60, types: ["Colorless"], attacks: [], retreatCost: ["Colorless"],
+    };
+    pl.bench.push({
+      instanceId: "hh1", card: hoothoot, damage: 0, attachedEnergy: [],
+      evolvedFrom: [], tools: [], playedThisTurn: false, evolvedThisTurn: false,
+      statuses: [], abilityUsedThisTurn: false,
+    });
+    const noctowl: PokemonCard = {
+      id: "noct-test", name: "Noctowl", supertype: "Pokémon",
+      subtypes: ["Stage 1"], hp: 110, types: ["Colorless"], attacks: [], retreatCost: ["Colorless"],
+      evolvesFrom: "Hoothoot",
+    };
+    pl.hand.push(noctowl);
+    const handIdx = pl.hand.length - 1;
+    const r = evolve(state, goingSecond, handIdx, "hh1");
+    expect(r.ok).toBe(false);
+    expect(r.ok ? "" : r.reason).toMatch(/first turn/i);
+  });
+
+  it("blocks the going-first player on engine T1 (existing behavior)", async () => {
+    const { evolve } = await import("../actions");
+    const state = bootGameToMain(445);
+    const goingFirst = state.firstPlayer ?? state.activePlayer;
+    state.activePlayer = goingFirst;
+    state.turn = 1;
+    state.phase = "main";
+    const pl = state.players[goingFirst];
+    const hoothoot: PokemonCard = {
+      id: "hoot-test-2", name: "Hoothoot", supertype: "Pokémon",
+      subtypes: ["Basic"], hp: 60, types: ["Colorless"], attacks: [], retreatCost: ["Colorless"],
+    };
+    pl.bench.push({
+      instanceId: "hh2", card: hoothoot, damage: 0, attachedEnergy: [],
+      evolvedFrom: [], tools: [], playedThisTurn: false, evolvedThisTurn: false,
+      statuses: [], abilityUsedThisTurn: false,
+    });
+    const noctowl: PokemonCard = {
+      id: "noct-test-2", name: "Noctowl", supertype: "Pokémon",
+      subtypes: ["Stage 1"], hp: 110, types: ["Colorless"], attacks: [], retreatCost: ["Colorless"],
+      evolvesFrom: "Hoothoot",
+    };
+    pl.hand.push(noctowl);
+    const handIdx = pl.hand.length - 1;
+    const r = evolve(state, goingFirst, handIdx, "hh2");
+    expect(r.ok).toBe(false);
+    expect(r.ok ? "" : r.reason).toMatch(/first turn/i);
+  });
+
+  it("allows the going-FIRST player to evolve on T3 (their second turn)", async () => {
+    const { evolve } = await import("../actions");
+    const state = bootGameToMain(446);
+    const goingFirst = state.firstPlayer ?? state.activePlayer;
+    state.activePlayer = goingFirst;
+    state.turn = 3;
+    state.phase = "main";
+    const pl = state.players[goingFirst];
+    const hoothoot: PokemonCard = {
+      id: "hoot-test-3", name: "Hoothoot", supertype: "Pokémon",
+      subtypes: ["Basic"], hp: 60, types: ["Colorless"], attacks: [], retreatCost: ["Colorless"],
+    };
+    pl.bench.push({
+      instanceId: "hh3", card: hoothoot, damage: 0, attachedEnergy: [],
+      evolvedFrom: [], tools: [], playedThisTurn: false, evolvedThisTurn: false,
+      statuses: [], abilityUsedThisTurn: false,
+    });
+    const noctowl: PokemonCard = {
+      id: "noct-test-3", name: "Noctowl", supertype: "Pokémon",
+      subtypes: ["Stage 1"], hp: 110, types: ["Colorless"], attacks: [], retreatCost: ["Colorless"],
+      evolvesFrom: "Hoothoot",
+    };
+    pl.hand.push(noctowl);
+    const handIdx = pl.hand.length - 1;
+    const r = evolve(state, goingFirst, handIdx, "hh3");
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe("Aura Jab — human picks where each Energy goes", () => {
+  it("opens a multi-pick picker; each click attaches one Energy to chosen Bench Pokémon", async () => {
+    const { resolveInPlayTarget } = await import("../trainerEffects");
+    const state = bootGameToMain(99);
+    const ap = state.activePlayer;
+    const opp = ap === "p1" ? "p2" : "p1";
+    state.players[ap].isAI = false;
+    // Two Fighting Energy in discard, ready to be pulled.
+    state.players[ap].discard = [
+      { id: "f1", name: "Basic Fighting Energy", supertype: "Energy", subtypes: ["Basic"], provides: ["Fighting"] },
+      { id: "f2", name: "Basic Fighting Energy", supertype: "Energy", subtypes: ["Basic"], provides: ["Fighting"] },
+    ];
+    // Mega Lucario-like attacker with Aura Jab.
+    state.players[ap].active!.card = {
+      id: "ml-test", name: "Mega Lucario ex", supertype: "Pokémon",
+      subtypes: ["Stage 2", "Mega Evolution", "ex"], hp: 320, types: ["Fighting"],
+      attacks: [{
+        name: "Aura Jab",
+        cost: ["Fighting", "Fighting", "Colorless"],
+        damage: 120,
+        effects: [{ kind: "attachNFromDiscardToBench", energyType: "Fighting", max: 2 }],
+      }],
+      retreatCost: ["Colorless", "Colorless"],
+    };
+    state.players[ap].active!.attachedEnergy = [
+      { id: "e-f1", name: "Basic Fighting Energy", supertype: "Energy", subtypes: ["Basic"], provides: ["Fighting"] },
+      { id: "e-f2", name: "Basic Fighting Energy", supertype: "Energy", subtypes: ["Basic"], provides: ["Fighting"] },
+      { id: "e-c", name: "Basic Psychic Energy", supertype: "Energy", subtypes: ["Basic"], provides: ["Psychic"] },
+    ];
+    // Two distinguishable benched Pokémon to pick from.
+    const benchTemplate: PokemonCard = {
+      id: "bench-t", name: "Bench Buddy", supertype: "Pokémon",
+      subtypes: ["Basic"], hp: 80, types: ["Colorless"], attacks: [], retreatCost: [],
+    };
+    state.players[ap].bench = [
+      { instanceId: "b1", card: benchTemplate, damage: 0, attachedEnergy: [], evolvedFrom: [], tools: [], playedThisTurn: false, evolvedThisTurn: false, statuses: [], abilityUsedThisTurn: false },
+      { instanceId: "b2", card: benchTemplate, damage: 0, attachedEnergy: [], evolvedFrom: [], tools: [], playedThisTurn: false, evolvedThisTurn: false, statuses: [], abilityUsedThisTurn: false },
+    ];
+    // Give opp some bench so the game doesn't end on the active KO.
+    const oppFiller: PokemonCard = {
+      id: "opp-filler", name: "Opp Filler", supertype: "Pokémon",
+      subtypes: ["Basic"], hp: 60, types: ["Colorless"], attacks: [], retreatCost: [],
+    };
+    state.players[opp].bench = [
+      { instanceId: "of1", card: oppFiller, damage: 0, attachedEnergy: [], evolvedFrom: [], tools: [], playedThisTurn: false, evolvedThisTurn: false, statuses: [], abilityUsedThisTurn: false },
+    ];
+    const ar = attack(state, ap, 0);
+    expect(ar.ok).toBe(true);
+    // Picker is now open with 2 picks remaining.
+    expect(state.pendingInPlayTarget).not.toBeNull();
+    expect(state.pendingInPlayTarget!.action.kind).toBe("attachEnergyFromDiscardPicker");
+    // First click: send to bench[0].
+    let r = resolveInPlayTarget(state, ap, ap, "b1");
+    expect(r.ok).toBe(true);
+    expect(state.players[ap].bench[0].attachedEnergy.length).toBe(1);
+    // Picker still open with 1 left.
+    expect(state.pendingInPlayTarget).not.toBeNull();
+    // Second click: send to bench[1].
+    r = resolveInPlayTarget(state, ap, ap, "b2");
+    expect(r.ok).toBe(true);
+    expect(state.players[ap].bench[1].attachedEnergy.length).toBe(1);
+    // Picker closes.
+    expect(state.pendingInPlayTarget).toBeNull();
+  });
+});
+
 describe("Unfair Stamp — gated on KO last turn", () => {
   it("rejects play when no Pokémon was KO'd during opp's last turn", async () => {
     const { precheckTrainerEffect } = await import("../trainerEffects");

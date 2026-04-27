@@ -1258,7 +1258,12 @@ export interface PendingInPlayTarget {
     // click hits the chosen opp Pokémon for `perHit` damage; `remaining`
     // decrements. When remaining reaches 0, the picker closes. `benchOnly`
     // restricts targets to the opp's Bench (Phantom Dive).
-    | { kind: "distributeDamage"; remaining: number; perHit: number; ignoreWR: boolean; benchOnly?: boolean; attackName: string };
+    | { kind: "distributeDamage"; remaining: number; perHit: number; ignoreWR: boolean; benchOnly?: boolean; attackName: string }
+    // Multi-pick energy attach to your own Bench (Aura Jab et al.). Each
+    // click pulls one matching basic Energy out of discard and attaches
+    // to the clicked Bench Pokémon. `remaining` decrements; when 0 OR
+    // discard runs dry, the picker closes.
+    | { kind: "attachEnergyFromDiscardPicker"; remaining: number; energyType: EnergyType; attackName: string };
 }
 
 export interface PendingPick {
@@ -1330,6 +1335,10 @@ export interface GameState {
   phase: Phase;
   winner: PlayerId | null;
   log: LogEntry[];
+  // The player who goes first this game. Set by chooseFirstPlayer; null
+  // until then. Used to derive "this is my first turn" for both players —
+  // going-first's first turn is engine turn 1; going-second's is turn 2.
+  firstPlayer: PlayerId | null;
   // True on the very first player's first turn — they cannot attack or play a Supporter.
   firstTurnNoAttack: boolean;
   // Stadium card currently in play (replaces previous when a new one is played).
