@@ -173,7 +173,7 @@ export const DECK_SPECS: DeckSpec[] = [
   },
   {
     id: "lucario-ex",
-    name: "Lucario ex",
+    name: "Mega Lucario",
     description: "Mega Lucario ex hits hard under Premium Power Pro with a Fighting-search engine.",
     decklist: LUCARIO,
   },

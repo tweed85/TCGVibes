@@ -22,7 +22,6 @@ import {
   canPayCost,
   chooseFirstPlayer,
   completeSetup,
-  energyProvidedBy,
   isBasic,
   isPokemon,
   prizeValue,
@@ -34,6 +33,7 @@ import {
   effectiveAttackCost,
   effectiveMaxHp,
   effectiveRetreatCost,
+  energyPoolForCost,
   stadiumAttackBonus,
   stadiumDamageReduction,
   turnAttackBonus,
@@ -161,7 +161,7 @@ export function resolveAiPendingPromote(state: GameState, player: PlayerId): boo
 function scorePromoteCandidate(p: PokemonInPlay, state: GameState, owner: PlayerId): number {
   let s = 0;
   // Can we attack right now from this spot? Huge plus.
-  const provided = energyProvidedBy(p);
+  const provided = energyPoolForCost(p, state);
   const usable = p.card.attacks.filter((a) =>
     canPayCost(provided, effectiveAttackCost(state, p, a.cost)),
   );
@@ -179,7 +179,7 @@ function scorePromoteCandidate(p: PokemonInPlay, state: GameState, owner: Player
   const oppId = opponentOf(owner);
   const opp = state.players[oppId];
   if (opp.active) {
-    const oppProvided = energyProvidedBy(opp.active);
+    const oppProvided = energyPoolForCost(opp.active, state);
     let threat = 0;
     for (const move of opp.active.card.attacks) {
       if (!canPayCost(oppProvided, effectiveAttackCost(state, opp.active, move.cost))) continue;
@@ -723,7 +723,7 @@ function weNeedEnergy(state: GameState, player: PlayerId): boolean {
   const pl = state.players[player];
   const all = [pl.active, ...pl.bench].filter((x): x is PokemonInPlay => !!x);
   for (const p of all) {
-    const cur = energyProvidedBy(p).length;
+    const cur = energyPoolForCost(p, state).length;
     const best = Math.min(...(p.card.attacks.length
       ? p.card.attacks.map((a) => effectiveAttackCost(state, p, a.cost).length)
       : [99]));
@@ -733,14 +733,14 @@ function weNeedEnergy(state: GameState, player: PlayerId): boolean {
 }
 
 function benchCanAttack(state: GameState, p: PokemonInPlay): boolean {
-  const provided = energyProvidedBy(p);
+  const provided = energyPoolForCost(p, state);
   return p.card.attacks.some((a) => canPayCost(provided, effectiveAttackCost(state, p, a.cost)));
 }
 
 function activeCantAttack(state: GameState, player: PlayerId): boolean {
   const a = state.players[player].active;
   if (!a) return true;
-  const provided = energyProvidedBy(a);
+  const provided = energyPoolForCost(a, state);
   return !a.card.attacks.some((atk) => canPayCost(provided, effectiveAttackCost(state, a, atk.cost)));
 }
 
@@ -755,7 +755,7 @@ function bestGustTarget(state: GameState, player: PlayerId): PokemonInPlay | nul
 
   // Only gust if our Active can actually attack (no point otherwise).
   const atk = pl.active;
-  const provided = energyProvidedBy(atk);
+  const provided = energyPoolForCost(atk, state);
   const usable = atk.card.attacks.filter((a) =>
     canPayCost(provided, effectiveAttackCost(state, atk, a.cost)),
   );
@@ -839,7 +839,7 @@ function scoreEnergyTarget(
 ): number {
   const pl = state.players[player];
   const isActive = pl.active === p;
-  const provided = energyProvidedBy(p);
+  const provided = energyPoolForCost(p, state);
   // Simulate attaching by adding the energy to the provided pool.
   const simulated = [...provided, ...energy.provides];
 
@@ -914,7 +914,7 @@ function pickBestAttack(state: GameState, player: PlayerId): { index: number; va
   }
   // Per-attack locks (Riolu/Mega Brave-style "can't use <name> next turn").
   const perAttackLock = (atk as typeof atk & { cantUseAttacksUntilTurn?: Record<string, number> }).cantUseAttacksUntilTurn;
-  const provided = energyProvidedBy(atk);
+  const provided = energyPoolForCost(atk, state);
   const defender = state.players[opponentOf(player)].active;
   let best: { index: number; value: number } | null = null;
   for (let i = 0; i < atk.card.attacks.length; i++) {
@@ -1320,7 +1320,7 @@ function scoreAbility(
     // Energy ramp from discard / deck ----------------------------------------
     case "attachEnergyFromDiscardToSelf": {
       const has = hasBasicEnergyInDiscard();
-      return has && holder.card.attacks.some((a) => a.cost.length > energyProvidedBy(holder).length) ? 70 : 10;
+      return has && holder.card.attacks.some((a) => a.cost.length > energyPoolForCost(holder, state).length) ? 70 : 10;
     }
     case "attachEnergyFromDiscardToBench":
       return hasBasicEnergyInDiscard(effect.energyType) && pl.bench.length > 0 ? 75 : 0;
@@ -1564,7 +1564,7 @@ function tryEvolve(state: GameState, player: PlayerId): boolean {
       // The evolved form's attack-readiness matters. If the new card has a
       // useable attack with current energy, prefer it. If it doesn't and the
       // pre-evo did, this is a tempo loss — penalize.
-      const provided = energyProvidedBy(t);
+      const provided = energyPoolForCost(t, state);
       const newCanAttack = c.attacks.some((a) =>
         canPayCost(provided, a.cost));
       const oldCanAttack = t.card.attacks.some((a) =>
@@ -1656,7 +1656,7 @@ function opponentMaxDamageNextTurn(state: GameState, player: PlayerId): number {
   const ourAct = state.players[player].active;
   if (!oppAct || !ourAct) return 0;
 
-  const provided = energyProvidedBy(oppAct);
+  const provided = energyPoolForCost(oppAct, state);
   const primary = deckPrimaryEnergy(opp.deck, opp.hand);
   // One-extra-energy hypothetical: if the opp has that energy type available
   // (deck or hand), assume they'll attach it.
@@ -1694,7 +1694,7 @@ function hasLethalThisTurn(state: GameState, player: PlayerId): boolean {
   if (atk.cantAttackUntilTurn !== undefined && state.turn <= atk.cantAttackUntilTurn) return false;
   const defender = state.players[opponentOf(player)].active;
   if (!defender) return false;
-  const provided = energyProvidedBy(atk);
+  const provided = energyPoolForCost(atk, state);
   const perAttackLock = (atk as typeof atk & { cantUseAttacksUntilTurn?: Record<string, number> }).cantUseAttacksUntilTurn;
   for (const move of atk.card.attacks) {
     if (!canPayCost(provided, effectiveAttackCost(state, atk, move.cost))) continue;
@@ -1721,7 +1721,7 @@ function tryDefensiveRetreat(state: GameState, player: PlayerId): boolean {
   if (threat < ourHp) return false;
 
   const cost = effectiveRetreatCost(ourAct, state).length;
-  const currentEnergy = energyProvidedBy(ourAct).length;
+  const currentEnergy = energyPoolForCost(ourAct, state).length;
   if (currentEnergy < cost) return false;
 
   // Pick the bench option that (a) is likely to survive the threat AND
@@ -1759,7 +1759,7 @@ function tryRetreat(state: GameState, player: PlayerId): boolean {
   if (!activeCantAttack(state, player)) return false;
 
   const cost = effectiveRetreatCost(pl.active, state).length;
-  const currentEnergy = energyProvidedBy(pl.active).length;
+  const currentEnergy = energyPoolForCost(pl.active, state).length;
   if (currentEnergy < cost) return false; // can't afford
 
   // Find a benched Pokémon that can attack.
@@ -1768,7 +1768,7 @@ function tryRetreat(state: GameState, player: PlayerId): boolean {
   for (let i = 0; i < pl.bench.length; i++) {
     const b = pl.bench[i];
     if (!benchCanAttack(state, b)) continue;
-    const provided = energyProvidedBy(b);
+    const provided = energyPoolForCost(b, state);
     const defender = state.players[opponentOf(player)].active;
     let bestDmg = 0;
     for (const a of b.card.attacks) {
@@ -1799,11 +1799,11 @@ function tryOffensiveSwitch(state: GameState, player: PlayerId): boolean {
   if (!defender) return false;
 
   const cost = effectiveRetreatCost(pl.active, state).length;
-  const currentEnergy = energyProvidedBy(pl.active).length;
+  const currentEnergy = energyPoolForCost(pl.active, state).length;
   if (currentEnergy < cost) return false;
 
   // Active's best damage on the current defender.
-  const provided = energyProvidedBy(pl.active);
+  const provided = energyPoolForCost(pl.active, state);
   let activeDmg = 0;
   for (const a of pl.active.card.attacks) {
     if (!canPayCost(provided, effectiveAttackCost(state, pl.active, a.cost))) continue;
@@ -1819,7 +1819,7 @@ function tryOffensiveSwitch(state: GameState, player: PlayerId): boolean {
   let bestDmg = 0;
   for (let i = 0; i < pl.bench.length; i++) {
     const b = pl.bench[i];
-    const bp = energyProvidedBy(b);
+    const bp = energyPoolForCost(b, state);
     let d = 0;
     for (const a of b.card.attacks) {
       if (!canPayCost(bp, effectiveAttackCost(state, b, a.cost))) continue;
@@ -2001,7 +2001,7 @@ function pickBestAttackWithLookahead(
   // Confused / asleep / paralyzed-style hard-locks already filtered by
   // pickBestAttack; if it returned null we'd already have bailed.
 
-  const provided = energyProvidedBy(atk);
+  const provided = energyPoolForCost(atk, state);
   const perAttackLock = (atk as typeof atk & { cantUseAttacksUntilTurn?: Record<string, number> }).cantUseAttacksUntilTurn;
 
   // Enumerate legal attack candidates, mirroring pickBestAttack's filters.

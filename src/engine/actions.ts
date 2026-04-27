@@ -13,7 +13,6 @@ import {
   canPayCost,
   clearAllStatuses,
   endTurn as endTurnRule,
-  energyProvidedBy,
   flipCoin,
   hasStatus,
   isBasic,
@@ -46,6 +45,7 @@ import {
   effectiveMaxHp,
   effectiveRetreatCost,
   effectiveWeaknesses,
+  energyPoolForCost,
   maxBenchSize,
   passiveAttackBonus,
   stadiumAttackBonus,
@@ -547,7 +547,7 @@ export function retreat(
   if (benchIndex < 0 || benchIndex >= pl.bench.length)
     return fail("Invalid bench slot.");
   const cost = effectiveRetreatCost(pl.active);
-  const provided = energyProvidedBy(pl.active);
+  const provided = energyPoolForCost(pl.active, state);
   if (!canPayCost(provided, cost))
     return fail("Not enough Energy to retreat.");
   // Pay by discarding Colorless cost — discard the first N attached energies.
@@ -972,7 +972,7 @@ export function attack(
       return fail("Born to Slack: opponent has no Pokémon ex or V in play.");
     }
   }
-  const provided = energyProvidedBy(atk);
+  const provided = energyPoolForCost(atk, state);
   const effectiveCost = effectiveAttackCost(state, atk, move.cost, move.name);
   if (!canPayCost(provided, effectiveCost))
     return fail("Not enough Energy for that attack.");

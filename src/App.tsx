@@ -28,13 +28,12 @@ import {
   canPayCost,
   chooseFirstPlayer,
   completeSetup,
-  energyProvidedBy,
   isBasic,
   isPokemon,
   resolveCoinGuess,
   setupGame,
 } from "./engine/rules";
-import { effectiveAttacks, effectiveMaxHp, estimateAttackDamage } from "./engine/ongoingEffects";
+import { effectiveAttacks, effectiveMaxHp, energyPoolForCost, estimateAttackDamage } from "./engine/ongoingEffects";
 import type { ActionResult } from "./engine/actions";
 import type { Ability, Card, GameState, PlayerId, PokemonInPlay } from "./engine/types";
 import { buildDeck, validatedDeckSpecs } from "./data/decks";
@@ -807,7 +806,9 @@ export default function App() {
   // me.active?.card so the dep changes when the card reference is swapped.
   const myActiveAttacks = useMemo(() => {
     if (!me.active) return [];
-    const provided = energyProvidedBy(me.active);
+    // Use the ability-aware pool so abilities like Meganium's Wild Growth
+    // (each Basic Grass = 2 Grass) are honored when computing payability.
+    const provided = energyPoolForCost(me.active, state);
     return effectiveAttacks(me.active).map((a, i) => ({
       index: i,
       name: a.name,

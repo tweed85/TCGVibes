@@ -192,6 +192,7 @@ export type TrainerEffectId =
   | "canariLightningSearch" // Cost: discard 1; search up to 4 Lightning Pokémon
   | "trGiovanniSwitchGust" // Switch own TR + gust opp
   | "trArcherShuffleDraw" // Both shuffle, you 5 / opp 3 (gated on KO last turn)
+  | "unfairStampShuffleDraw" // Unfair Stamp ACE SPEC: shuffle both, you 5 / opp 2 (KO last turn)
   | "ogresMaskSwapOgerpon" // Swap Ogerpon ex in discard with Ogerpon ex in play
   | "redeemableTicketReprize" // Shuffle prizes, take new ones from top of deck
   | "tmFluoriteTool" // Tool granting an attack — passive, handled at attach
@@ -510,6 +511,7 @@ export function detectTrainerEffect(t: ApiTrainer): TrainerEffectId | undefined 
   if (t.name === "Canari") return "canariLightningSearch";
   if (t.name === "Team Rocket's Giovanni") return "trGiovanniSwitchGust";
   if (t.name === "Team Rocket's Archer") return "trArcherShuffleDraw";
+  if (t.name === "Unfair Stamp") return "unfairStampShuffleDraw";
   if (t.name === "Ogre's Mask") return "ogresMaskSwapOgerpon";
   if (t.name === "Redeemable Ticket") return "redeemableTicketReprize";
   if (t.name === "Technical Machine: Fluorite") return "tmFluoriteTool";
@@ -699,6 +701,13 @@ export function precheckTrainerEffect(
 ): string | null {
   const pl = state.players[player];
   const id = t.effectId as TrainerEffectId | undefined;
+  // Unfair Stamp / Team Rocket's Archer require a KO during opp's last turn.
+  if (id === "unfairStampShuffleDraw" && !pl.yourPokemonKoedLastOppTurn) {
+    return "Unfair Stamp can only be played the turn after one of your Pokémon was Knocked Out.";
+  }
+  if (id === "trArcherShuffleDraw" && !pl.yourPokemonKoedLastOppTurn) {
+    return "Team Rocket's Archer requires a Team Rocket's Pokémon to have been Knocked Out during your opponent's last turn.";
+  }
   if (id === "searchAnyPokemon" && pl.hand.length < 3) {
     return "Need 2 other cards in hand to discard for Ultra Ball.";
   }
@@ -3233,6 +3242,21 @@ export function applyTrainerEffect(
       drawUpTo(state, player, 5);
       drawUpTo(state, oppId, 3);
       logEvent(state, player, "Team Rocket's Archer: both shuffled. You drew 5, opp drew 3.");
+      return;
+    }
+    case "unfairStampShuffleDraw": {
+      // Unfair Stamp (ACE SPEC). Gate: any of your Pokémon were KO'd
+      // during your opponent's last turn. Both players shuffle hand into
+      // deck; you draw 5, opp draws 2.
+      if (!pl.yourPokemonKoedLastOppTurn) {
+        logEvent(state, player, "Unfair Stamp: requires one of your Pokémon to have been Knocked Out during your opponent's last turn.");
+        return;
+      }
+      shuffleHandIntoDeck(state, player);
+      shuffleHandIntoDeck(state, oppId);
+      drawUpTo(state, player, 5);
+      drawUpTo(state, oppId, 2);
+      logEvent(state, player, "Unfair Stamp: both shuffled. You drew 5, opp drew 2.");
       return;
     }
     case "ogresMaskSwapOgerpon": {

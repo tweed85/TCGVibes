@@ -231,6 +231,100 @@ describe("Per-Pokemon lock flags (selfCantAttack / cantRetreat)", () => {
   });
 });
 
+describe("Unfair Stamp — gated on KO last turn", () => {
+  it("rejects play when no Pokémon was KO'd during opp's last turn", async () => {
+    const { precheckTrainerEffect } = await import("../trainerEffects");
+    const state = bootGameToMain(101);
+    const ap = state.activePlayer;
+    state.players[ap].yourPokemonKoedLastOppTurn = false;
+    const stamp: TrainerCard = {
+      id: "test-stamp-1",
+      name: "Unfair Stamp",
+      supertype: "Trainer",
+      subtypes: ["Item", "ACE SPEC"],
+      text: "",
+      effectId: "unfairStampShuffleDraw",
+    };
+    const reason = precheckTrainerEffect(state, ap, stamp);
+    expect(reason).not.toBeNull();
+    expect(reason!.toLowerCase()).toContain("knocked out");
+  });
+
+  it("resolves when the gate is satisfied: shuffle both, you draw 5, opp draws 2", async () => {
+    const { applyTrainerEffect } = await import("../trainerEffects");
+    const state = bootGameToMain(102);
+    const ap = state.activePlayer;
+    const opp = ap === "p1" ? "p2" : "p1";
+    state.players[ap].yourPokemonKoedLastOppTurn = true;
+    const myHandBefore = state.players[ap].hand.length;
+    const oppHandBefore = state.players[opp].hand.length;
+    const stamp: TrainerCard = {
+      id: "test-stamp-2",
+      name: "Unfair Stamp",
+      supertype: "Trainer",
+      subtypes: ["Item", "ACE SPEC"],
+      text: "",
+      effectId: "unfairStampShuffleDraw",
+    };
+    applyTrainerEffect(state, ap, stamp);
+    // We should now have exactly 5 cards (shuffle erases the prior hand,
+    // then drew 5).
+    expect(state.players[ap].hand.length).toBe(5);
+    expect(state.players[opp].hand.length).toBe(2);
+    void myHandBefore; void oppHandBefore;
+  });
+});
+
+describe("Wild Growth (Meganium) doubles Grass Energy for cost checks", () => {
+  it("Arboliva ex with 2 Grass attached + Wild Growth ally can pay Aroma Shot's 3 Colorless", () => {
+    const state = bootGameToMain(103);
+    const ap = state.activePlayer;
+    // Build a Meganium-like ally on the bench with Wild Growth.
+    const meganium: PokemonCard = {
+      id: "meganium-test",
+      name: "Meganium",
+      supertype: "Pokémon",
+      subtypes: ["Stage 2"],
+      hp: 150,
+      types: ["Grass"],
+      attacks: [],
+      retreatCost: ["Colorless", "Colorless"],
+      abilities: [
+        {
+          name: "Wild Growth",
+          type: "Ability",
+          text: "Each Basic Grass Energy attached to all of your Pokémon provides Grass Grass Energy.",
+        },
+      ],
+    };
+    state.players[ap].bench.push({
+      instanceId: "meg-1", card: meganium, damage: 0, attachedEnergy: [],
+      evolvedFrom: [], tools: [], playedThisTurn: false, evolvedThisTurn: false,
+      statuses: [], abilityUsedThisTurn: false,
+    });
+    // Make the active an Arboliva-ex-like Pokémon with the Aroma Shot cost.
+    const arbo: PokemonCard = {
+      id: "arboliva-test",
+      name: "Arboliva ex",
+      supertype: "Pokémon",
+      subtypes: ["Stage 2", "ex"],
+      hp: 280,
+      types: ["Grass"],
+      attacks: [
+        { name: "Aroma Shot", cost: ["Colorless", "Colorless", "Colorless"], damage: 160 },
+      ],
+      retreatCost: ["Colorless", "Colorless"],
+    };
+    state.players[ap].active!.card = arbo;
+    state.players[ap].active!.attachedEnergy = [
+      { id: "g1", name: "Basic Grass Energy", supertype: "Energy", subtypes: ["Basic"], provides: ["Grass"] },
+      { id: "g2", name: "Basic Grass Energy", supertype: "Energy", subtypes: ["Basic"], provides: ["Grass"] },
+    ];
+    const result = attack(state, ap, 0);
+    expect(result.ok).toBe(true);
+  });
+});
+
 describe("Phantom Dive — 200 to active, 60 spread on bench", () => {
   it("AI delivers full base damage to the defender and 6 counters on bench", () => {
     const state = bootGameToMain(33);

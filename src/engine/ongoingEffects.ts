@@ -15,6 +15,7 @@ import type {
   TrainerCard,
 } from "./types";
 import { getAttackEffects } from "../data/effectPatterns";
+import { effectiveEnergyProvides } from "./rules";
 
 const hasSubtype = (c: PokemonCard, s: string) => (c.subtypes ?? []).includes(s);
 const hasType = (c: PokemonCard, t: EnergyType) => c.types.includes(t);
@@ -181,6 +182,18 @@ export function effectiveWeaknesses(
     }
   }
   return base;
+}
+
+// Returns the effective energy pool for cost-checking: base provides plus
+// Wild Growth's extra Grass per Basic Grass attached. Use this anywhere
+// the engine checks "can this attack/retreat be paid?" so abilities like
+// Meganium's Wild Growth properly double Grass output.
+export function energyPoolForCost(p: PokemonInPlay, state: GameState): string[] {
+  // Inlined to avoid the rules ↔ ongoingEffects circular import.
+  const base = p.attachedEnergy.flatMap((e) =>
+    effectiveEnergyProvides(e, p.card, p.attachedEnergy),
+  );
+  return [...base, ...wildGrowthBonusGrass(p, state)];
 }
 
 // Wild Growth (Sceptile, etc.): each Basic Grass Energy attached provides
