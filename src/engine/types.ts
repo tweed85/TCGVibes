@@ -226,6 +226,292 @@ export type AttackEffect =
   // "Put a Supporter card from your discard pile into your hand."
   | { kind: "recoverTrainerFromDiscard"; max: number; subtype: "Supporter" | "Item" | "Pokémon Tool" | "any" }
   | { kind: "selfCantUseAttackNextTurn"; attackName: string } // Riolu / Mega Brave — only THIS attack is locked
+  // "This attack does N less damage for each Energy attached to the opp's
+  // Active Pokémon." (Tinkaton Windup Swing)
+  | { kind: "damageReducedPerEnergyOnDefender"; perCount: number }
+  // "Discard N <Type> Energy from your hand. If you can't, this attack does
+  // nothing." (Ceruledge Infernal Slash)
+  | { kind: "discardEnergyFromHandOrFizzle"; count: number; energyType?: EnergyType }
+  // "Shuffle this Pokémon and all attached cards into your deck." (Lokix)
+  | { kind: "selfShuffleIntoDeck" }
+  // "Put N <Type> Energy attached to this Pokémon into your hand."
+  // (Volcanion Backfire) — moves attached energy back to hand.
+  | { kind: "returnAttachedEnergyToHand"; count: number; energyType?: EnergyType }
+  // "This attack also does N damage to each Benched Pokémon (both yours and
+  // your opponent's)." (Gloom Disperse Drool)
+  | { kind: "alsoDamageEachBench"; damage: number; sides: "both" | "opp" | "self" }
+  // "This attack does N damage for each Pokémon Tool attached to all
+  // Pokémon (both sides)." (Bronzong Tool Drop)
+  | { kind: "perAttachedToolBothSides"; perCount: number }
+  // "This attack does N damage for each damage counter on all of your
+  // Benched <named> Pokémon." (Raticate Retaliatory Incisors)
+  | { kind: "perDamageCounterOnBenchNamed"; perCount: number; namePart: string }
+  // Move 1 attached energy of a given type from this Pokémon to a Benched
+  // Pokémon. (Frosmoth Cold Cyclone)
+  | { kind: "moveOneEnergyToBench"; energyType?: EnergyType }
+  // Discard a single attached energy of a given type from this Pokémon
+  // (cost-style; not energy-for-damage). (Raichu Strong Volt)
+  | { kind: "discardSingleAttachedEnergy"; energyType?: EnergyType }
+  // "This attack does +N damage for each Prize card your opponent took
+  // during their last turn." (Okidogi Settle the Score)
+  | { kind: "perPrizeOppTookLastTurn"; perCount: number }
+  // Search deck for a mix of cards by filter list, all to hand. (Celebi
+  // Traverse Time: 3 cards in any combination of Grass Pokémon and Stadium
+  // cards.) Each filter slot independently matches one card.
+  | { kind: "searchDeckMixedToHand"; max: number; filters: AttackSearchFilter[] }
+  // Search deck for up to N basic <Type> Pokémon and put them onto your
+  // Bench. (Xerneas Geo Gate)
+  | { kind: "searchDeckBasicTypeToBench"; max: number; pokemonType: EnergyType }
+  // "Search your deck for any number of Pokémon that have '<Name>' in their
+  // name and put them onto your Bench." (Rotom Roto Call) — capped by
+  // available bench slots.
+  | { kind: "searchDeckNamedPokemonToBench"; namePart: string }
+  // "Discard random cards from your opponent's hand until they have N cards
+  // in their hand." (Furfrou Hand Trim) — only fires if opp's hand is over
+  // the cap. Random selection per cycle.
+  | { kind: "oppHandTrimToCount"; targetCount: number }
+  // Energy Sketch family — flip N coins, attach <count> Basic Energy from
+  // discard to bench based on heads. (Smeargle Energizing Sketch)
+  | { kind: "flipNAttachBasicFromDiscardToBench"; coins: number }
+  // "Flip a coin until you get tails. Search your deck for a number of
+  // basic Energy up to the number of heads and attach to this Pokémon."
+  // (Snorlax Gormandizer)
+  | { kind: "flipUntilTailsAttachBasicSelf" }
+  // "Discard up to N Energy cards from your hand. +M damage per discard."
+  // (Mawile Double Eater) — same shape as discardOwnEnergyForDamage but the
+  // discard source is HAND, not the attacker's attached energy.
+  | { kind: "discardEnergyFromHandForDamage"; max: number; damagePer: number }
+  // "Search deck for up to N Basic Energy cards of different types and
+  // attach to your <subtypeFilter> Pokémon in any way." (Terapagos Prism Charge)
+  | { kind: "searchBasicEnergyDifferentTypesToBenchSubtype"; max: number; benchSubtype: string }
+  // "Move a Water Energy from this Pokémon to a Benched <type> Pokémon."
+  // (Frosmoth) — already covered above by moveOneEnergyToBench; kept for
+  // forward compatibility with type-targeted variants.
+  | { kind: "selfDamageAndStatusOpp"; selfDamage: number; status: StatusCondition }
+  // Self-bench snipe — "This attack also does N damage to 1 of your Benched
+  // Pokémon." (Manectric Flash Impact)
+  | { kind: "alsoDamageOwnBench"; damage: number }
+  // Search deck for a single Basic <Type> Energy and attach it to one of
+  // your Pokémon. (Teal Mask Ogerpon Grass Kagura, Hearthflame Mask, Wellspring Mask)
+  | { kind: "searchBasicEnergyAttachOne"; energyType: EnergyType }
+  // Search deck for up to N <named> Pokémon and put them in hand. (Misty's
+  // Lapras Swim Together)
+  | { kind: "searchDeckNamedPokemonToHand"; namePart: string; max: number }
+  // "This attack does N more damage for each <named> card in your discard
+  // pile." (Ethan's Typhlosion Buddy Blast — Ethan's Adventure)
+  | { kind: "perCardInOwnDiscardNamed"; namePart: string; perCount: number }
+  // "This attack does N damage for each of your Pokémon that has '<X>' in
+  // its name that has any damage counters." (Paldean Tauros Raging Charge)
+  | { kind: "perOwnPokemonNamedWithDamage"; namePart: string; perCount: number }
+  // Discard top N from deck; +M damage per discarded card matching <named>.
+  // (Misty's Gyarados Splashing Panic)
+  | { kind: "discardTopNAndDamagePerNamed"; topN: number; namePart: string; perCount: number }
+  // Search deck for up to N basic <named> Pokémon and bench. (Steven's
+  // Baltoy Summoning Sign)
+  | { kind: "searchDeckBasicNamedToBench"; namePart: string; max: number }
+  // "Discard N <Type> Energy cards from your hand, and Knock Out your
+  // opponent's Active Pokémon. If you can't discard N cards in this way,
+  // this attack does nothing." (Hydrapple Hydra Breath)
+  | { kind: "discardEnergyFromHandAndKoOpp"; count: number; energyType: EnergyType }
+  // "Choose 1 of your opponent's Active Pokémon's attacks and use it as
+  // this attack." (Clefable Metronome — auto-pick first opp attack the
+  // attacker can pay for; the engine resolves it as a regular attack.)
+  | { kind: "useOppActiveAttack"; coinFlip?: boolean }
+  // "Choose 1 of your Benched <Name> Pokémon's attacks and use it as this
+  // attack." (N's Zoroark ex Night Joker — picks the highest-damage attack
+  // among the named bench whose cost the attacker can pay.) Cost is paid
+  // from THIS Pokémon's attached Energy; the source attack's effects are
+  // copied verbatim, but the actor stays the holder of Night Joker.
+  | { kind: "useBenchedAllyNamedAttack"; namePart: string }
+  // Move all damage counters from one of your Benched <named> Pokémon to
+  // opp's Active. (Team Rocket's Wobbuffet Rocket Mirror)
+  | { kind: "moveAllBenchDamageNamedToOppActive"; namePart: string }
+  // Flip 3 coins; put up to N=heads cards from discard to hand. (Stoutland
+  // Odor Sleuth)
+  | { kind: "flipNRecoverDiscardToHand"; coins: number; filter: AttackSearchFilter }
+  // Attach a Basic Energy from hand to this Pokémon (no type filter).
+  // (Tornadus Wrapped in Wind)
+  | { kind: "attachBasicEnergyFromHandToSelf" }
+  // Discard up to N Supporter cards with <named> from hand; +M damage per
+  // discard. (Team Rocket's Honchkrow Rocket Feathers)
+  | { kind: "discardNamedSupporterFromHandForDamage"; namePart: string; perCount: number; max: number }
+  // "Flip a coin for each <Type> Pokémon you have in play. This attack
+  // does N damage for each heads." (Scrafty Ruffians Attack)
+  | { kind: "flipPerPokemonOfTypePerHeads"; energyType: EnergyType; perHeads: number }
+  // "If this Pokémon has N or more <Type> Energy attached, this attack
+  // does M more damage." (Abomasnow Frozen Wood)
+  | { kind: "ifSelfEnergyAtLeastBonus"; energyType: EnergyType; count: number; bonus: number }
+  // Inteleon Bring Down: "Choose a Pokémon in play (yours or your
+  // opponent's) that has the least HP remaining, except this Pokémon, and
+  // it is Knocked Out."
+  | { kind: "koLowestHpInPlay" }
+  // Shiftry Reversing Gust: "Flip a coin. If heads, choose 1 of your
+  // opponent's Pokémon. Shuffle that Pokémon and all attached cards into
+  // their deck."
+  | { kind: "flipShuffleOppPokemonIntoDeck" }
+  // Sandslash Sand Attack: "During your opponent's next turn, if the
+  // Defending Pokémon tries to use an attack, your opponent flips a coin.
+  // If tails, that attack doesn't happen."
+  | { kind: "defenderAttackCoinFlipNextTurn" }
+  // Pachirisu Electrified Incisors: "During your opponent's next turn,
+  // whenever they attach an Energy card from their hand to the Defending
+  // Pokémon, place 8 damage counters on that Pokémon."
+  | { kind: "defenderEnergyAttachPenaltyNextTurn"; counters: number }
+  // Watchog Focus Energy: "During your next turn, this Pokémon's <Name>
+  // attack's base damage is N." (Generalizes selfNextTurnAttackBonus to
+  // a fixed override.)
+  | { kind: "selfNextTurnAttackBaseOverride"; attackName: string; baseDamage: number }
+  // Crawdaunt Cutting Riposte: "If this Pokémon has any damage counters
+  // on it, this attack can be used for <Type>." (Type-cost rewriting.)
+  | { kind: "altTypeCostIfDamaged"; energyType: EnergyType }
+  // Salazzle Sudden Scorching: "Your opponent discards a card from their
+  // hand. If this Pokémon evolved from <Source> during this turn, your
+  // opponent discards 2 more cards."
+  | { kind: "oppDiscardWithEvolveBonus"; baseCount: number; bonusCount: number; sourceCardName: string }
+  // N's Vanilluxe Snow Coating: "Double the number of damage counters on
+  // each of your opponent's Pokémon."
+  | { kind: "doubleOppDamageCounters" }
+  // Team Rocket's Murkrow Torment: "Choose 1 of your opponent's Active
+  // Pokémon's attacks. During your opponent's next turn, that Pokémon
+  // can't use that attack." (Auto-pick the most-impactful attack.)
+  | { kind: "lockOneOppAttackNextTurn" }
+  // Team Rocket's Blipbug Searching Eyes: "Look at 1 of your opponent's
+  // face-down Prize cards." (No mechanical effect in our engine since we
+  // don't track face-up Prize state, but logged.)
+  | { kind: "peekOppPrize" }
+  // Gothorita Fortunate Eye: "Look at the top 5 cards of your opponent's
+  // deck and put them back in any order." (No-op for AI; logged.)
+  | { kind: "peekOppDeckTop"; count: number }
+  // Cinderace Turbo Flare: "Search your deck for up to N Basic Energy
+  // cards and attach them to your Benched Pokémon in any way you like."
+  | { kind: "searchBasicEnergyAttachBench"; max: number }
+  // Dialga Chrono Burst: "You may shuffle all Energy attached to this
+  // Pokémon into your deck and have this attack do N more damage."
+  | { kind: "optionalShuffleSelfEnergyForBonus"; bonus: number }
+  // Meloetta Soothing Melody: "Heal N damage from 1 of your Benched
+  // <Type> Pokémon."
+  | { kind: "healOneBenchPokemonByType"; amount: number; pokemonType: EnergyType }
+  // Miltank Bellyful of Milk: "Flip 2 coins. If both of them are heads,
+  // heal all damage from 1 of your Pokémon."
+  | { kind: "flipBothHeadsHealOne" }
+  // Dedenne Tail Generator: "Choose Basic <Type> Energy cards from your
+  // discard pile up to the amount of Energy attached to all of your
+  // opponent's Pokémon and attach them to your <Type> Pokémon in any way."
+  | { kind: "attachDiscardEnergyByOppEnergy"; energyType: EnergyType; pokemonType: EnergyType }
+  // Kyogre Riptide: "This attack does N damage for each Basic <Type>
+  // Energy card in your discard pile. Then, shuffle those cards into your
+  // deck."
+  | { kind: "perBasicEnergyInDiscardThenShuffle"; energyType: EnergyType; perCount: number }
+  // Boldore Smack Down: "If your opponent's Active Pokémon has Fighting
+  // Resistance, this attack does N more damage."
+  | { kind: "ifDefenderHasResistanceOfTypeBonus"; resistanceType: EnergyType; bonus: number }
+  // Basculin Bared Fangs: "If your opponent's Active Pokémon has no damage
+  // counters on it before this attack does damage, this attack does
+  // nothing."
+  | { kind: "fizzleIfDefenderUndamaged" }
+  // Team Rocket's Exeggutor Tri Kinesis: "Flip 3 coins. If all of them
+  // are heads, Knock Out 1 of your opponent's Pokémon." (Auto-target
+  // most-damaged opp Pokémon.)
+  | { kind: "flipAllHeadsKoOppOne"; coins: number }
+  // Chi-Yu Scorching Earth: "If your opponent has a Stadium in play,
+  // discard it. If you do, your opponent can't play any Stadium cards
+  // from their hand during their next turn."
+  | { kind: "discardOppStadiumAndLock" }
+  // Medicham Harmonious Spirit Palm: "If this Pokémon and your opponent's
+  // Active Pokémon have the same amount of Energy attached, this attack
+  // does N more damage."
+  | { kind: "ifEqualEnergyBonus"; bonus: number }
+  // Search deck for up to N Basic <Type> Energy cards and attach to bench.
+  // (Boltund Electrifying Dash)
+  | { kind: "searchBasicEnergyTypeAttachBench"; max: number; energyType: EnergyType }
+  // Move any amount of <Type> Energy among your Pokémon. (Forretress)
+  | { kind: "moveAnyEnergyAcrossOwn"; energyType?: EnergyType }
+  // Attach a Basic <Type> Energy card from discard to this Pokémon. (Varoom)
+  | { kind: "attachBasicEnergyDiscardToSelfTyped"; energyType: EnergyType }
+  // Put a Basic <Type> Energy card from discard into your hand. (Poltchageist)
+  | { kind: "recoverBasicEnergyTypeToHand"; energyType: EnergyType }
+  // Heal N damage from 1 of your Benched Pokémon of <subtype> (e.g. Ancient).
+  // (Scream Tail Supportive Singing)
+  | { kind: "healOneBenchBySubtype"; amount: number; subtype: string }
+  // "Put up to N damage counters on this Pokémon. This attack does M damage
+  // for each damage counter you placed in this way." (Walking Wake)
+  | { kind: "selfPlaceCountersForDamage"; max: number; damagePer: number }
+  // "Discard a Basic <Type> Energy card from your hand. If you can't, this
+  // attack does nothing." (Decidueye Power Shot — single energy)
+  | { kind: "discardSingleEnergyFromHandOrFizzle"; energyType: EnergyType }
+  // Vikavolt Circuit Cannon: "This attack does N more damage for each of
+  // your Benched <Name>."
+  | { kind: "perBenchPokemonNamed"; namePart: string; perCount: number }
+  // Aggron Angry Slam / Hawlucha: "This attack does N damage for each of
+  // your Pokémon that has any damage counters on it." (in play, both
+  // active and bench)
+  | { kind: "perOwnPokemonWithDamage"; perCount: number }
+  // "If you have more Prize cards remaining than your opponent, +N damage."
+  // (Hawlucha Prize Count)
+  | { kind: "ifMorePrizesThanOpp"; bonus: number }
+  // Move any number of damage counters from opp's Bench to opp's Active.
+  // (Sableye Damage Collection)
+  | { kind: "moveAllOppBenchDamageToOppActive" }
+  // "This attack does N more damage for each Colorless in opp Active's
+  // Retreat Cost." (Ariados String Bind)
+  | { kind: "perColorlessOnDefenderRetreat"; perCount: number }
+  // "Discard up to N <Type> Energy cards from your Pokémon. +M damage per."
+  // (Sinistcha Spill the Tea — variant of discardOwnEnergyForDamage with
+  // a specific energy type filter that walks ALL of your Pokémon, not just
+  // attacker.)
+  | { kind: "discardEnergyAnywhereForDamage"; max: number; damagePer: number; energyType?: EnergyType }
+  // "Put N damage counters on 1 of your opponent's Pokémon for each Basic
+  // <Type> Energy card in your discard pile. Then, shuffle those Energy
+  // cards into your deck." (Sinistcha ex Re-Brew)
+  | { kind: "perBasicEnergyDiscardCountersOnOpp"; perCount: number; energyType: EnergyType }
+  // "Discard a card from your hand. If you do, your opponent discards a
+  // card from their hand." (Team Rocket's Porygon Hacking)
+  | { kind: "discardOwnAndOppHand" }
+  // "Attach up to N Basic Energy cards from your discard pile to your
+  // Pokémon in any way you like." (Morpeko Pick and Stick)
+  | { kind: "attachAnyBasicEnergyDiscardN"; max: number }
+  // "During your opponent's next turn, they can't play any Pokémon from
+  // their hand to evolve their Pokémon." (Bronzong Evolution Jammer)
+  | { kind: "blockOppEvolveNextTurn" }
+  // "During your opponent's next turn, attacks used by the Defending
+  // Pokémon cost Colorless more, and its Retreat Cost is Colorless more."
+  // (Rillaboom Drum Beating)
+  | { kind: "defenderAttackAndRetreatCostUpNextTurn"; amount: number }
+  // "Attach a Basic <Type> Energy card from your hand to 1 of your Benched
+  // Pokémon. If you do, heal all damage from that Pokémon." (Leafeon
+  // Leaflet Blessings)
+  | { kind: "attachBasicEnergyTypeToBenchAndHeal"; energyType: EnergyType }
+  // Bench-shuffle (your): "Shuffle 1 of your Benched Pokémon and all
+  // attached cards into your deck." (Chimecho Homeward Chime)
+  | { kind: "shuffleOwnBenchPokemonIntoDeck" }
+  // "Put N damage counters on 1 of your opponent's Pokémon." (Swirlix
+  // Sneaky Placement) — generalizes single-target counter placement.
+  | { kind: "placeCountersOnOneOpp"; counters: number }
+  // Conkeldurr Gutsy Swing: "If this Pokémon is affected by a Special
+  // Condition, ignore all Energy in this attack's cost." (Cost rewrite)
+  | { kind: "freeCostIfStatus" }
+  // Mega Heracross ex Juggernaut Horn: "If this Pokémon was damaged by an
+  // attack during your opponent's last turn, this attack does that much
+  // more damage." (Variable bonus = damage taken.)
+  | { kind: "damageEqualToDamageTakenLastTurn" }
+  // Cresselia Crescent Purge: "You may turn 1 of your face-down Prize
+  // cards face up. If you do, this attack does N more damage." (Auto-take
+  // the bonus since prize face-up tracking isn't modeled.)
+  | { kind: "autoOptionalBonus"; bonus: number }
+  // Iron Valiant Majestic Sword: "If you played a <subtype> Supporter
+  // card from your hand during this turn, this attack does N more damage."
+  | { kind: "ifPlayedSupporterSubtypeBonus"; supporterSubtype: string; bonus: number }
+  // Hippowdon Super Sandstorm: "This attack also does N damage to each
+  // Benched Pokémon that has any damage counters on it (both yours and
+  // opponent's)."
+  | { kind: "alsoDamageBenchWithCounters"; damage: number }
+  // Bronzong-style: "This attack does N damage for each Pokémon in play
+  // that has '<X>' or '<Y>' in its name (both yours and your opponent's)."
+  | { kind: "perInPlayPokemonNamed"; namePart: string; perCount: number; bothSides: boolean }
+  // Boldore-style mass deck-search-and-bench. (Grubbin/Froakie Flock —
+  // already have searchDeckNamedPokemonToBench but not the "up to N"
+  // variant; we add the bounded version.)
+  | { kind: "searchDeckNamedToBenchN"; namePart: string; max: number }
   | { kind: "multiCoinPerOppPokemon"; damagePerHeads: number } // Mega Zygarde ex "Nullifying Zero"
   | { kind: "fizzleIfNoAlly"; allyName: string } // Solrock Cosmic Beam
   | { kind: "ignoreWeaknessResistance" } // Cosmic Beam — ignore both
@@ -344,7 +630,36 @@ export type AttackPredicate =
   | { kind: "yourBenchCountAtMost"; count: number }
   | { kind: "yourDiscardHasNTypedEnergy"; count: number; energyType: EnergyType }
   | { kind: "youHavePokemonNamedOnBench"; namePart: string }
-  | { kind: "supporterPlayedThisTurnNamed"; namePart: string };
+  | { kind: "supporterPlayedThisTurnNamed"; namePart: string }
+  // "If you have at least N <Type> Energy in play, ..."
+  | { kind: "youHaveEnergyOfTypeAtLeast"; energyType: EnergyType; count: number }
+  // "If this Pokémon was healed during this turn, ..." (Vileplume Lively Flower)
+  | { kind: "selfHealedThisTurn" }
+  // "If this Pokémon was damaged by an attack during your opponent's last
+  // turn, ..." (Mega Heracross ex Juggernaut Horn)
+  | { kind: "selfDamagedLastOppTurn" }
+  // "If this Pokémon used <Name> during your last turn, ..." (Togedemaru ex)
+  | { kind: "selfUsedAttackLastTurn"; attackName: string }
+  // "If your opponent's Active Pokémon isn't <Status>, this attack does
+  // nothing." (Camerupt Roasting Burn)
+  | { kind: "defenderHasNoStatus"; status: StatusCondition }
+  // "If your opponent has exactly N or M Prize cards remaining, ..."
+  // (Hop's Cramorant Fickle Spitting — 3 or 4)
+  | { kind: "oppPrizesInRange"; min: number; max: number }
+  // "If <named> is in your discard pile, ..." (Serperior Solar Coiling)
+  | { kind: "yourDiscardHasCardNamed"; namePart: string }
+  // "If any of your Benched <named> have any damage counters on them, ..."
+  // (Pangoro Master's Punch)
+  | { kind: "benchPokemonNamedHasDamage"; namePart: string }
+  // "If your Benched Pokémon have any damage counters on them, ..."
+  // (Hawlucha Vengeful Kick)
+  | { kind: "anyBenchHasDamage" }
+  // "If any of your <named> Pokémon were Knocked Out by damage from an
+  // attack during your opponent's last turn, ..." (Hop's Trevenant)
+  | { kind: "yourNamedPokemonKoedLastOppTurn"; namePart: string }
+  // "If you played a <named> Supporter card during this turn, ..." (Team
+  // Rocket's Kangaskhan ex)
+  | { kind: "supporterPlayedThisTurnNameContains"; namePart: string };
 
 export type StatusCondition = "asleep" | "burned" | "confused" | "paralyzed" | "poisoned";
 
@@ -363,12 +678,12 @@ export type AbilityEffect =
   | { kind: "healSelf"; amount: number; oncePerTurn: true }
   | { kind: "healAny"; amount: number; oncePerTurn: true } // heal one of your Pokémon
   | { kind: "searchBasicEnergy"; count: number; energyType?: EnergyType; oncePerTurn: true }
-  | { kind: "attachEnergyFromHand"; energyType: EnergyType; oncePerTurn: true }
+  | { kind: "attachEnergyFromHand"; energyType: EnergyType; oncePerTurn: boolean }
   | { kind: "attachEnergyFromHandThenDraw"; energyType: EnergyType; drawCount: number; oncePerTurn: true } // Teal Dance
   | { kind: "attachEnergyFromDiscardToSelf"; oncePerTurn: true } // any Basic Energy from discard → self
   | { kind: "attachEnergyFromDiscardToBench"; energyType: EnergyType; oncePerTurn: true } // Dynamotor
   | { kind: "attachEnergyFromHandToBenchNameN"; energyType: EnergyType; max: number; namePrefix: string; oncePerTurn: true } // Golden Flame: up to 2 Fire to Bench Ethan's
-  | { kind: "moveOwnBasicEnergyBetween"; oncePerTurn: true } // Happy Switch
+  | { kind: "moveOwnBasicEnergyBetween"; oncePerTurn: boolean } // Happy Switch (true), Bubble Gathering / Wash Out (false: as often as you like)
   | { kind: "moveDamageOwnToOpp"; counters: number; energyConditionType?: EnergyType; oncePerTurn: true } // Adrena-Brain (needs Darkness attached)
   | { kind: "applyStatusToOppActive"; status: StatusCondition; activeOnly: boolean; oncePerTurn: true } // Calming Light, Scalding Steam
   | { kind: "healEachOwn"; amount: number; oncePerTurn: true } // Lovely Fragrance
@@ -511,6 +826,17 @@ export interface PokemonInPlay {
   // upcoming turn, this Pokémon ignores its own Weakness. Cleared at end of
   // its owner's turn.
   noWeaknessUntilTurn?: number;
+  // Tracks "this Pokémon was healed during this turn" for predicates like
+  // Vileplume "Lively Flower". Cleared at end of owner's turn.
+  healedThisTurn?: boolean;
+  // True if this Pokémon was damaged by an attack during the opponent's
+  // most recent turn. Cleared when this Pokémon's owner ends their turn.
+  damagedLastOppTurn?: boolean;
+  // Name of the last attack used by THIS Pokémon during its owner's most
+  // recent turn. Used by predicates like Togedemaru ex Spiky Rolling
+  // ("If this Pokémon used Spiky Rolling during your last turn, ..."). Set
+  // when an attack resolves; consumed/preserved across the next attack.
+  lastAttackUsedNamePriorTurn?: string;
 }
 
 export type PlayerId = "p1" | "p2";
@@ -556,6 +882,11 @@ export interface PlayerState {
   // the opponent's turn that just ended. Consumed by Flip the Script / etc.
   // Cleared at the end of this player's turn.
   yourPokemonKoedLastOppTurn: boolean;
+  // Number of Prize cards this player took during their most recent
+  // (already-ended) turn. Used by Okidogi "Settle the Score" — "+60 damage
+  // for each Prize card your opponent took during their last turn."
+  // Reset to 0 at the start of each of this player's own turns.
+  lastTurnPrizesTaken: number;
   // Set true once this player's Legacy Energy has triggered its "opp takes
   // 1 fewer Prize" effect. "Can't be applied more than once per game."
   legacyEnergyUsed: boolean;

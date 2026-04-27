@@ -45,6 +45,7 @@ import {
   effectiveAttacks,
   effectiveMaxHp,
   effectiveRetreatCost,
+  effectiveWeaknesses,
   maxBenchSize,
   passiveAttackBonus,
   stadiumAttackBonus,
@@ -82,6 +83,27 @@ export function playBasicToBench(
   const card = pl.hand[handIndex];
   if (!card) return fail("No such card in hand.");
   if (!isPokemon(card) || !isBasic(card)) return fail("Must be a Basic Pokémon.");
+  // Hero's Spirit (Palafin Hero Form) — "Put this Pokémon into play only with
+  // the effect of Palafin's Zero to Hero Ability." It can't be benched
+  // directly from hand.
+  if ((card.abilities ?? []).some((a) => a.name === "Hero's Spirit")) {
+    return fail("Hero's Spirit: can only enter play via Zero to Hero.");
+  }
+  // Potent Glare (opp's Active) — "Your opponent can't play any Pokémon that
+  // has an Ability from their hand, except for Team Rocket's Pokémon." We
+  // treat this as a mid-turn block (but Pokémon already in play with the
+  // ability are unaffected).
+  {
+    const oppId: PlayerId = player === "p1" ? "p2" : "p1";
+    const oppActive = state.players[oppId].active;
+    if (oppActive && (oppActive.card.abilities ?? []).some((a) => a.name === "Potent Glare")) {
+      const isTeamRocket = card.name.startsWith("Team Rocket's ");
+      const cardHasAbility = (card.abilities ?? []).length > 0;
+      if (cardHasAbility && !isTeamRocket) {
+        return fail("Potent Glare: can't play that Pokémon while opp's Active has Potent Glare.");
+      }
+    }
+  }
   const cap = maxBenchSize(state, pl.bench, pl.active);
   if (pl.bench.length >= cap) return fail("Bench is full.");
   pl.hand.splice(handIndex, 1);
@@ -123,7 +145,18 @@ export function evolve(
   if (!card.evolvesFrom) return fail("That card is not an evolution.");
   const target = findInPlayByInstance(state, player, targetInstanceId);
   if (!target) return fail("Target not in play.");
-  if (target.card.name !== card.evolvesFrom)
+  // Rainbow DNA (Eevee ex) — can evolve into any Pokémon ex that evolves from
+  // Eevee, regardless of the played card's stated evolvesFrom (provided card
+  // is a Pokémon ex whose evolution chain originates at Eevee). Per text,
+  // can't be used during T1 or the turn played; that's enforced below by the
+  // generic playedThisTurn / turn 1 rules.
+  const targetHasRainbowDNA =
+    (target.card.abilities ?? []).some((a) => a.name === "Rainbow DNA");
+  const cardIsEx = (card.subtypes ?? []).some((s) => /^(?:ex|EX)$/.test(s));
+  const cardEvolvesFromEevee =
+    card.evolvesFrom === "Eevee" || card.evolvesFrom?.endsWith(" Eevee") === true;
+  const rainbowMatch = targetHasRainbowDNA && cardIsEx && cardEvolvesFromEevee;
+  if (target.card.name !== card.evolvesFrom && !rainbowMatch)
     return fail(`${card.name} evolves from ${card.evolvesFrom}, not ${target.card.name}.`);
   // Forest of Vitality (Grass→Grass) overrides BOTH the played-this-turn
   // rule and the once-per-instance evolution rule, so Chikorita → Bayleef →
@@ -131,11 +164,18 @@ export function evolve(
   // the standard rules below can defer to it.
   const fovChain = canEvolveOnPlayTurn(state, target, card);
   // Boosted Evolution (Eevee) / Stimulated Evolution (Shelmet w/ Karrablast)
+  // / Fighting Roar (target Pokémon that evolves only when opp Active is ex)
   // — let this Pokémon evolve on turn 1 / the turn it was played.
   const ownerAllies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+  const oppActive = state.players[player === "p1" ? "p2" : "p1"].active;
+  const oppActiveIsEx = oppActive
+    ? (oppActive.card.subtypes ?? []).some((s) => /^(?:ex|EX)$/.test(s))
+    : false;
   const allowsTurn1 = (target.card.abilities ?? []).some(
-    (a) => a.name === "Boosted Evolution" ||
-      (a.name === "Stimulated Evolution" && ownerAllies.some((p) => p.card.name === "Karrablast")),
+    (a) =>
+      a.name === "Boosted Evolution" ||
+      (a.name === "Stimulated Evolution" && ownerAllies.some((p) => p.card.name === "Karrablast")) ||
+      (a.name === "Fighting Roar" && oppActiveIsEx),
   );
   // Once-per-instance rule — bypassed by FoV's Grass→Grass chain.
   if (target.evolvedThisTurn && !fovChain) return fail("Already evolved this turn.");
@@ -159,6 +199,51 @@ export function evolve(
   target.abilityUsedThisTurn = false;
   target.evolvedThisTurn = true;
   logEvent(state, player, `evolves into ${card.name}.`);
+
+  // Darkest Impulse (Mega Banette etc.) — opp-side reaction: when YOU evolve
+  // a Pokémon, opp's allies with this ability place 4 damage counters on
+  // the just-evolved Pokémon. Doesn't stack — fires only once even if
+  // multiple holders are in play.
+  {
+    const oppId: PlayerId = player === "p1" ? "p2" : "p1";
+    const oppAllies = [state.players[oppId].active, ...state.players[oppId].bench]
+      .filter((p): p is PokemonInPlay => !!p);
+    const triggers = oppAllies.some((q) =>
+      (q.card.abilities ?? []).some((a) => a.name === "Darkest Impulse"),
+    );
+    if (triggers) {
+      target.damage += 40;
+      logEvent(state, oppId, `Darkest Impulse: 4 counters on ${target.card.name}.`);
+    }
+  }
+
+  // Inviting Wink (Cacnea / Cacturne) — when this evolves, you may have opp
+  // reveal their hand and put any Basic Pokémon you find there onto their
+  // bench. Auto-applied: opp's Basic Pokémon in hand all bench (capped at
+  // 5 slots). Skipped silently if opp's bench is full.
+  if ((target.card.abilities ?? []).some((a) => a.name === "Inviting Wink")) {
+    const oppId: PlayerId = player === "p1" ? "p2" : "p1";
+    const opp = state.players[oppId];
+    const benchSlotsAvailable = 5 - opp.bench.length;
+    if (benchSlotsAvailable > 0) {
+      const basicIdxs: number[] = [];
+      for (let i = 0; i < opp.hand.length; i++) {
+        const c = opp.hand[i];
+        if (c.supertype === "Pokémon" && (c.subtypes ?? []).includes("Basic")) {
+          basicIdxs.push(i);
+          if (basicIdxs.length >= benchSlotsAvailable) break;
+        }
+      }
+      if (basicIdxs.length > 0) {
+        // Splice in descending order to keep prior indexes valid.
+        for (const i of basicIdxs.sort((a, b) => b - a)) {
+          const [c] = opp.hand.splice(i, 1);
+          opp.bench.push(makePokemonInPlay(c as PokemonCard));
+        }
+        logEvent(state, player, `Inviting Wink: benches ${basicIdxs.length} Basic from ${opp.name}'s hand.`);
+      }
+    }
+  }
 
   // Fire any triggered-on-evolve ability the evolved card has (e.g.
   // Noctowl's Jewel Seeker, Alakazam's Psychic Draw, Hariyama's Heave-Ho
@@ -246,6 +331,37 @@ export function attachEnergy(
       }
     }
   }
+  // On-attach ability reactions:
+  // - Auto Heal (your Active with this ability triggers when YOU attach):
+  //   heal 90 from the Pokémon you attached to.
+  // - Gnawing Curse (opp's Pokémon with this ability triggers when YOU attach):
+  //   place 2 damage counters on the Pokémon you attached to.
+  {
+    const pAllies = [pl.active, ...pl.bench].filter((q): q is import("./types").PokemonInPlay => !!q);
+    for (const ally of pAllies) {
+      if (pl.active !== ally) continue; // Auto Heal is Active-only.
+      for (const ab of ally.card.abilities ?? []) {
+        if (ab.name === "Auto Heal") {
+          if (target.damage > 0) {
+            const healed = Math.min(90, target.damage);
+            target.damage -= healed;
+            logEvent(state, player, `Auto Heal: heals ${healed} from ${target.card.name}.`);
+          }
+        }
+      }
+    }
+    const oppId: PlayerId = player === "p1" ? "p2" : "p1";
+    const oppAllies = [state.players[oppId].active, ...state.players[oppId].bench]
+      .filter((q): q is import("./types").PokemonInPlay => !!q);
+    for (const oppAlly of oppAllies) {
+      for (const ab of oppAlly.card.abilities ?? []) {
+        if (ab.name === "Gnawing Curse") {
+          target.damage += 20;
+          logEvent(state, oppId, `Gnawing Curse: 2 counters on ${target.card.name}.`);
+        }
+      }
+    }
+  }
   return ok;
 }
 
@@ -313,13 +429,23 @@ export function playTrainer(
   }
 
   // Tool: must be attached to a Pokémon in play with no Tool already.
+  // Multi Adapter (Rotom V) — "Each of your Pokémon that has 'Rotom' in its
+  // name may have up to 2 Pokémon Tool cards attached." Bumps the cap to 2
+  // for Rotom-named Pokémon when any owner ally has the ability in play.
   if (isTool) {
     const targetId = target?.kind === "inPlay" ? target.instanceId : null;
     if (!targetId) return fail("Pick a Pokémon to attach this Tool to.");
     const p = findInPlayByInstance(state, player, targetId);
     if (!p) return fail("Target not in play.");
-    if ((p.tools?.length ?? 0) >= 1)
-      return fail("That Pokémon already has a Tool attached.");
+    let maxTools = 1;
+    if (p.card.name.includes("Rotom")) {
+      const allies = [pl.active, ...pl.bench].filter((x): x is PokemonInPlay => !!x);
+      if (allies.some((a) => (a.card.abilities ?? []).some((ab) => ab.name === "Multi Adapter"))) {
+        maxTools = 2;
+      }
+    }
+    if ((p.tools?.length ?? 0) >= maxTools)
+      return fail(`That Pokémon already has ${maxTools === 1 ? "a Tool" : "the maximum Tools"} attached.`);
     pl.hand.splice(handIndex, 1);
     p.tools.push(t);
     logEvent(state, player, `attaches ${t.name} to ${p.card.name}.`);
@@ -545,7 +671,8 @@ function executeAttackHit(
   damage = result.damage;
   if (def && damage > 0) {
     const atkType = atk.card.types[0];
-    const weak = def.card.weaknesses?.find((w) => w.type === atkType);
+    // effectiveWeaknesses honors Fairy Zone (opp Dragons get Psychic weakness).
+    const weak = effectiveWeaknesses(def, state).find((w) => w.type === atkType);
     const res = def.card.resistances?.find((w) => w.type === atkType);
     const defenderIgnoresWeakness =
       def.noWeaknessUntilTurn !== undefined && state.turn <= def.noWeaknessUntilTurn;
@@ -643,6 +770,32 @@ function executeAttackHit(
           const removed = atk.attachedEnergy.shift()!;
           state.players[player].discard.push(removed);
           logEvent(state, "system", `Shell Spikes: ${atk.card.name} loses ${removed.name}.`);
+        }
+      } else if (a.name === "Smog Signals") {
+        // When in Active and damaged, search deck for up to 2 Koffing-named
+        // Pokémon and put them on the bench. Auto-applies for AI; for the
+        // human, the deck-search infrastructure could open a picker but we
+        // keep it auto for the on-damaged path.
+        const defPl = state.players[defOwner];
+        if (defPl.bench.length < 5) {
+          let placed = 0;
+          for (let i = 0; i < defPl.deck.length && placed < 2 && defPl.bench.length < 5; ) {
+            const c = defPl.deck[i];
+            if (c.supertype === "Pokémon" && c.name.includes("Koffing")) {
+              defPl.deck.splice(i, 1);
+              defPl.bench.push(makePokemonInPlay(c as PokemonCard));
+              placed++;
+            } else i++;
+          }
+          if (placed > 0) {
+            logEvent(state, defOwner, `Smog Signals: benches ${placed} Koffing-line Pokémon.`);
+            // Shuffle remaining deck.
+            const arr = defPl.deck;
+            for (let i = arr.length - 1; i > 0; i--) {
+              const j = state.rng.int(i + 1);
+              [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+          }
         }
       }
     }
@@ -805,6 +958,19 @@ export function attack(
   const perAttackLock = (atk as typeof atk & { cantUseAttacksUntilTurn?: Record<string, number> }).cantUseAttacksUntilTurn;
   if (perAttackLock && perAttackLock[move.name] !== undefined && state.turn <= perAttackLock[move.name]) {
     return fail(`This Pokémon can't use ${move.name} this turn.`);
+  }
+  // Born to Slack (Slaking) — "If your opponent has no Pokémon ex or Pokémon V
+  // in play, this Pokémon can't attack."
+  if ((atk.card.abilities ?? []).some((a) => a.name === "Born to Slack")) {
+    const oppId: PlayerId = player === "p1" ? "p2" : "p1";
+    const oppAllies = [state.players[oppId].active, ...state.players[oppId].bench]
+      .filter((p): p is import("./types").PokemonInPlay => !!p);
+    const hasExOrV = oppAllies.some((p) =>
+      (p.card.subtypes ?? []).some((s) => /^(?:ex|EX|V|VMAX|VSTAR|V-UNION)$/.test(s)),
+    );
+    if (!hasExOrV) {
+      return fail("Born to Slack: opponent has no Pokémon ex or V in play.");
+    }
   }
   const provided = energyProvidedBy(atk);
   const effectiveCost = effectiveAttackCost(state, atk, move.cost, move.name);

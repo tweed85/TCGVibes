@@ -316,11 +316,9 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
     }
   }
   // ---- Discard a named Special Energy → KO opp Active --------------------
-  if (
-    /discard a team rocket'?s energy from this pok[eé]mon\.\s*if you do, discard your opponent'?s active pok[eé]mon and all attached cards/i.test(
-      text,
-    )
-  ) {
+  if (text.match(
+    /discard a team rocket'?s energy from this pok[eé]mon\.\s*if you do, discard your opponent'?s active pok[eé]mon and all attached cards/i,
+  )) {
     effects.push({ kind: "discardSpecialEnergyKoOpp", energyName: "Team Rocket's Energy" });
   }
   // ---- Reveal opp's hand (info-only) -------------------------------------
@@ -667,19 +665,15 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
   // ---- Self-lock next turn (handled below in the consolidated block) ------
 
   // ---- Defender can't retreat next turn -------------------------------------
-  if (
-    /during your opponent'?s next turn, (?:the defending pok[eé]mon|that pok[eé]mon) can'?t retreat/i.test(
-      text,
-    )
-  ) {
+  if (text.match(
+    /during your opponent'?s next turn, (?:the defending pok[eé]mon|that pok[eé]mon) can'?t retreat/i,
+  )) {
     effects.push({ kind: "defenderCantRetreatNextTurn" });
   }
   // ---- Defender can't attack next turn --------------------------------------
-  if (
-    /during your opponent'?s next turn, (?:the defending pok[eé]mon|that pok[eé]mon) can'?t (?:use )?attacks?\b/i.test(
-      text,
-    )
-  ) {
+  if (text.match(
+    /during your opponent'?s next turn, (?:the defending pok[eé]mon|that pok[eé]mon) can'?t (?:use )?attacks?\b/i,
+  )) {
     effects.push({ kind: "defenderCantAttackNextTurn" });
   }
 
@@ -821,17 +815,13 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
   // wording is the strongest version; "all damage done" alone still prevents
   // damage but allows non-damage effects through. We don't distinguish at
   // runtime — both block damage during the opp's next turn.
-  if (
-    /flip a coin\. if heads, during your opponent'?s next turn, prevent all damage (?:from and effects of attacks |done to this pok[eé]mon by attacks)/i.test(
-      text,
-    )
-  ) {
+  if (text.match(
+    /flip a coin\. if heads, during your opponent'?s next turn, prevent all damage (?:from and effects of attacks |done to this pok[eé]mon by attacks)/i,
+  )) {
     effects.push({ kind: "shieldNextTurn", requiresHeads: true });
-  } else if (
-    /during your opponent'?s next turn, prevent all damage (?:from and effects of attacks |done to this pok[eé]mon by attacks)/i.test(
-      text,
-    )
-  ) {
+  } else if (text.match(
+    /during your opponent'?s next turn, prevent all damage (?:from and effects of attacks |done to this pok[eé]mon by attacks)/i,
+  )) {
     effects.push({ kind: "shieldNextTurn", requiresHeads: false });
   }
 
@@ -968,11 +958,9 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
 
   // ---- Ignore Weakness / Resistance / Opp Effects -------------------------
   // Combined "Weakness or Resistance, or by any effects" → all three flags.
-  if (
-    /this (?:attack'?s )?damage isn'?t affected by weakness or resistance,?\s*or by any effects on (?:your opponent'?s active pok[eé]mon|those pok[eé]mon)/i.test(
-      text,
-    )
-  ) {
+  if (text.match(
+    /this (?:attack'?s )?damage isn'?t affected by weakness or resistance,?\s*or by any effects on (?:your opponent'?s active pok[eé]mon|those pok[eé]mon)/i,
+  )) {
     effects.push({ kind: "ignoreWeaknessResistance" });
     effects.push({ kind: "ignoreOppEffects" });
   } else if (/this (?:attack'?s )?damage isn'?t affected by weakness or resistance/i.test(text)) {
@@ -985,11 +973,9 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
       effects.push({ kind: "ignoreResistanceOnly" });
     }
   }
-  if (
-    /this attack'?s damage isn'?t affected by any effects on your opponent'?s active pok[eé]mon/i.test(
-      text,
-    )
-  ) {
+  if (text.match(
+    /this attack'?s damage isn'?t affected by any effects on your opponent'?s active pok[eé]mon/i,
+  )) {
     if (!effects.some((ef) => ef.kind === "ignoreOppEffects")) {
       effects.push({ kind: "ignoreOppEffects" });
     }
@@ -1154,6 +1140,1040 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
   // Knocked Out." Each calls `parseAttackPredicate` on the captured clause.
   detectConditionalDamage(text, effects);
 
+  // ---- New patterns (this batch) ----
+
+  // Tinkaton Windup Swing: "This attack does N less damage for each Energy
+  // attached to your opponent's Active Pokémon."
+  {
+    const m = text.match(
+      /this attack does (\d+) less damage for each energy attached to your opponent'?s active pok[eé]mon/i,
+    );
+    if (m) effects.push({ kind: "damageReducedPerEnergyOnDefender", perCount: parseInt(m[1], 10) });
+  }
+
+  // Ceruledge Infernal Slash: "Discard N Basic <Type> Energy cards from your
+  // hand. If you can't discard N cards in this way, this attack does nothing."
+  {
+    const m = text.match(
+      /discard (\d+) basic ([A-Za-z]+) energy cards? from your hand\. if you can'?t discard \d+ cards? in this way, this attack does nothing/i,
+    );
+    if (m) {
+      const t = matchEnergyType(m[2]);
+      if (t) effects.push({ kind: "discardEnergyFromHandOrFizzle", count: parseInt(m[1], 10), energyType: t });
+    }
+  }
+
+  // Lokix Jumping Shot: "Shuffle this Pokémon and all attached cards into
+  // your deck."
+  if (/shuffle this pok[eé]mon and all attached cards into your deck/i.test(text)) {
+    effects.push({ kind: "selfShuffleIntoDeck" });
+  }
+
+  // Volcanion Backfire: "Put N <Type> Energy attached to this Pokémon into
+  // your hand."
+  {
+    const m = text.match(/put (\d+) ([A-Za-z]+) energy attached to this pok[eé]mon into your hand/i);
+    if (m) {
+      const t = matchEnergyType(m[2]);
+      effects.push({ kind: "returnAttachedEnergyToHand", count: parseInt(m[1], 10), energyType: t });
+    }
+  }
+
+  // Gloom Disperse Drool: "This attack also does N damage to each Benched
+  // Pokémon (both yours and your opponent's)."
+  {
+    const m = text.match(
+      /this attack also does (\d+) damage to each benched pok[eé]mon \(both yours and your opponent'?s\)/i,
+    );
+    if (m) effects.push({ kind: "alsoDamageEachBench", damage: parseInt(m[1], 10), sides: "both" });
+  }
+
+  // Bronzong Tool Drop: "This attack does N damage for each Pokémon Tool
+  // attached to all Pokémon."
+  {
+    const m = text.match(/this attack does (\d+) damage for each pok[eé]mon tool attached to all pok[eé]mon/i);
+    if (m) effects.push({ kind: "perAttachedToolBothSides", perCount: parseInt(m[1], 10) });
+  }
+
+  // Raticate Retaliatory Incisors: "This attack does N damage for each
+  // damage counter on all of your Benched <Name>."
+  {
+    const m = text.match(
+      /this attack does (\d+) damage for each damage counter on all of your benched ([A-Za-z][A-Za-z' -]+?)\.?$/i,
+    );
+    if (m) {
+      effects.push({
+        kind: "perDamageCounterOnBenchNamed",
+        perCount: parseInt(m[1], 10),
+        namePart: m[2].trim().replace(/[. ]+$/, ""),
+      });
+    }
+  }
+
+  // Frosmoth Cold Cyclone: "Move a <Type> Energy from this Pokémon to 1 of
+  // your Benched Pokémon."
+  {
+    const m = text.match(/move an? ([A-Za-z]+) energy from this pok[eé]mon to 1 of your benched pok[eé]mon/i);
+    if (m) {
+      const t = matchEnergyType(m[1]);
+      effects.push({ kind: "moveOneEnergyToBench", energyType: t });
+    }
+  }
+
+  // Raichu Strong Volt: "Discard a <Type> Energy from this Pokémon."
+  // (One-shot single-energy discard, not the per-energy-for-damage form.)
+  {
+    const m = text.match(/^discard an? ([A-Za-z]+) energy from this pok[eé]mon\.?$/im);
+    if (m) {
+      const t = matchEnergyType(m[1]);
+      // Avoid claiming if we already detected discardOwnEnergy / per-energy.
+      const alreadyHas = effects.some(
+        (e) => e.kind === "discardOwnEnergy" || e.kind === "discardOwnEnergyForDamage",
+      );
+      if (!alreadyHas) {
+        effects.push({ kind: "discardSingleAttachedEnergy", energyType: t });
+      }
+    }
+  }
+
+  // Okidogi Settle the Score: "This attack does N more damage for each
+  // Prize card your opponent took during their last turn."
+  {
+    const m = text.match(
+      /this attack does (\d+) more damage for each prize card your opponent took during their last turn/i,
+    );
+    if (m) effects.push({ kind: "perPrizeOppTookLastTurn", perCount: parseInt(m[1], 10) });
+  }
+
+  // Celebi Traverse Time: "Search your deck for up to N in any combination
+  // of <X> Pokémon and <Y> cards, reveal them, and put them into your hand."
+  // Heatmor Licking Catch: similar shape with Pokémon + Basic Energy.
+  {
+    const mPS = text.match(
+      /search your deck for up to (\d+) in any combination of ([A-Za-z]+) pok[eé]mon and stadium cards, reveal them, and put them into your hand/i,
+    );
+    if (mPS) {
+      const t = matchEnergyType(mPS[2]);
+      if (t) {
+        const max = parseInt(mPS[1], 10);
+        // Each slot independently matches either a Pokémon of <type> OR any
+        // Stadium card. Engine's slot-based search picks the first match per
+        // slot, so we put one Pokémon slot then the rest as Stadium-or-any.
+        const filters: AttackSearchFilter[] = [];
+        for (let i = 0; i < max; i++) {
+          filters.push(
+            i === 0
+              ? { kind: "pokemonOfType", energyType: t }
+              : { kind: "any" },
+          );
+        }
+        effects.push({ kind: "searchDeckMixedToHand", max, filters });
+      }
+    }
+  }
+  {
+    const mPE = text.match(
+      /search your deck for up to (\d+) in any combination of ([A-Za-z]+) pok[eé]mon and basic ([A-Za-z]+) energy cards, reveal them, and put them into your hand/i,
+    );
+    if (mPE) {
+      const tp = matchEnergyType(mPE[2]);
+      const te = matchEnergyType(mPE[3]);
+      if (tp && te) {
+        const max = parseInt(mPE[1], 10);
+        const filters: AttackSearchFilter[] = [];
+        for (let i = 0; i < max; i++) {
+          filters.push(
+            i % 2 === 0
+              ? { kind: "pokemonOfType", energyType: tp }
+              : { kind: "basicEnergyType", energyType: te },
+          );
+        }
+        effects.push({ kind: "searchDeckMixedToHand", max, filters });
+      }
+    }
+  }
+
+  // Xerneas Geo Gate: "Search your deck for up to N Basic <Type> Pokémon and
+  // put them onto your Bench."
+  {
+    const m = text.match(
+      /search your deck for up to (\d+) basic ([A-Za-z]+) pok[eé]mon and put them onto your bench/i,
+    );
+    if (m) {
+      const t = matchEnergyType(m[2]);
+      if (t) effects.push({ kind: "searchDeckBasicTypeToBench", max: parseInt(m[1], 10), pokemonType: t });
+    }
+  }
+
+  // Rotom Roto Call: "Search your deck for any number of Pokémon that have
+  // '<Name>' in their name and put them onto your Bench."
+  {
+    const m = text.match(
+      /search your deck for any number of pok[eé]mon that have "?([A-Za-z][A-Za-z' -]+?)"? in their name and put them onto your bench/i,
+    );
+    if (m) effects.push({ kind: "searchDeckNamedPokemonToBench", namePart: m[1].trim() });
+  }
+
+  // Furfrou Hand Trim: "Discard random cards from your opponent's hand
+  // until they have N cards in their hand."
+  {
+    const m = text.match(
+      /discard random cards from your opponent'?s hand until they have (\d+) cards? in their hand/i,
+    );
+    if (m) effects.push({ kind: "oppHandTrimToCount", targetCount: parseInt(m[1], 10) });
+  }
+
+  // Smeargle Energizing Sketch: "Flip N coins. Attach an amount of Basic
+  // Energy up to the number of heads from your discard pile to your Benched
+  // Pokémon in any way you like."
+  {
+    const m = text.match(
+      /flip (\d+) coins?\. attach an amount of basic energy up to the number of heads from your discard pile to your benched pok[eé]mon/i,
+    );
+    if (m) effects.push({ kind: "flipNAttachBasicFromDiscardToBench", coins: parseInt(m[1], 10) });
+  }
+
+  // Snorlax Gormandizer: "Flip a coin until you get tails. Search your deck
+  // for an amount of Basic Energy up to the number of heads and attach it
+  // to this Pokémon."
+  if (text.match(
+    /flip a coin until you get tails\. search your deck for an amount of basic energy up to the number of heads and attach it to this pok[eé]mon/i,
+  )) {
+    effects.push({ kind: "flipUntilTailsAttachBasicSelf" });
+  }
+
+  // Mawile Double Eater: "Discard up to N Energy cards from your hand, and
+  // this attack does M damage for each card you discarded in this way."
+  {
+    const m = text.match(
+      /discard up to (\d+) energy cards? from your hand,? and this attack does (\d+) damage for each card you discarded in this way/i,
+    );
+    if (m) {
+      effects.push({
+        kind: "discardEnergyFromHandForDamage",
+        max: parseInt(m[1], 10),
+        damagePer: parseInt(m[2], 10),
+      });
+    }
+  }
+
+  // Terapagos Prism Charge: "Search your deck for up to N Basic Energy
+  // cards of different types and attach them to your Tera Pokémon in any
+  // way you like."
+  {
+    const m = text.match(
+      /search your deck for up to (\d+) basic energy cards? of different types and attach them to your ([A-Za-z][A-Za-z ]+?) pok[eé]mon/i,
+    );
+    if (m) {
+      effects.push({
+        kind: "searchBasicEnergyDifferentTypesToBenchSubtype",
+        max: parseInt(m[1], 10),
+        benchSubtype: m[2].trim(),
+      });
+    }
+  }
+
+  // Pawmot Voltaic Fist: "You may have this Pokémon also do N damage to
+  // itself and make your opponent's Active Pokémon Paralyzed."
+  {
+    const m = text.match(
+      /(?:you may have )?this pok[eé]mon also do (\d+) damage to itself and make your opponent'?s active pok[eé]mon (asleep|burned|confused|paralyzed|poisoned)/i,
+    );
+    if (m) {
+      effects.push({
+        kind: "selfDamageAndStatusOpp",
+        selfDamage: parseInt(m[1], 10),
+        status: m[2].toLowerCase() as StatusCondition,
+      });
+    }
+  }
+
+  // Manectric Flash Impact / Honchkrow / various: "This attack also does
+  // N damage to 1 of your Benched Pokémon."
+  {
+    const m = text.match(
+      /this attack also does (\d+) damage to 1 of your benched pok[eé]mon/i,
+    );
+    if (m) effects.push({ kind: "alsoDamageOwnBench", damage: parseInt(m[1], 10) });
+  }
+
+  // Teal/Hearthflame/Wellspring Mask Ogerpon Kagura family: "Search your
+  // deck for a Basic <Type> Energy card and attach it to 1 of your Pokémon."
+  {
+    const m = text.match(
+      /search your deck for a basic ([A-Za-z]+) energy card and attach it to 1 of your pok[eé]mon/i,
+    );
+    if (m) {
+      const t = matchEnergyType(m[1]);
+      if (t) effects.push({ kind: "searchBasicEnergyAttachOne", energyType: t });
+    }
+  }
+
+  // Misty's Lapras Swim Together: "Search your deck for up to N <Name>
+  // Pokémon, reveal them, and put them into your hand."
+  {
+    const m = text.match(
+      /search your deck for up to (\d+) ([A-Z][A-Za-z'’-]+(?:'s| s)?) pok[eé]mon, reveal them, and put them into your hand/,
+    );
+    if (m) {
+      effects.push({
+        kind: "searchDeckNamedPokemonToHand",
+        namePart: m[2].trim(),
+        max: parseInt(m[1], 10),
+      });
+    }
+  }
+
+  // Ethan's Typhlosion Buddy Blast: "This attack does N more damage for
+  // each <Name> card in your discard pile."
+  {
+    const m = text.match(
+      /this attack does (\d+) more damage for each ([A-Z][A-Za-z'’ -]+?) card in your discard pile/,
+    );
+    if (m) {
+      effects.push({
+        kind: "perCardInOwnDiscardNamed",
+        namePart: m[2].trim(),
+        perCount: parseInt(m[1], 10),
+      });
+    }
+  }
+
+  // Paldean Tauros Raging Charge: "This attack does N damage for each of
+  // your Pokémon that has '<Name>' in its name that has any damage
+  // counters on it."
+  {
+    const m = text.match(
+      /this attack does (\d+) damage for each of your pok[eé]mon that has "([A-Za-z][A-Za-z' -]+?)" in its name that has any damage counters/i,
+    );
+    if (m) {
+      effects.push({
+        kind: "perOwnPokemonNamedWithDamage",
+        namePart: m[2].trim(),
+        perCount: parseInt(m[1], 10),
+      });
+    }
+  }
+
+  // Misty's Gyarados Splashing Panic: "Discard the top N cards of your
+  // deck, and this attack does M damage for each <Name> Pokémon that you
+  // discarded in this way."
+  {
+    const m = text.match(
+      /discard the top (\d+) cards? of your deck,? and this attack does (\d+) damage for each ([A-Z][A-Za-z'’ -]+?) pok[eé]mon that you discarded in this way/,
+    );
+    if (m) {
+      effects.push({
+        kind: "discardTopNAndDamagePerNamed",
+        topN: parseInt(m[1], 10),
+        namePart: m[3].trim(),
+        perCount: parseInt(m[2], 10),
+      });
+    }
+  }
+
+  // Steven's Baltoy Summoning Sign: "Search your deck for up to N Basic
+  // <Name> Pokémon and put them onto your Bench."
+  {
+    const m = text.match(
+      /search your deck for up to (\d+) basic ([A-Z][A-Za-z'’ -]+?) pok[eé]mon and put them onto your bench/,
+    );
+    if (m) {
+      effects.push({
+        kind: "searchDeckBasicNamedToBench",
+        namePart: m[2].trim(),
+        max: parseInt(m[1], 10),
+      });
+    }
+  }
+
+  // Hydrapple Hydra Breath: "Discard N Basic <Type> Energy cards from your
+  // hand, and Knock Out your opponent's Active Pokémon. If you can't
+  // discard N cards in this way, this attack does nothing."
+  {
+    const m = text.match(
+      /discard (\d+) basic ([A-Za-z]+) energy cards? from your hand,? and knock out your opponent'?s active pok[eé]mon/i,
+    );
+    if (m) {
+      const t = matchEnergyType(m[2]);
+      if (t) {
+        effects.push({
+          kind: "discardEnergyFromHandAndKoOpp",
+          count: parseInt(m[1], 10),
+          energyType: t,
+        });
+      }
+    }
+  }
+
+  // Clefable Metronome / N's Zoroark / Team Rocket's Mimikyu copy-attack
+  // family: "Choose 1 of your opponent's [Active] Pokémon's attacks and
+  // use it as this attack."
+  if (text.match(/choose 1 of your opponent'?s active pok[eé]mon's attacks and use it as this attack/i)) {
+    effects.push({ kind: "useOppActiveAttack" });
+  }
+  // N's Zoroark ex Night Joker: "Choose 1 of your Benched <Name> Pokémon's
+  // attacks and use it as this attack."
+  {
+    const m = text.match(
+      /choose 1 of your benched ([A-Za-z'’ -]+?) pok[eé]mon's attacks and use it as this attack/i,
+    );
+    if (m) {
+      effects.push({ kind: "useBenchedAllyNamedAttack", namePart: m[1].trim() });
+    }
+  }
+  // Coin-flip variant (Ethan's Sudowoodo Try to Imitate).
+  if (text.match(
+    /flip a coin\. if heads, choose 1 of your opponent'?s active pok[eé]mon's attacks and use it as this attack/i,
+  )) {
+    effects.push({ kind: "useOppActiveAttack", coinFlip: true });
+  }
+
+  // Team Rocket's Wobbuffet Rocket Mirror: "Move all damage counters from
+  // 1 of your Benched <Name> Pokémon to your opponent's Active Pokémon."
+  {
+    const m = text.match(
+      /move all damage counters from 1 of your benched ([A-Z][A-Za-z'’ -]+?) pok[eé]mon to your opponent'?s active pok[eé]mon/,
+    );
+    if (m) {
+      effects.push({ kind: "moveAllBenchDamageNamedToOppActive", namePart: m[1].trim() });
+    }
+  }
+
+  // Stoutland Odor Sleuth: "Flip N coins. Put a number of cards up to the
+  // number of heads from your discard pile into your hand."
+  {
+    const m = text.match(
+      /flip (\d+) coins?\. put a number of cards up to the number of heads from your discard pile into your hand/i,
+    );
+    if (m) {
+      effects.push({
+        kind: "flipNRecoverDiscardToHand",
+        coins: parseInt(m[1], 10),
+        filter: { kind: "any" },
+      });
+    }
+  }
+
+  // Tornadus Wrapped in Wind: "Attach a Basic Energy card from your hand
+  // to this Pokémon."
+  if (
+    text.match(/^attach a basic energy card from your hand to this pok[eé]mon\.?$/im) &&
+    !text.match(/\bdiscard\b/i)
+  ) {
+    effects.push({ kind: "attachBasicEnergyFromHandToSelf" });
+  }
+
+  // Rocket Feathers (Honchkrow): "You may discard any number of Supporter
+  // cards that have '<Name>' in their name from your hand, and this attack
+  // does M damage for each card you discarded in this way."
+  {
+    const m = text.match(
+      /you may discard any number of supporter cards that have "([A-Z][A-Za-z'’ ]+?)" in their name from your hand,? and this attack does (\d+) damage for each card you discarded in this way/i,
+    );
+    if (m) {
+      effects.push({
+        kind: "discardNamedSupporterFromHandForDamage",
+        namePart: m[1].trim(),
+        perCount: parseInt(m[2], 10),
+        max: 99,
+      });
+    }
+  }
+
+  // Scrafty Ruffians Attack: "Flip a coin for each <Type> Pokémon you have
+  // in play. This attack does N damage for each heads."
+  {
+    const m = text.match(
+      /flip a coin for each ([A-Za-z]+) pok[eé]mon you have in play\. this attack does (\d+) damage for each heads/i,
+    );
+    if (m) {
+      const t = matchEnergyType(m[1]);
+      if (t) effects.push({ kind: "flipPerPokemonOfTypePerHeads", energyType: t, perHeads: parseInt(m[2], 10) });
+    }
+  }
+
+  // Abomasnow Frozen Wood: "If this Pokémon has N or more <Type> Energy
+  // attached, this attack does M more damage."
+  {
+    const m = text.match(
+      /if this pok[eé]mon has (\d+) or more ([A-Za-z]+) energy attached,? this attack does (\d+) more damage/i,
+    );
+    if (m) {
+      const t = matchEnergyType(m[2]);
+      if (t) {
+        effects.push({
+          kind: "ifSelfEnergyAtLeastBonus",
+          energyType: t,
+          count: parseInt(m[1], 10),
+          bonus: parseInt(m[3], 10),
+        });
+      }
+    }
+  }
+
+  // Inteleon Bring Down: "Choose a Pokémon in play (yours or your
+  // opponent's) that has the least HP remaining, except for this Pokémon,
+  // and it is Knocked Out."
+  if (text.match(
+    /choose a pok[eé]mon in play.*?that has the least hp remaining.*?and it is knocked out/i,
+  )) {
+    effects.push({ kind: "koLowestHpInPlay" });
+  }
+
+  // Shiftry Reversing Gust: "Flip a coin. If heads, choose 1 of your
+  // opponent's Pokémon. Shuffle that Pokémon and all attached cards into
+  // their deck."
+  if (text.match(
+    /flip a coin\. if heads, choose 1 of your opponent'?s pok[eé]mon\. shuffle that pok[eé]mon and all attached cards into their deck/i,
+  )) {
+    effects.push({ kind: "flipShuffleOppPokemonIntoDeck" });
+  }
+
+  // Sandslash Sand Attack: "During your opponent's next turn, if the
+  // Defending Pokémon tries to use an attack, your opponent flips a coin.
+  // If tails, that attack doesn't happen."
+  if (text.match(
+    /during your opponent'?s next turn, if the defending pok[eé]mon tries to use an attack, your opponent flips a coin\. if tails, that attack doesn'?t happen/i,
+  )) {
+    effects.push({ kind: "defenderAttackCoinFlipNextTurn" });
+  }
+
+  // Pachirisu Electrified Incisors.
+  if (text.match(
+    /during your opponent'?s next turn, whenever they attach an energy card from their hand to the defending pok[eé]mon, place (\d+) damage counters on that pok[eé]mon/i,
+  )) {
+    const m = text.match(/place (\d+) damage counters/i);
+    const counters = m ? parseInt(m[1], 10) : 80;
+    effects.push({ kind: "defenderEnergyAttachPenaltyNextTurn", counters });
+  }
+
+  // Watchog Focus Energy: "During your next turn, this Pokémon's <Name>
+  // attack's base damage is N."
+  {
+    const m = text.match(
+      /during your next turn, this pok[eé]mon'?s ([A-Za-z][A-Za-z' -]+?) attack'?s base damage is (\d+)/i,
+    );
+    if (m) {
+      effects.push({
+        kind: "selfNextTurnAttackBaseOverride",
+        attackName: m[1].trim(),
+        baseDamage: parseInt(m[2], 10),
+      });
+    }
+  }
+
+  // Crawdaunt Cutting Riposte: "If this Pokémon has any damage counters
+  // on it, this attack can be used for <Type>."
+  {
+    const m = text.match(
+      /if this pok[eé]mon has any damage counters on it,? this attack can be used for ([A-Za-z]+)/i,
+    );
+    if (m) {
+      const t = matchEnergyType(m[1]);
+      if (t) effects.push({ kind: "altTypeCostIfDamaged", energyType: t });
+    }
+  }
+
+  // Salazzle Sudden Scorching: "Your opponent discards a card from their
+  // hand. If this Pokémon evolved from <Source> during this turn, your
+  // opponent discards N more cards."
+  {
+    const m = text.match(
+      /your opponent discards a card from their hand\. if this pok[eé]mon evolved from ([A-Z][A-Za-z'’ -]+?) during this turn, your opponent discards (\d+) more cards/i,
+    );
+    if (m) {
+      effects.push({
+        kind: "oppDiscardWithEvolveBonus",
+        baseCount: 1,
+        bonusCount: parseInt(m[2], 10),
+        sourceCardName: m[1].trim(),
+      });
+    }
+  }
+
+  // N's Vanilluxe Snow Coating.
+  if (/double the number of damage counters on each of your opponent'?s pok[eé]mon/i.test(text)) {
+    effects.push({ kind: "doubleOppDamageCounters" });
+  }
+
+  // Team Rocket's Murkrow Torment: "Choose 1 of your opponent's Active
+  // Pokémon's attacks. During your opponent's next turn, that Pokémon
+  // can't use that attack."
+  if (text.match(
+    /choose 1 of your opponent'?s active pok[eé]mon's attacks\. during your opponent'?s next turn, that pok[eé]mon can'?t use that attack/i,
+  )) {
+    effects.push({ kind: "lockOneOppAttackNextTurn" });
+  }
+
+  // Team Rocket's Blipbug Searching Eyes.
+  if (/look at 1 of your opponent'?s face-down prize cards/i.test(text)) {
+    effects.push({ kind: "peekOppPrize" });
+  }
+
+  // Gothorita Fortunate Eye.
+  {
+    const m = text.match(
+      /look at the top (\d+) cards of your opponent'?s deck and put them back in any order/i,
+    );
+    if (m) effects.push({ kind: "peekOppDeckTop", count: parseInt(m[1], 10) });
+  }
+
+  // Cinderace Turbo Flare: "Search your deck for up to N Basic Energy
+  // cards and attach them to your Benched Pokémon in any way you like."
+  {
+    const m = text.match(
+      /search your deck for up to (\d+) basic energy cards? and attach them to your benched pok[eé]mon/i,
+    );
+    if (m) effects.push({ kind: "searchBasicEnergyAttachBench", max: parseInt(m[1], 10) });
+  }
+
+  // Dialga Chrono Burst: "You may shuffle all Energy attached to this
+  // Pokémon into your deck and have this attack do N more damage."
+  {
+    const m = text.match(
+      /you may shuffle all energy attached to this pok[eé]mon into your deck and have this attack do (\d+) more damage/i,
+    );
+    if (m) effects.push({ kind: "optionalShuffleSelfEnergyForBonus", bonus: parseInt(m[1], 10) });
+  }
+
+  // Meloetta Soothing Melody: "Heal N damage from 1 of your Benched
+  // <Type> Pokémon."
+  {
+    const m = text.match(
+      /heal (\d+) damage from 1 of your benched ([A-Za-z]+) pok[eé]mon/i,
+    );
+    if (m) {
+      const t = matchEnergyType(m[2]);
+      if (t) effects.push({ kind: "healOneBenchPokemonByType", amount: parseInt(m[1], 10), pokemonType: t });
+    }
+  }
+
+  // Miltank Bellyful of Milk: "Flip 2 coins. If both of them are heads,
+  // heal all damage from 1 of your Pokémon."
+  if (text.match(/flip 2 coins?\. if both of them are heads, heal all damage from 1 of your pok[eé]mon/i)) {
+    effects.push({ kind: "flipBothHeadsHealOne" });
+  }
+
+  // Dedenne Tail Generator: "Choose Basic <Type> Energy cards from your
+  // discard pile up to the amount of Energy attached to all of your
+  // opponent's Pokémon and attach them to your <Type> Pokémon in any way."
+  {
+    const m = text.match(
+      /choose basic ([A-Za-z]+) energy cards? from your discard pile up to the amount of energy attached to all of your opponent'?s pok[eé]mon and attach them to your ([A-Za-z]+) pok[eé]mon/i,
+    );
+    if (m) {
+      const te = matchEnergyType(m[1]);
+      const tp = matchEnergyType(m[2]);
+      if (te && tp) {
+        effects.push({ kind: "attachDiscardEnergyByOppEnergy", energyType: te, pokemonType: tp });
+      }
+    }
+  }
+
+  // Kyogre Riptide: "This attack does N damage for each Basic <Type>
+  // Energy card in your discard pile. Then, shuffle those cards into your
+  // deck."
+  {
+    const m = text.match(
+      /this attack does (\d+) damage for each basic ([A-Za-z]+) energy card in your discard pile\. then, shuffle those cards into your deck/i,
+    );
+    if (m) {
+      const t = matchEnergyType(m[2]);
+      if (t) {
+        effects.push({
+          kind: "perBasicEnergyInDiscardThenShuffle",
+          energyType: t,
+          perCount: parseInt(m[1], 10),
+        });
+      }
+    }
+  }
+
+  // Boldore Smack Down: "If your opponent's Active Pokémon has <Type>
+  // Resistance, this attack does N more damage."
+  {
+    const m = text.match(
+      /if your opponent'?s active pok[eé]mon has ([A-Za-z]+) resistance, this attack does (\d+) more damage/i,
+    );
+    if (m) {
+      const t = matchEnergyType(m[1]);
+      if (t) {
+        effects.push({
+          kind: "ifDefenderHasResistanceOfTypeBonus",
+          resistanceType: t,
+          bonus: parseInt(m[2], 10),
+        });
+      }
+    }
+  }
+
+  // Basculin Bared Fangs: "If your opponent's Active Pokémon has no damage
+  // counters on it before this attack does damage, this attack does nothing."
+  if (text.match(
+    /if your opponent'?s active pok[eé]mon has no damage counters on it before this attack does damage, this attack does nothing/i,
+  )) {
+    effects.push({ kind: "fizzleIfDefenderUndamaged" });
+  }
+
+  // Team Rocket's Exeggutor Tri Kinesis: "Flip 3 coins. If all of them
+  // are heads, Knock Out 1 of your opponent's Pokémon."
+  {
+    const m = text.match(
+      /flip (\d+) coins?\. if all of them are heads, knock out 1 of your opponent'?s pok[eé]mon/i,
+    );
+    if (m) effects.push({ kind: "flipAllHeadsKoOppOne", coins: parseInt(m[1], 10) });
+  }
+
+  // Chi-Yu Scorching Earth: "If your opponent has a Stadium in play,
+  // discard it. If you do, your opponent can't play any Stadium cards from
+  // their hand during their next turn."
+  if (text.match(
+    /if your opponent has a stadium in play, discard it\. if you do, your opponent can'?t play any stadium cards from their hand during their next turn/i,
+  )) {
+    effects.push({ kind: "discardOppStadiumAndLock" });
+  }
+
+  // Medicham Harmonious Spirit Palm: "If this Pokémon and your opponent's
+  // Active Pokémon have the same amount of Energy attached, this attack
+  // does N more damage."
+  {
+    const m = text.match(
+      /if this pok[eé]mon and your opponent'?s active pok[eé]mon have the same amount of energy attached, this attack does (\d+) more damage/i,
+    );
+    if (m) effects.push({ kind: "ifEqualEnergyBonus", bonus: parseInt(m[1], 10) });
+  }
+
+  // Boltund Electrifying Dash: "Search your deck for up to N Basic <Type>
+  // Energy cards and attach them to your Benched Pokémon in any way you like."
+  {
+    const m = text.match(
+      /search your deck for up to (\d+) basic ([A-Za-z]+) energy cards? and attach them to your benched pok[eé]mon/i,
+    );
+    if (m) {
+      const t = matchEnergyType(m[2]);
+      if (t) effects.push({ kind: "searchBasicEnergyTypeAttachBench", max: parseInt(m[1], 10), energyType: t });
+    }
+  }
+
+  // Forretress / Delcatty: "You may move any amount of <Type> Energy from
+  // your Pokémon to your other Pokémon in any way you like." (or no type
+  // for any-Energy variants)
+  {
+    const m = text.match(
+      /you may move any amount of (?:([A-Za-z]+) )?energy from your pok[eé]mon to your other pok[eé]mon/i,
+    );
+    if (m) {
+      const t = m[1] ? matchEnergyType(m[1]) : undefined;
+      effects.push({ kind: "moveAnyEnergyAcrossOwn", energyType: t });
+    }
+  }
+
+  // Varoom Metal Coating: "Attach a Basic <Type> Energy card from your
+  // discard pile to this Pokémon."
+  {
+    const m = text.match(
+      /^attach a basic ([A-Za-z]+) energy card from your discard pile to this pok[eé]mon\.?$/im,
+    );
+    if (m) {
+      const t = matchEnergyType(m[1]);
+      if (t) effects.push({ kind: "attachBasicEnergyDiscardToSelfTyped", energyType: t });
+    }
+  }
+
+  // Poltchageist Tea Server: "Put a Basic <Type> Energy card from your
+  // discard pile into your hand."
+  {
+    const m = text.match(
+      /put a basic ([A-Za-z]+) energy card from your discard pile into your hand/i,
+    );
+    if (m) {
+      const t = matchEnergyType(m[1]);
+      if (t) effects.push({ kind: "recoverBasicEnergyTypeToHand", energyType: t });
+    }
+  }
+
+  // Scream Tail Supportive Singing: "Heal N damage from 1 of your Benched
+  // <Subtype> Pokémon."
+  {
+    const m = text.match(
+      /heal (\d+) damage from 1 of your benched (Ancient|Future|Tera) pok[eé]mon/,
+    );
+    if (m) {
+      effects.push({ kind: "healOneBenchBySubtype", amount: parseInt(m[1], 10), subtype: m[2] });
+    }
+  }
+
+  // Walking Wake Undulating Slice: "Put up to N damage counters on this
+  // Pokémon. This attack does M damage for each damage counter you placed
+  // in this way."
+  {
+    const m = text.match(
+      /put up to (\d+) damage counters? on this pok[eé]mon\. this attack does (\d+) damage for each damage counter you placed in this way/i,
+    );
+    if (m) {
+      effects.push({
+        kind: "selfPlaceCountersForDamage",
+        max: parseInt(m[1], 10),
+        damagePer: parseInt(m[2], 10),
+      });
+    }
+  }
+
+  // Decidueye Power Shot: "Discard a Basic <Type> Energy card from your
+  // hand. If you can't, this attack does nothing."
+  {
+    const m = text.match(
+      /discard a basic ([A-Za-z]+) energy card from your hand\. if you can'?t,? this attack does nothing/i,
+    );
+    if (m) {
+      const t = matchEnergyType(m[1]);
+      if (t) effects.push({ kind: "discardSingleEnergyFromHandOrFizzle", energyType: t });
+    }
+  }
+
+  // Vikavolt Circuit Cannon: "This attack does N more damage for each of
+  // your Benched <Name>."
+  {
+    const m = text.match(
+      /this attack does (\d+) more damage for each of your benched ([A-Z][A-Za-z'’ -]+?)\.?\s*$/im,
+    );
+    if (m) {
+      effects.push({
+        kind: "perBenchPokemonNamed",
+        namePart: m[2].trim(),
+        perCount: parseInt(m[1], 10),
+      });
+    }
+  }
+
+  // Aggron Angry Slam: "This attack does N damage for each of your Pokémon
+  // that has any damage counters on it."
+  {
+    const m = text.match(
+      /this attack does (\d+) damage for each of your pok[eé]mon that has any damage counters on it/i,
+    );
+    if (m) effects.push({ kind: "perOwnPokemonWithDamage", perCount: parseInt(m[1], 10) });
+  }
+
+  // Hawlucha Prize Count: "If you have more Prize cards remaining than
+  // your opponent, this attack does N more damage."
+  {
+    const m = text.match(
+      /if you have more prize cards? remaining than your opponent,? this attack does (\d+) more damage/i,
+    );
+    if (m) effects.push({ kind: "ifMorePrizesThanOpp", bonus: parseInt(m[1], 10) });
+  }
+
+  // Sableye Damage Collection: "You may move any number of damage counters
+  // from your opponent's Benched Pokémon to their Active Pokémon."
+  if (text.match(
+    /you may move any number of damage counters from your opponent'?s benched pok[eé]mon to their active pok[eé]mon/i,
+  )) {
+    effects.push({ kind: "moveAllOppBenchDamageToOppActive" });
+  }
+
+  // Ariados String Bind: "This attack does N more damage for each
+  // Colorless in your opponent's Active Pokémon's Retreat Cost."
+  {
+    const m = text.match(
+      /this attack does (\d+) more damage for each colorless in your opponent'?s active pok[eé]mon'?s retreat cost/i,
+    );
+    if (m) effects.push({ kind: "perColorlessOnDefenderRetreat", perCount: parseInt(m[1], 10) });
+  }
+
+  // Sinistcha Spill the Tea: "Discard up to N Grass Energy cards from your
+  // Pokémon. This attack does M damage for each card you discarded in this way."
+  {
+    const m = text.match(
+      /discard up to (\d+) ([A-Za-z]+) energy cards? from your pok[eé]mon\. this attack does (\d+) damage for each card you discarded in this way/i,
+    );
+    if (m) {
+      const t = matchEnergyType(m[2]);
+      effects.push({
+        kind: "discardEnergyAnywhereForDamage",
+        max: parseInt(m[1], 10),
+        damagePer: parseInt(m[3], 10),
+        energyType: t,
+      });
+    }
+  }
+
+  // Sinistcha ex Re-Brew: "Put N damage counters on 1 of your opponent's
+  // Pokémon for each Basic <Type> Energy card in your discard pile. Then,
+  // shuffle those Energy cards into your deck."
+  {
+    const m = text.match(
+      /put (\d+) damage counters? on 1 of your opponent'?s pok[eé]mon for each basic ([A-Za-z]+) energy card in your discard pile\. then, shuffle those energy cards into your deck/i,
+    );
+    if (m) {
+      const t = matchEnergyType(m[2]);
+      if (t) {
+        effects.push({
+          kind: "perBasicEnergyDiscardCountersOnOpp",
+          perCount: parseInt(m[1], 10),
+          energyType: t,
+        });
+      }
+    }
+  }
+
+  // Team Rocket's Porygon Hacking: "Discard a card from your hand. If you
+  // do, your opponent discards a card from their hand."
+  if (text.match(
+    /discard a card from your hand\. if you do, your opponent discards a card from their hand/i,
+  )) {
+    effects.push({ kind: "discardOwnAndOppHand" });
+  }
+
+  // Morpeko Pick and Stick: "Attach up to N Basic Energy cards from your
+  // discard pile to your Pokémon in any way you like."
+  {
+    const m = text.match(
+      /attach up to (\d+) basic energy cards? from your discard pile to your pok[eé]mon in any way you like/i,
+    );
+    if (m) effects.push({ kind: "attachAnyBasicEnergyDiscardN", max: parseInt(m[1], 10) });
+  }
+
+  // Bronzong Evolution Jammer.
+  if (text.match(
+    /during your opponent'?s next turn,? they can'?t play any pok[eé]mon from their hand to evolve their pok[eé]mon/i,
+  )) {
+    effects.push({ kind: "blockOppEvolveNextTurn" });
+  }
+
+  // Rillaboom Drum Beating: "During your opponent's next turn, attacks
+  // used by the Defending Pokémon cost Colorless more, and its Retreat
+  // Cost is Colorless more."
+  if (text.match(
+    /during your opponent'?s next turn,? attacks used by the defending pok[eé]mon cost colorless more,? and its retreat cost is colorless more/i,
+  )) {
+    effects.push({ kind: "defenderAttackAndRetreatCostUpNextTurn", amount: 1 });
+  }
+
+  // Leafeon Leaflet Blessings.
+  {
+    const m = text.match(
+      /attach a basic ([A-Za-z]+) energy card from your hand to 1 of your benched pok[eé]mon\. if you do, heal all damage from that pok[eé]mon/i,
+    );
+    if (m) {
+      const t = matchEnergyType(m[1]);
+      if (t) effects.push({ kind: "attachBasicEnergyTypeToBenchAndHeal", energyType: t });
+    }
+  }
+
+  // Chimecho Homeward Chime: "Shuffle 1 of your Benched Pokémon and all
+  // attached cards into your deck."
+  if (text.match(/shuffle 1 of your benched pok[eé]mon and all attached cards into your deck/i)) {
+    effects.push({ kind: "shuffleOwnBenchPokemonIntoDeck" });
+  }
+
+  // Swirlix Sneaky Placement: "Put N damage counters on 1 of your
+  // opponent's Pokémon."
+  {
+    const m = text.match(
+      /^put (\d+) damage counters? on 1 of your opponent'?s pok[eé]mon\.?\s*$/im,
+    );
+    if (m) effects.push({ kind: "placeCountersOnOneOpp", counters: parseInt(m[1], 10) });
+  }
+
+  // Conkeldurr Gutsy Swing: "If this Pokémon is affected by a Special
+  // Condition, ignore all Energy in this attack's cost."
+  if (text.match(
+    /if this pok[eé]mon is affected by a special condition,? ignore all energy in this attack'?s cost/i,
+  )) {
+    effects.push({ kind: "freeCostIfStatus" });
+  }
+
+  // Mega Heracross ex Juggernaut Horn: "If this Pokémon was damaged by an
+  // attack during your opponent's last turn, this attack does that much
+  // more damage."
+  if (text.match(
+    /if this pok[eé]mon was damaged by an attack during your opponent'?s last turn,? this attack does that much more damage/i,
+  )) {
+    effects.push({ kind: "damageEqualToDamageTakenLastTurn" });
+  }
+
+  // Cresselia Crescent Purge: "You may turn 1 of your face-down Prize
+  // cards face up. If you do, this attack does N more damage."
+  {
+    const m = text.match(
+      /you may turn 1 of your face-down prize cards face up\. if you do, this attack does (\d+) more damage/i,
+    );
+    if (m) effects.push({ kind: "autoOptionalBonus", bonus: parseInt(m[1], 10) });
+  }
+
+  // Iron Valiant Majestic Sword: "If you played a <subtype> Supporter
+  // card from your hand during this turn, this attack does N more damage."
+  {
+    const m = text.match(
+      /if you played a (Future|Ancient|Tera) supporter card from your hand during this turn,? this attack does (\d+) more damage/i,
+    );
+    if (m) {
+      effects.push({
+        kind: "ifPlayedSupporterSubtypeBonus",
+        supporterSubtype: m[1],
+        bonus: parseInt(m[2], 10),
+      });
+    }
+  }
+
+  // Hippowdon Super Sandstorm: "This attack also does N damage to each
+  // Benched Pokémon that has any damage counters on it (both yours and
+  // your opponent's)."
+  {
+    const m = text.match(
+      /this attack also does (\d+) damage to each benched pok[eé]mon that has any damage counters on it/i,
+    );
+    if (m) effects.push({ kind: "alsoDamageBenchWithCounters", damage: parseInt(m[1], 10) });
+  }
+
+  // Team Rocket's Weezing Explode Together Now: "This attack does N
+  // damage for each Pokémon in play that has '<X>' or '<Y>' in its name
+  // (both yours and your opponent's)."
+  {
+    const m = text.match(
+      /this attack does (\d+) damage for each pok[eé]mon in play that has "([^"]+)"\s+or "([^"]+)" in its name(?: \(both yours and your opponent'?s\))?/i,
+    );
+    if (m) {
+      // Treat as a single combined namePart (will match either Koffing or
+      // Weezing because contains-check is OR-able with two passes; we just
+      // pick the first.)
+      effects.push({
+        kind: "perInPlayPokemonNamed",
+        namePart: m[2],
+        perCount: parseInt(m[1], 10),
+        bothSides: true,
+      });
+      effects.push({
+        kind: "perInPlayPokemonNamed",
+        namePart: m[3],
+        perCount: parseInt(m[1], 10),
+        bothSides: true,
+      });
+    }
+  }
+
+  // Grubbin / Froakie Flock: "Search your deck for up to N <Name> and put
+  // them onto your Bench."
+  {
+    const m = text.match(
+      /search your deck for up to (\d+) ([A-Z][A-Za-z'’ -]+?) and put them onto your bench/,
+    );
+    if (
+      m &&
+      // Avoid clashing with the typed search detector above.
+      !m[2].toLowerCase().endsWith(" energy") &&
+      !/basic|pok[eé]mon/i.test(m[2])
+    ) {
+      effects.push({
+        kind: "searchDeckNamedToBenchN",
+        namePart: m[2].trim(),
+        max: parseInt(m[1], 10),
+      });
+    }
+  }
+
   return { effects, baseDamageOverride };
 }
 
@@ -1234,7 +2254,14 @@ function parseAttackPredicate(clauseRaw: string): AttackPredicate | undefined {
     const m = c.match(/this pok[eé]mon is (asleep|burned|confused|paralyzed|poisoned)/i);
     if (m) return { kind: "selfHasStatus", status: m[1].toLowerCase() as StatusCondition };
   }
-  if (/a stadium (?:card )?is in play/i.test(c)) {
+  if (/(?:a stadium (?:card )?is in play|you have a stadium (?:card )?in play)/i.test(c)) {
+    return { kind: "stadiumInPlayNamed", stadiumNamePart: "" };
+  }
+  if (/your opponent has a stadium (?:card )?in play/i.test(c)) {
+    // Reuse stadiumInPlayNamed; the engine doesn't distinguish controller in
+    // the predicate today, so we treat "any Stadium in play" as the gate.
+    // (Cards using this predicate typically pair it with a "discard the
+    // Stadium" rider that's separately wired.)
     return { kind: "stadiumInPlayNamed", stadiumNamePart: "" };
   }
   // Prize predicates
@@ -1323,6 +2350,67 @@ function parseAttackPredicate(clauseRaw: string): AttackPredicate | undefined {
     if (m) {
       return { kind: "stadiumInPlayNamed", stadiumNamePart: m[1].trim() };
     }
+  }
+  // ---- New predicates (this batch) ----
+  // "If you have at least N <Type> Energy in play"
+  {
+    const m = c.match(/you have at least (\d+) ([A-Za-z]+) energy in play/i);
+    if (m) {
+      const t = matchEnergyType(m[2]);
+      if (t) return { kind: "youHaveEnergyOfTypeAtLeast", energyType: t, count: parseInt(m[1], 10) };
+    }
+  }
+  // "If this Pokémon was healed during this turn"
+  if (/this pok[eé]mon was healed (?:during )?this turn/i.test(c)) {
+    return { kind: "selfHealedThisTurn" };
+  }
+  // "If this Pokémon was damaged by an attack during your opponent's last turn"
+  if (/this pok[eé]mon was damaged by an attack during your opponent'?s last turn/i.test(c)) {
+    return { kind: "selfDamagedLastOppTurn" };
+  }
+  // "If this Pokémon used <Name> during your last turn"
+  {
+    const m = c.match(/this pok[eé]mon used ([A-Za-z][A-Za-z' -]+?) during your last turn/i);
+    if (m) return { kind: "selfUsedAttackLastTurn", attackName: m[1].trim() };
+  }
+  // "If your opponent's Active Pokémon isn't <Status>"
+  {
+    const m = c.match(/your opponent'?s active pok[eé]mon isn'?t (asleep|burned|confused|paralyzed|poisoned)/i);
+    if (m) return { kind: "defenderHasNoStatus", status: m[1].toLowerCase() as StatusCondition };
+  }
+  // "If your opponent doesn't have exactly N or M Prize cards remaining"
+  {
+    const m = c.match(/your opponent (?:doesn'?t have|has) exactly (\d+) or (\d+) prize cards? remaining/i);
+    if (m) return { kind: "oppPrizesInRange", min: parseInt(m[1], 10), max: parseInt(m[2], 10) };
+  }
+  // "If <Name> is in your discard pile"
+  {
+    const m = c.match(/([A-Z][A-Za-z'’ -]+?) is in your discard pile/);
+    if (m && !m[1].toLowerCase().startsWith("basic ")) {
+      return { kind: "yourDiscardHasCardNamed", namePart: m[1].trim() };
+    }
+  }
+  // "If any of your Benched <Name> have any damage counters on them"
+  {
+    const m = c.match(/(?:any of )?your benched ([A-Za-z][A-Za-z' -]*?) have any damage counters/i);
+    if (m) return { kind: "benchPokemonNamedHasDamage", namePart: m[1].trim() };
+  }
+  // "If your Benched Pokémon have any damage counters on them"
+  if (/your benched pok[eé]mon have any damage counters/i.test(c)) {
+    return { kind: "anyBenchHasDamage" };
+  }
+  // "If any of your <named> Pokémon were Knocked Out by damage from an
+  // attack during your opponent's last turn"
+  {
+    const m = c.match(
+      /any of your ([A-Za-z][A-Za-z' -]+?) (?:pok[eé]mon )?(?:were|was) knocked out by damage from an attack during your opponent'?s last turn/i,
+    );
+    if (m) return { kind: "yourNamedPokemonKoedLastOppTurn", namePart: m[1].trim() };
+  }
+  // "If you played a Supporter card that has '<Name>' in its name during this turn"
+  {
+    const m = c.match(/you played a supporter card that has "?([A-Za-z][A-Za-z' -]+?)"? in its name (?:from your hand )?during this turn/i);
+    if (m) return { kind: "supporterPlayedThisTurnNameContains", namePart: m[1].trim() };
   }
   return undefined;
 }
@@ -1562,18 +2650,16 @@ function detectRandomHandDiscard(text: string, effects: AttackEffect[]): void {
       return;
     }
   }
-  if (/discard a random card from your opponent'?s hand/i.test(text)) {
+  if (text.match(/discard a random card from your opponent'?s hand/i)) {
     effects.push({ kind: "randomOppHandDiscard", count: 1 });
   }
 }
 
 function detectRevealOppHand(text: string, effects: AttackEffect[]): void {
   // "Choose a random card from your opponent's hand. <they reveal and> shuffle into deck."
-  if (
-    /choose a random card from your opponent'?s hand[\s\S]*?(?:reveals?|reveal that card)[\s\S]*?shuffles? (?:it|that card|them) into their deck/i.test(
-      text,
-    )
-  ) {
+  if (text.match(
+    /choose a random card from your opponent'?s hand[\s\S]*?(?:reveals?|reveal that card)[\s\S]*?shuffles? (?:it|that card|them) into their deck/i,
+  )) {
     effects.push({ kind: "randomOppHandToDeck", count: 1 });
   }
   // "Flip a coin until you get tails. For each heads, choose a random card from opp's hand and shuffle..."

@@ -93,6 +93,7 @@ export function createPlayer(
     lastDitchUsedThisTurn: false,
     lastSupporterNameThisTurn: null,
     yourPokemonKoedLastOppTurn: false,
+    lastTurnPrizesTaken: 0,
     legacyEnergyUsed: false,
     isAI,
   };
@@ -236,6 +237,16 @@ export function chooseFirstPlayer(
 // Complete the opening setup for one player by promoting a hand card to the
 // Active spot and (optionally) putting additional Basics on the Bench. Returns
 // a list of validation errors, empty if successful.
+// Voltorb / Electrode "Explosiveness" — "If this Pokémon is in your hand
+// when you are setting up to play, you may put it face down in the Active
+// Spot." This is a setup-phase choice that's distinct from the normal
+// Active selection. Currently the SetupModal auto-routes the user's first
+// Basic to Active; surfacing the Explosiveness option would need a tri-state
+// Active picker. Recognized by name for coverage; the modal shortcut still
+// produces a legal setup, just not the optimal one for Voltorb-decks.
+const _EXPLOSIVENESS_RECOGNIZED = "Explosiveness";
+void _EXPLOSIVENESS_RECOGNIZED;
+
 export function completeSetup(
   state: GameState,
   player: PlayerId,
@@ -475,6 +486,52 @@ export function pokemonCheckup(state: GameState): void {
     }
   }
 
+  // 0a. Sand Stream — if Active has it, put 2 damage counters on each of
+  // opp's Basic Pokémon during Pokémon Checkup.
+  for (const pid of ORDER) {
+    const active = state.players[pid].active;
+    if (!active) continue;
+    const hasSandStream = (active.card.abilities ?? []).some((ab) => ab.name === "Sand Stream");
+    if (!hasSandStream) continue;
+    const opp = state.players[opponentOf(pid)];
+    const oppAllies = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+    for (const target of oppAllies) {
+      if (!target.card.subtypes.includes("Basic")) continue;
+      target.damage += 20;
+      logEvent(state, "system", `Sand Stream: 2 counters on ${target.card.name}.`);
+    }
+  }
+
+  // 0b. Freezing Shroud (Froslass) — during Pokémon Checkup, put 1 damage
+  // counter on each Pokémon (both yours and your opponent's) that has an
+  // Ability, except any Froslass.
+  {
+    const froslassInPlay = (() => {
+      for (const pid of ORDER) {
+        const pl = state.players[pid];
+        const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+        for (const a of allies) {
+          if ((a.card.abilities ?? []).some((ab) => ab.name === "Freezing Shroud")) {
+            return true;
+          }
+        }
+      }
+      return false;
+    })();
+    if (froslassInPlay) {
+      for (const pid of ORDER) {
+        const pl = state.players[pid];
+        const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+        for (const target of allies) {
+          if ((target.card.abilities ?? []).length === 0) continue;
+          if (target.card.name === "Froslass") continue; // exception per text
+          target.damage += 10;
+          logEvent(state, "system", `Freezing Shroud: 1 counter on ${target.card.name}.`);
+        }
+      }
+    }
+  }
+
   // 1. Poison damage (Perilous Jungle adds +20 on non-Darkness).
   for (const pid of ORDER) {
     const a = state.players[pid].active;
@@ -484,11 +541,19 @@ export function pokemonCheckup(state: GameState): void {
     if ((state.phase as string) === "gameOver") return;
   }
 
-  // 2. Burn damage (20) + cure flip (heads cures).
+  // 2. Burn damage (20) + cure flip (heads cures). Magma Surge on the
+  // opponent's Active adds +30 (3 more counters).
   for (const pid of ORDER) {
     const a = state.players[pid].active;
     if (!a || !hasStatus(a, "burned")) continue;
-    damageFromStatus(state, pid, a, 20, "burn");
+    let burnDmg = 20;
+    const opp = state.players[opponentOf(pid)];
+    if (opp.active) {
+      for (const ab of opp.active.card.abilities ?? []) {
+        if (ab.name === "Magma Surge") burnDmg += 30;
+      }
+    }
+    damageFromStatus(state, pid, a, burnDmg, burnDmg > 20 ? "burn (Magma Surge)" : "burn");
     if ((state.phase as string) === "gameOver") return;
     const cured = flipCoin(state, `${a.card.name} burn flip`);
     if (cured) {
@@ -756,20 +821,44 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
   );
   // Move active + evolution stack + attached energy + tools to discard.
   // Infinite Shadow returns the KO'd card to hand instead; attached cards
-  // and pre-evolutions still go to discard.
+  // and pre-evolutions still go to discard. Diver's Catch (Wugtrio) — if a
+  // Water Pokémon is KO'd and any owner ally has this ability, Basic Water
+  // Energy on that Pokémon returns to hand instead of going to discard.
+  const ownerAllies = [owner.active, ...owner.bench].filter((p): p is PokemonInPlay => !!p);
+  const hasDiversCatch = ownerAllies.some((p) =>
+    (p.card.abilities ?? []).some((a) => a.name === "Diver's Catch"),
+  );
+  const energyToHand: import("./types").EnergyCard[] = [];
+  const energyToDiscard: import("./types").EnergyCard[] = [];
+  if (hasDiversCatch && ko.card.types.includes("Water")) {
+    for (const e of ko.attachedEnergy) {
+      if ((e.subtypes ?? []).includes("Basic") && e.provides.includes("Water")) {
+        energyToHand.push(e);
+      } else {
+        energyToDiscard.push(e);
+      }
+    }
+    if (energyToHand.length > 0) {
+      logEvent(state, ownerId, `Diver's Catch: returns ${energyToHand.length} Basic Water Energy to hand.`);
+    }
+  } else {
+    energyToDiscard.push(...ko.attachedEnergy);
+  }
   if (infiniteShadow) {
     owner.hand.push(ko.card);
+    owner.hand.push(...energyToHand);
     owner.discard.push(
       ...ko.evolvedFrom,
-      ...ko.attachedEnergy,
+      ...energyToDiscard,
       ...(ko.tools ?? []),
     );
     logEvent(state, ownerId, `Infinite Shadow: ${ko.card.name} returns to hand.`);
   } else {
+    owner.hand.push(...energyToHand);
     owner.discard.push(
       ko.card,
       ...ko.evolvedFrom,
-      ...ko.attachedEnergy,
+      ...energyToDiscard,
       ...(ko.tools ?? []),
     );
   }

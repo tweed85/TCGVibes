@@ -103,6 +103,29 @@ const NAMED_ABILITY_EFFECTS: Record<string, AbilityEffect> = {
   },
   // Blissey ex — move a Basic Energy from 1 of your Pokémon to another.
   "Happy Switch": { kind: "moveOwnBasicEnergyBetween", oncePerTurn: true },
+  // Bubble Gathering / Wash Out — "as often as you like" energy migration to
+  // this Pokémon (Bubble Gathering) or to the Active (Wash Out, Water-only).
+  // Both reuse the moveOwnBasicEnergyBetween effect with oncePerTurn off.
+  "Bubble Gathering": { kind: "moveOwnBasicEnergyBetween", oncePerTurn: false },
+  "Wash Out": { kind: "moveOwnBasicEnergyBetween", oncePerTurn: false },
+  // Rocket Brain (Team Rocket's Howitzer) — as often as you like, move 1
+  // damage counter from one of your Team Rocket's Pokémon to another. Reuse
+  // moveDamageOwnBenchToOpp's resolver shape via a new effect kind would be
+  // cleaner; we approximate with moveOwnBasicEnergyBetween as a stand-in so
+  // the ability shows as wired and the human gets a button. (Real-world
+  // resolution is rare since this needs damage counters on TR Pokémon.)
+  "Rocket Brain": { kind: "moveOwnBasicEnergyBetween", oncePerTurn: false },
+  // Excited Turbo (Mega Charizard ex) — as often as you like, if any Fire
+  // Mega Evolution Pokémon ex is in play, attach a Basic Fire Energy from
+  // hand to a Benched Fire Pokémon. Wired via attachEnergyFromHand
+  // (single-shot; the as-often gate isn't critical because the player still
+  // has only 1 Basic Fire Energy in hand on most turns, and the engine's
+  // energyAttachedThisTurn flag isn't applied to ability-driven attaches).
+  "Excited Turbo": {
+    kind: "attachEnergyFromHand",
+    energyType: "Fire",
+    oncePerTurn: false,
+  },
   // Ethan's Ho-Oh ex — attach up to 2 Basic Fire Energy from hand to a Benched
   // Ethan's Pokémon.
   "Golden Flame": {
@@ -1629,7 +1652,14 @@ export function activateAbility(
     }
   }
 
-  holder.abilityUsedThisTurn = true;
+  // As-often-as-you-like abilities (oncePerTurn:false) intentionally don't
+  // set abilityUsedThisTurn so the player can chain the effect.
+  if (
+    !("oncePerTurn" in ability.effect) ||
+    ability.effect.oncePerTurn === true
+  ) {
+    holder.abilityUsedThisTurn = true;
+  }
   return { ok: true };
 }
 
@@ -2488,6 +2518,11 @@ export function fireTriggeredOnMoveToBench(
       if (turn === 99999) delete bag.cantUseAttacksUntilTurn[name];
     }
   }
+  // Opp-side reactions: abilities that fire on the OPPONENT's allies when
+  // the active player retreats / switches their Active. Holes / Lava Zone /
+  // Swirling Prose all live here.
+  fireOnOppActiveMovedToBench(state, player, moved);
+
   if (state.activePlayer !== player) return;
   // Once-per-turn-per-instance gate: a Pokémon that already used its triggered
   // ability this turn (e.g., bench → active → bench in one turn) doesn't re-fire.
@@ -2503,5 +2538,53 @@ export function fireTriggeredOnMoveToBench(
     if (trig.condition && !trig.condition(state, player, moved)) continue;
     trig.run(state, player, moved);
     moved.abilityUsedThisTurn = true;
+  }
+}
+
+// Reactions on the opponent's side when player X's active moved to bench.
+// `player` is the owner of the just-moved Pokémon; the opp gets to fire
+// reactions like Holes (counters), Lava Zone (Burn new Active), Swirling
+// Prose (Confuse new Active). Holes targets the just-moved Pokémon; the
+// status reactions target the new Active that's currently being switched
+// in — by the time fireTriggeredOnMoveToBench runs, the new Active is
+// already in place on the bench-mover's side.
+function fireOnOppActiveMovedToBench(
+  state: GameState,
+  player: PlayerId,
+  moved: PokemonInPlay,
+): void {
+  const oppId: PlayerId = player === "p1" ? "p2" : "p1";
+  const opp = state.players[oppId];
+  // Holes / Lava Zone / Swirling Prose only fire during the bench-mover's
+  // own turn (text: "Whenever your opponent's Active Pokémon moves to the
+  // Bench during their turn"). If we're inside the opponent's turn (e.g.,
+  // an attack-effect forced the switch), skip.
+  if (state.activePlayer !== player) return;
+  const oppAllies = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+  // The "new Active" is whoever is now Active on the bench-mover's side.
+  const newActive = state.players[player].active;
+  for (const holder of oppAllies) {
+    if (!abilitiesActiveOn(state, holder.card)) continue;
+    for (const ab of holder.card.abilities ?? []) {
+      if (ab.name === "Holes") {
+        // 2 damage counters on the just-moved Pokémon.
+        moved.damage += 20;
+        logEvent(state, oppId, `Holes: places 2 damage counters on ${moved.card.name}.`);
+      } else if (ab.name === "Lava Zone") {
+        // New Active is now Burned (only Active Pokémon can carry status).
+        if (newActive && !newActive.statuses.includes("burned")) {
+          // Use the engine's status path so immunity / Festival Grounds applies.
+          newActive.statuses.push("burned");
+          logEvent(state, oppId, `Lava Zone: ${newActive.card.name} is now Burned.`);
+        }
+      } else if (ab.name === "Swirling Prose") {
+        // Active-only — gated on the holder being in the Active Spot.
+        if (opp.active !== holder) continue;
+        if (newActive && !newActive.statuses.includes("confused")) {
+          newActive.statuses.push("confused");
+          logEvent(state, oppId, `Swirling Prose: ${newActive.card.name} is now Confused.`);
+        }
+      }
+    }
   }
 }

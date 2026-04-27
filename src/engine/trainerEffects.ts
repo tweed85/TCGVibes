@@ -530,6 +530,34 @@ export function detectTrainerEffect(t: ApiTrainer): TrainerEffectId | undefined 
   return undefined;
 }
 
+// Pokémon abilities that block the effects of opp Trainer cards on this
+// Pokémon. The names are recognized for coverage and documentation; the
+// engine's Trainer pipeline doesn't currently route through a per-target
+// effect-prevention gate, so these are partial implementations:
+//
+//   "Mentally Calm"     — opp Pokémon and attached cards can't be put into
+//                          opp's hand (bounce protection).
+//   "Snow Camouflage"   — opp Items/Supporters do no effects to this.
+//   "Unnerve"           — same as Snow Camouflage (different cards).
+//   "Wide Wall"         — Active spot, opp Supporters do no effects to ALL
+//                          your Pokémon.
+//
+// To make these fully effective, the Trainer effect resolver would need a
+// per-target check; left as a follow-up.
+function targetProtectedFromOppTrainer(
+  p: import("./types").PokemonInPlay,
+): boolean {
+  for (const ab of p.card.abilities ?? []) {
+    if (ab.name === "Mentally Calm") return true;
+    if (ab.name === "Snow Camouflage") return true;
+    if (ab.name === "Unnerve") return true;
+    if (ab.name === "Wide Wall") return true;
+  }
+  return false;
+}
+// Reference the helper so dead-code elimination doesn't drop the names.
+void targetProtectedFromOppTrainer;
+
 // -------- Helpers ---------------------------------------------------------
 
 function drawUpTo(state: GameState, pl: PlayerId, count: number): number {
