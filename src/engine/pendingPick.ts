@@ -146,6 +146,15 @@ function applyChainStep(
       }
       break;
     }
+    case "hilda-energy": {
+      // Hilda step 2: after the Evolution Pokémon, pick a basic Energy.
+      const pred = (c: Card) =>
+        c.supertype === "Energy" && (c.subtypes ?? []).includes("Basic");
+      if (!setDeckSearchPick(state, player, pred, 1, "Hilda (2 of 2): pick a basic Energy")) {
+        logEvent(state, player, "Hilda: no basic Energy in deck.");
+      }
+      break;
+    }
   }
 }
 

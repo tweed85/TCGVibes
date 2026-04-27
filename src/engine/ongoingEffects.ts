@@ -1660,6 +1660,14 @@ export function estimateAttackDamage(
       d = Math.max(0, d - r.amount);
     }
   }
+  // Damage-counter placement (Powerful Hand etc.) bypasses W/R and reductions —
+  // add it AFTER the multiplier/subtraction step so the preview reflects what
+  // actually lands.
+  for (const e of moveEffects) {
+    if (e.kind === "placeCountersPerHandCard") {
+      d += e.countersPerCard * 10 * atkPl.hand.length;
+    }
+  }
   return Math.max(0, Math.floor(d));
 }
 

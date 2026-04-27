@@ -231,6 +231,94 @@ describe("Per-Pokemon lock flags (selfCantAttack / cantRetreat)", () => {
   });
 });
 
+describe("Run Away Draw + Poké Pad chain", () => {
+  it("after Dudunsparce shuffles itself into deck and the player promotes, Poké Pad still searches the deck", async () => {
+    const { activateAbility } = await import("../abilities");
+    const { promoteBenchToActive, playTrainer } = await import("../actions");
+    const state = bootGameToMain(11);
+    const ap = state.activePlayer;
+    const pl = state.players[ap];
+    // Build a Dudunsparce with Run Away Draw ability and place it as Active.
+    const dudunsparce: PokemonCard = {
+      id: "dudunsparce-test",
+      name: "Dudunsparce",
+      supertype: "Pokémon",
+      subtypes: ["Stage 1"],
+      hp: 130,
+      types: ["Colorless"],
+      attacks: [],
+      retreatCost: ["Colorless"],
+      abilities: [
+        {
+          name: "Run Away Draw",
+          type: "Ability",
+          text: "Once during your turn, you may draw 3 cards. Then, shuffle this Pokémon and all attached cards into your deck.",
+          effect: { kind: "shuffleSelfIntoDeck", oncePerTurn: true },
+        },
+      ],
+    };
+    pl.active!.card = dudunsparce;
+    pl.active!.evolvedFrom = [];
+    pl.active!.tools = [];
+    pl.active!.attachedEnergy = [];
+    pl.active!.abilityUsedThisTurn = false;
+    // Make sure there's a benched Pokémon to promote into.
+    if (pl.bench.length === 0) {
+      pl.bench.push({
+        instanceId: "bench-fill",
+        card: pl.active!.card,
+        damage: 0,
+        attachedEnergy: [],
+        evolvedFrom: [],
+        tools: [],
+        playedThisTurn: false,
+        evolvedThisTurn: false,
+        statuses: [],
+        abilityUsedThisTurn: false,
+      });
+    }
+    // Plant a Poké Pad in hand.
+    const pokePad: TrainerCard = {
+      id: "poke-pad-test",
+      name: "Poké Pad",
+      supertype: "Trainer",
+      subtypes: ["Item"],
+      text: "Search your deck for a Pokémon that doesn't have a Rule Box, reveal it, and put it into your hand. Then, shuffle your deck.",
+      effectId: "searchNonRuleBoxPokemon",
+    };
+    pl.hand.push(pokePad);
+    const pokePadIdx = pl.hand.length - 1;
+    // Activate Run Away Draw on the Active.
+    const r = activateAbility(state, ap, pl.active!.instanceId, 0);
+    expect(r.ok).toBe(true);
+    expect(state.pendingPromote).toBe(ap);
+    // Phase stays "main" because Run Away Draw is non-terminal — the player
+    // can keep playing Items / attaching Energy / etc. before choosing the
+    // new Active.
+    expect(state.phase).toBe("main");
+    // Play Poké Pad WITHOUT promoting first — should succeed.
+    const padIdx = pl.hand.findIndex((c) => c.name === "Poké Pad");
+    expect(padIdx).toBeGreaterThanOrEqual(0);
+    const r2 = playTrainer(state, ap, padIdx);
+    expect(r2.ok).toBe(true);
+    // Search modal should be open.
+    expect(state.pendingPick).not.toBeNull();
+    expect(state.pendingPick!.label).toContain("Poké Pad");
+    // Skip the search to clear the pendingPick.
+    const { resolvePendingPick } = await import("../pendingPick");
+    resolvePendingPick(state, ap, []);
+    // pendingPromote is still set — the player must still pick an Active.
+    expect(state.pendingPromote).toBe(ap);
+    // Promote a benched Pokémon now.
+    promoteBenchToActive(state, ap, 0);
+    expect(state.pendingPromote).toBeNull();
+    expect(state.phase).toBe("main");
+    expect(pl.active).not.toBeNull();
+    // Suppress unused variable warning for pokePadIdx.
+    void pokePadIdx;
+  });
+});
+
 describe("Import decklist → valid 60-card deck", () => {
   it("a minimal synthetic decklist builds correctly", () => {
     // Use the built-in decks module directly; there's no public import flow

@@ -2027,19 +2027,32 @@ export function applyTrainerEffect(
 
     case "searchEvolutionAndEnergy": {
       const isEvo = (c: Card) => c.supertype === "Pokémon" && !!c.evolvesFrom;
-      const isEnergy = (c: Card) => c.supertype === "Energy";
-      // Two sequential picks would need chained UI; auto-pick first of each.
-      const evo = pl.deck.find(isEvo);
-      const energy = pl.deck.find(isEnergy);
-      if (evo) pl.deck.splice(pl.deck.indexOf(evo), 1);
-      if (energy) pl.deck.splice(pl.deck.indexOf(energy), 1);
-      const took: Card[] = [];
-      if (evo) { pl.hand.push(evo); took.push(evo); }
-      if (energy) { pl.hand.push(energy); took.push(energy); }
-      shuffleDeck(state, player);
-      logEvent(state, player, took.length
-        ? `takes ${took.map((c) => c.name).join(", ")}.`
-        : "finds nothing.");
+      const isBasicEnergyCard = (c: Card) =>
+        c.supertype === "Energy" && c.subtypes.includes("Basic");
+      if (pl.isAI) {
+        // AI: auto-pick first match of each. Cheaper than driving two picks.
+        const evo = pl.deck.find(isEvo);
+        const energy = pl.deck.find(isBasicEnergyCard);
+        if (evo) pl.deck.splice(pl.deck.indexOf(evo), 1);
+        if (energy) pl.deck.splice(pl.deck.indexOf(energy), 1);
+        const took: Card[] = [];
+        if (evo) { pl.hand.push(evo); took.push(evo); }
+        if (energy) { pl.hand.push(energy); took.push(energy); }
+        shuffleDeck(state, player);
+        logEvent(state, player, took.length
+          ? `takes ${took.map((c) => c.name).join(", ")}.`
+          : "finds nothing.");
+        return;
+      }
+      // Human path: pick the Evolution first; chain into the basic Energy
+      // pick. Each step shuffles + opens the next via postResolveChain.
+      if (
+        !setDeckSearchPick(state, player, isEvo, 1, "Hilda (1 of 2): pick an Evolution Pokémon", {
+          postResolveChain: { kind: "hilda-energy" },
+        })
+      ) {
+        logEvent(state, player, "Hilda: no Evolution Pokémon in deck.");
+      }
       return;
     }
 

@@ -98,6 +98,69 @@ describe("Dawn — 1 Basic + 1 Stage 1 + 1 Stage 2 chained picker", () => {
     if (s2Name) expect(hand.some((c) => c.name === s2Name)).toBe(true);
   });
 
+  it("Alakazam (Stage 2) is in the Stage 2 pool and can be picked", () => {
+    const { state, player } = booted();
+    const dawn: TrainerCard = {
+      id: "test-dawn-3",
+      name: "Dawn",
+      supertype: "Trainer",
+      subtypes: ["Supporter"],
+      text: "",
+      effectId: "dawnSearchBasicStage1Stage2",
+    };
+    applyTrainerEffect(state, player, dawn);
+    // Stage 1: pick a Basic.
+    expect(state.pendingPick!.label).toMatch(/Basic/);
+    resolvePendingPick(state, player, state.pendingPick!.pool.length > 0 ? [0] : []);
+    // Stage 2: pick a Stage 1.
+    expect(state.pendingPick!.label).toMatch(/Stage 1/);
+    resolvePendingPick(state, player, state.pendingPick!.pool.length > 0 ? [0] : []);
+    // Stage 3: pick a Stage 2 — Alakazam should be present.
+    expect(state.pendingPick!.label).toMatch(/Stage 2/);
+    const alakazamIdx = state.pendingPick!.pool.findIndex((c) => c.name === "Alakazam");
+    expect(alakazamIdx).toBeGreaterThanOrEqual(0);
+    const r = resolvePendingPick(state, player, [alakazamIdx]);
+    expect(r.ok).toBe(true);
+    expect(state.pendingPick).toBeNull();
+    expect(state.players[player].hand.some((c) => c.name === "Alakazam")).toBe(true);
+  });
+
+  it("Hilda — interactive picker chains Evolution Pokémon → basic Energy", () => {
+    const { state, player } = booted();
+    const hilda: TrainerCard = {
+      id: "test-hilda",
+      name: "Hilda",
+      supertype: "Trainer",
+      subtypes: ["Supporter"],
+      text: "",
+      effectId: "searchEvolutionAndEnergy",
+    };
+    applyTrainerEffect(state, player, hilda);
+    // Stage 1: Evolution Pokémon picker.
+    expect(state.pendingPick).not.toBeNull();
+    expect(state.pendingPick!.label).toMatch(/Evolution/);
+    expect(state.pendingPick!.max).toBe(1);
+    for (const c of state.pendingPick!.pool) {
+      expect(c.supertype === "Pokémon" && !!c.evolvesFrom).toBe(true);
+    }
+    const evoIdx = state.pendingPick!.pool.findIndex(() => true);
+    const evoName = evoIdx >= 0 ? state.pendingPick!.pool[evoIdx].name : null;
+    resolvePendingPick(state, player, evoIdx >= 0 ? [evoIdx] : []);
+    // Stage 2: basic Energy picker.
+    expect(state.pendingPick).not.toBeNull();
+    expect(state.pendingPick!.label).toMatch(/basic Energy/);
+    expect(state.pendingPick!.max).toBe(1);
+    for (const c of state.pendingPick!.pool) {
+      expect(c.supertype === "Energy" && c.subtypes.includes("Basic")).toBe(true);
+    }
+    const energyIdx = state.pendingPick!.pool.findIndex(() => true);
+    const energyName = energyIdx >= 0 ? state.pendingPick!.pool[energyIdx].name : null;
+    resolvePendingPick(state, player, energyIdx >= 0 ? [energyIdx] : []);
+    expect(state.pendingPick).toBeNull();
+    if (evoName) expect(state.players[player].hand.some((c) => c.name === evoName)).toBe(true);
+    if (energyName) expect(state.players[player].hand.some((c) => c.name === energyName)).toBe(true);
+  });
+
   it("rejects picking 2 cards at a single stage", () => {
     const { state, player } = booted();
     const dawn: TrainerCard = {

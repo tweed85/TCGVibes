@@ -557,7 +557,16 @@ export default function App() {
   const promoteOpen = state.pendingPromote === viewingPlayer;
 
   const onHandClick = (i: number) => {
-    if (promoteOpen) {
+    // TERMINAL pendingPromote (attack-KO / checkup-KO) sets phase to
+    // "promoteActive" — the engine itself blocks all main actions until
+    // the player promotes. We surface a hint and bail.
+    //
+    // NON-terminal pendingPromote (e.g. Run Away Draw shuffling the active
+    // away, Adrena-Brain KOing opp's active) leaves phase as "main" so the
+    // player can keep playing Items / attach Energy / evolve / etc. before
+    // choosing the new Active. We DON'T return here — the click should
+    // proceed normally.
+    if (promoteOpen && state.phase === "promoteActive") {
       setStatusMsg("Pick a Benched Pokémon to promote to Active.");
       return;
     }
@@ -2665,6 +2674,16 @@ function PickModal({
   onResolve: (pickedIndexes: number[]) => void;
 }) {
   const [selected, setSelected] = useState<number[]>([]);
+  // Chained picks (Dawn Basic → Stage 1 → Stage 2, Hilda Evolution → Energy)
+  // reuse the same PickModal mount — React doesn't remount because the
+  // outer conditional stays true. Without this reset, `selected` from the
+  // previous stage leaks into the next: e.g., selected=[0] from Stage 1
+  // makes the Stage 2 modal think it's already at max=1, silently
+  // rejecting any click on Alakazam at a higher index. Reset on every new
+  // pool identity so each stage starts fresh.
+  useEffect(() => {
+    setSelected([]);
+  }, [pick.pool, pick.label]);
   const eligibleSet = pick.eligibleIndexes
     ? new Set(pick.eligibleIndexes)
     : null;

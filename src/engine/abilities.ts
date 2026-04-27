@@ -33,6 +33,13 @@ const ENERGY_TYPES: EnergyType[] = [
 // Resolve a KO triggered by an ability that places damage counters. Handles
 // either active or bench correctly: active KOs flow through `knockOut`
 // (tools, prizes, promote pause), bench KOs through `resolveBenchKOs`.
+//
+// Ability-induced KOs are NON-TERMINAL — the active player's turn continues
+// after the ability resolves. `knockOut` sets phase = "promoteActive" which
+// would otherwise block all subsequent actions, so we revert to "main" once
+// the engine has done its accounting. The pendingPromote flag stays set so
+// the opponent (or active player, in self-KO cases like Cursed Blast) is
+// still required to choose an Active before attacks / end-of-turn fire.
 export function knockOutFromAbilityCounters(
   state: GameState,
   ownerId: PlayerId,
@@ -45,6 +52,10 @@ export function knockOutFromAbilityCounters(
     knockOut(state, ownerId);
   } else {
     resolveBenchKOs(state);
+  }
+  // Restore main phase — this KO didn't end the active player's turn.
+  if (state.phase === "promoteActive" && state.onPromoteResolved === null) {
+    state.phase = "main";
   }
 }
 
@@ -690,10 +701,16 @@ export function activateAbility(
       pl.deck.push(...cards);
       if (fromActive) {
         pl.active = null;
-        // Force a promote so the player can still act this turn.
+        // Pause for promote — but keep phase="main" so the player can still
+        // play Trainers, attach Energy to Bench, evolve, activate other
+        // abilities, etc. before choosing the new Active. Action Bar's
+        // attack/retreat/end-turn buttons are gated on `promoteOpen` so
+        // those are blocked until a Bench Pokémon is promoted.
         state.pendingPromote = player;
-        state.phase = "promoteActive";
         state.onPromoteResolved = null;
+        // (Intentionally NOT setting phase = "promoteActive" — that phase
+        // is reserved for terminal promotes like attack-KO / checkup-KO
+        // where the turn is already ending.)
       } else {
         pl.bench = pl.bench.filter((p) => p.instanceId !== holder.instanceId);
       }
@@ -1784,10 +1801,17 @@ const TRIGGERED_ON_EVOLVE: Record<string, TriggeredOnEvolveEffect> = {
     },
   },
   // Alakazam / Kadabra — "Psychic Draw". Alakazam draws 3, Kadabra draws 2.
+  // Gated to fire only when the evolved Pokémon lands on the Bench so the
+  // draw engine doesn't fire when evolving the Active spot. (House rule:
+  // keeps the AI from suiciding draw value on a vulnerable Active.)
   "Psychic Draw": {
     label: "Psychic Draw: draw cards",
     run: (state, player, self) => {
       const pl = state.players[player];
+      if (pl.active?.instanceId === self.instanceId) {
+        logEvent(state, player, `Psychic Draw skipped — ${self.card.name} is in the Active Spot.`);
+        return;
+      }
       const count = self.card.name === "Kadabra" ? 2 : 3;
       let drawn = 0;
       for (let i = 0; i < count; i++) {

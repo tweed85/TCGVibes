@@ -1284,7 +1284,8 @@ export interface PendingPick {
 // resolver knows which predicate + label to use for the next pick.
 export type DeckSearchChainStep =
   | { kind: "dawn-stage1" } // Dawn: after picking the Basic, pick a Stage 1
-  | { kind: "dawn-stage2" }; // Dawn: after picking the Stage 1, pick a Stage 2
+  | { kind: "dawn-stage2" } // Dawn: after picking the Stage 1, pick a Stage 2
+  | { kind: "hilda-energy" }; // Hilda: after the Evolution, pick a basic Energy
 
 // Short "hey, heads up" modal shown between chained deck searches when the
 // current stage has no qualifying cards. Lets the player acknowledge the
