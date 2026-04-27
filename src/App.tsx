@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   attachEnergy,
   attack,
@@ -39,6 +39,8 @@ import type { ActionResult } from "./engine/actions";
 import type { Ability, Card, GameState, PlayerId, PokemonInPlay } from "./engine/types";
 import { buildDeck, validatedDeckSpecs } from "./data/decks";
 import { datasetAsOf, datasetFormat } from "./data/cards";
+import { getAttackEffects } from "./data/effectPatterns";
+import { loadImportedDecks, saveImportedDecks, type PersistedImport } from "./data/persistence";
 import {
   buildDeckFromEntries,
   importDecklist,
@@ -67,10 +69,10 @@ interface ImportedDeck {
   cards: Card[];             // resolved at import / load time
 }
 
-// localStorage persistence. We store entries (not resolved Cards) so rotations
-// or dataset updates re-resolve cleanly. Bump the key suffix if the schema
-// changes in a breaking way.
-const IMPORTS_STORAGE_KEY = "tcgvibes.imports.v1";
+// Settings stay in localStorage — small (~100 bytes) and we need sync init
+// before first render. Imported decks moved to IndexedDB (see persistence.ts)
+// so iOS WebView storage pressure can't evict them and we're not capped at
+// localStorage's ~5MB.
 const SETTINGS_STORAGE_KEY = "tcgvibes.settings.v1";
 
 type AiSpeed = "instant" | "fast" | "normal" | "slow";
@@ -111,55 +113,43 @@ function saveSettings(s: PersistedSettings): void {
   }
 }
 
-interface PersistedImport {
-  id: string;
-  name: string;
-  entries: DeckListEntry[];
-}
-
-function loadPersistedImports(): ImportedDeck[] {
-  try {
-    const raw = localStorage.getItem(IMPORTS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as PersistedImport[];
-    const restored: ImportedDeck[] = [];
-    for (const p of parsed) {
-      if (!p || !p.id || !p.name || !Array.isArray(p.entries)) continue;
-      const built = buildDeckFromEntries(p.entries);
-      // Skip decks that can't be resolved at all (dataset drift) — the raw
-      // entries would still be in storage for debugging, but a zero-card deck
-      // is unplayable. Partial resolution (<60) is kept and flagged in UI.
-      if (built.deck.length === 0) continue;
-      restored.push({ id: p.id, name: p.name, entries: p.entries, cards: built.deck });
-    }
-    return restored;
-  } catch {
-    return [];
+function rehydrateImports(persisted: PersistedImport[]): ImportedDeck[] {
+  const restored: ImportedDeck[] = [];
+  for (const p of persisted) {
+    if (!p || !p.id || !p.name || !Array.isArray(p.entries)) continue;
+    const built = buildDeckFromEntries(p.entries);
+    // Skip decks that can't be resolved at all (dataset drift) — the raw
+    // entries would still be in storage for debugging, but a zero-card deck
+    // is unplayable. Partial resolution (<60) is kept and flagged in UI.
+    if (built.deck.length === 0) continue;
+    restored.push({ id: p.id, name: p.name, entries: p.entries, cards: built.deck });
   }
-}
-
-function savePersistedImports(imports: ImportedDeck[]): void {
-  try {
-    const data: PersistedImport[] = imports.map(({ id, name, entries }) => ({
-      id,
-      name,
-      entries,
-    }));
-    localStorage.setItem(IMPORTS_STORAGE_KEY, JSON.stringify(data));
-  } catch {
-    // Storage quota / private mode — silently ignore; imports stay in-memory.
-  }
+  return restored;
 }
 
 export default function App() {
   const deckSpecs = useMemo(() => validatedDeckSpecs(), []);
   const savedSettings = useMemo(() => loadSettings(), []);
-  const [imports, setImports] = useState<ImportedDeck[]>(() => loadPersistedImports());
+  // Imports come from IndexedDB (async). Start empty and rehydrate on mount.
+  // Selected deck IDs may temporarily fall back to the first preset if the
+  // user's saved import-deck isn't yet rehydrated by first paint, then sync
+  // up once IDB resolves.
+  const [imports, setImports] = useState<ImportedDeck[]>([]);
+  const [importsLoaded, setImportsLoaded] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void loadImportedDecks().then((persisted) => {
+      if (cancelled) return;
+      setImports(rehydrateImports(persisted));
+      setImportsLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
   const knownDeckIds = useMemo(() => {
     const ids = new Set<string>(deckSpecs.map((d) => d.id));
-    for (const i of loadPersistedImports()) ids.add(i.id);
+    for (const i of imports) ids.add(i.id);
     return ids;
-  }, [deckSpecs]);
+  }, [deckSpecs, imports]);
   const [myDeckId, setMyDeckId] = useState(
     savedSettings.myDeckId && knownDeckIds.has(savedSettings.myDeckId)
       ? savedSettings.myDeckId
@@ -262,10 +252,15 @@ export default function App() {
   const opp = state.players[viewingPlayer === "p1" ? "p2" : "p1"];
   const myTurn = state.activePlayer === viewingPlayer && state.phase === "main";
 
-  // Persist imported decks across reloads.
+  // Persist imported decks across reloads. Skip the first save before IDB has
+  // finished its initial load — otherwise we'd write an empty array over any
+  // existing saved decks if the user lands on the page and reloads quickly.
   useEffect(() => {
-    savePersistedImports(imports);
-  }, [imports]);
+    if (!importsLoaded) return;
+    void saveImportedDecks(
+      imports.map(({ id, name, entries }): PersistedImport => ({ id, name, entries })),
+    );
+  }, [imports, importsLoaded]);
 
   // Persist UI settings (gameMode, openHands, last-selected decks).
   useEffect(() => {
@@ -471,64 +466,67 @@ export default function App() {
   //   Esc  → close topmost dismissible modal (discard viewer, import)
   //   E    → end turn (if main phase + my turn + no blocking modal)
   //   1-9  → click hand card at that position
-  useEffect(() => {
-    const onKey = (ev: KeyboardEvent) => {
-      // Never interfere with typing into inputs (decklist paste, deck name, etc.).
-      const t = ev.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-      if (ev.key === "Escape") {
-        if (zoomCard) { setZoomCard(null); ev.preventDefault(); return; }
-        if (discardViewer) { setDiscardViewer(null); ev.preventDefault(); return; }
-        if (importOpen) { setImportOpen(false); ev.preventDefault(); return; }
-        if (buildOpen) { setBuildOpen(false); ev.preventDefault(); return; }
-        // Other modals (handoff, setup, pick, coin flip) are intentionally
-        // non-dismissible via Esc to avoid accidental turn skips.
-        return;
-      }
-      // Block shortcuts while any modal owns focus.
-      if (
-        preGameOpen ||
-        pendingHandoff ||
-        state.pendingPick ||
-        state.pendingHandReveal ||
-        discardViewer ||
-        importOpen ||
-        buildOpen ||
-        state.phase === "coinFlip" ||
-        (state.phase === "setup" && !state.players[viewingPlayer].setupComplete) ||
-        state.phase === "promoteActive" ||
-        state.winner !== null
-      ) return;
-      if (state.phase !== "main") return;
-      if (state.activePlayer !== viewingPlayer) return;
-      if (ev.key === "e" || ev.key === "E") {
-        onEndTurn();
+  //
+  // Pattern: bind window listeners ONCE via a stable wrapper that defers to
+  // a ref. Updating the ref each render keeps the closures fresh (no stale
+  // state), without thrashing addEventListener/removeEventListener every
+  // render. The previous version had no deps array, so it re-bound on
+  // every CPU-step rerender.
+  const keyHandlerRef = useRef<(ev: KeyboardEvent) => void>(() => {});
+  const popHandlerRef = useRef<() => void>(() => {});
+  keyHandlerRef.current = (ev: KeyboardEvent) => {
+    // Never interfere with typing into inputs (decklist paste, deck name, etc.).
+    const t = ev.target as HTMLElement | null;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    if (ev.key === "Escape") {
+      if (zoomCard) { setZoomCard(null); ev.preventDefault(); return; }
+      if (discardViewer) { setDiscardViewer(null); ev.preventDefault(); return; }
+      if (importOpen) { setImportOpen(false); ev.preventDefault(); return; }
+      if (buildOpen) { setBuildOpen(false); ev.preventDefault(); return; }
+      return;
+    }
+    if (
+      preGameOpen ||
+      pendingHandoff ||
+      state.pendingPick ||
+      state.pendingHandReveal ||
+      discardViewer ||
+      importOpen ||
+      buildOpen ||
+      state.phase === "coinFlip" ||
+      (state.phase === "setup" && !state.players[viewingPlayer].setupComplete) ||
+      state.phase === "promoteActive" ||
+      state.winner !== null
+    ) return;
+    if (state.phase !== "main") return;
+    if (state.activePlayer !== viewingPlayer) return;
+    if (ev.key === "e" || ev.key === "E") {
+      onEndTurn();
+      ev.preventDefault();
+    } else if (/^[1-9]$/.test(ev.key)) {
+      const idx = parseInt(ev.key, 10) - 1;
+      if (idx < me.hand.length) {
+        onHandClick(idx);
         ev.preventDefault();
-      } else if (/^[1-9]$/.test(ev.key)) {
-        const idx = parseInt(ev.key, 10) - 1;
-        if (idx < me.hand.length) {
-          onHandClick(idx);
-          ev.preventDefault();
-        }
       }
-    };
-    // Android back-button → close any open modal instead of leaving the page.
-    // We listen to popstate; if a modal is open we just close it. The modal
-    // open-handlers below push a sentinel history entry so the browser's
-    // built-in back navigation lands on this listener.
-    const onPop = () => {
-      if (zoomCard) { setZoomCard(null); return; }
-      if (discardViewer) { setDiscardViewer(null); return; }
-      if (importOpen) { setImportOpen(false); return; }
-      if (buildOpen) { setBuildOpen(false); return; }
-    };
+    }
+  };
+  popHandlerRef.current = () => {
+    if (zoomCard) { setZoomCard(null); return; }
+    if (discardViewer) { setDiscardViewer(null); return; }
+    if (importOpen) { setImportOpen(false); return; }
+    if (buildOpen) { setBuildOpen(false); return; }
+  };
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => keyHandlerRef.current(ev);
+    const onPop = () => popHandlerRef.current();
     window.addEventListener("keydown", onKey);
     window.addEventListener("popstate", onPop);
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("popstate", onPop);
     };
-  });
+  }, []);
 
   // Push a history entry whenever a dismissible modal opens, so Android's
   // hardware/gesture back button lands on a popstate event (handled above)
@@ -712,7 +710,7 @@ export default function App() {
     // If the attack carries a snipeOne effect and the opponent has more than
     // one benched Pokémon, pause first so the user can pick the target.
     const move = me.active?.card.attacks[atkIndex];
-    const hasSnipe = move?.effects?.some((e) => e.kind === "snipeOne");
+    const hasSnipe = move ? getAttackEffects(move).some((e) => e.kind === "snipeOne") : false;
     if (hasSnipe && opp.bench.length > 1) {
       setPendingSnipeAttack(atkIndex);
       return;
@@ -769,10 +767,11 @@ export default function App() {
     rerender();
   };
 
-  // Don't memoize: evolving mutates PokemonInPlay.card in place, so a
-  // reference-keyed useMemo would return stale attacks/abilities. These are
-  // cheap to recompute per render.
-  const myActiveAttacks = (() => {
+  // Memoized on a coarse render epoch (state.log.length advances on every
+  // logged action). The previous "don't memoize" comment was about evolution
+  // mutating PokemonInPlay.card — covered here by including
+  // me.active?.card so the dep changes when the card reference is swapped.
+  const myActiveAttacks = useMemo(() => {
     if (!me.active) return [];
     const provided = energyProvidedBy(me.active);
     return effectiveAttacks(me.active).map((a, i) => ({
@@ -784,7 +783,8 @@ export default function App() {
       payable: canPayCost(provided, a.cost),
       estimated: estimateAttackDamage(state, viewingPlayer, me.active!, a),
     }));
-  })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me.active, me.active?.card, state.log.length, state.turn, viewingPlayer]);
 
   // Derive a location label ("Active", "Bench 1", "Bench 2"…) per Pokémon
   // so the ability button can disambiguate multiple copies of the same card
@@ -794,18 +794,28 @@ export default function App() {
     const idx = me.bench.findIndex((b) => b.instanceId === p.instanceId);
     return idx >= 0 ? `Bench ${idx + 1}` : "";
   };
-  const activatableAbilities = [me.active, ...me.bench]
-    .filter((p): p is PokemonInPlay => !!p)
-    .flatMap((p) =>
-      (p.card.abilities ?? [])
-        .map((a, i) => ({ p, a, i, location: locationOf(p) }))
-        .filter(({ a, p }) => a.effect && !p.abilityUsedThisTurn),
-    );
+  const activatableAbilities = useMemo(
+    () =>
+      [me.active, ...me.bench]
+        .filter((p): p is PokemonInPlay => !!p)
+        .flatMap((p) =>
+          (p.card.abilities ?? [])
+            .map((a, i) => ({ p, a, i, location: locationOf(p) }))
+            .filter(({ a, p }) => a.effect && !p.abilityUsedThisTurn),
+        ),
+    // log.length advances each action, picking up p.abilityUsedThisTurn flips
+    // and per-Pokémon card swaps from evolve.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [me.active, me.active?.card, me.bench, state.log.length, state.turn],
+  );
 
   // Legal-target highlighting — when a card is selected in hand, compute the
   // set of Pokémon instance-ids that would be a legal drop target and pass
   // that down to the rendered boards so they can light up accordingly.
-  const legalTargets = (() => {
+  // Memoized: this re-runs only when the user changes selection, hovers an
+  // ability source, the engine logs an action, or a pending in-play target
+  // appears — not on every unrelated rerender (CPU-turn ticks, etc.).
+  const legalTargets = useMemo(() => {
     const own = new Set<string>();
     const opp_ = new Set<string>();
     let benchHint = false; // highlight player's empty bench slots (Basic play)
@@ -959,7 +969,22 @@ export default function App() {
     }
 
     return { own, opp: opp_, benchHint };
-  })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    selected,
+    hoveredAbilitySource,
+    state.log.length,
+    state.turn,
+    state.phase,
+    state.pendingInPlayTarget,
+    me.hand,
+    me.active,
+    me.bench,
+    me.energyAttachedThisTurn,
+    opp.active,
+    opp.bench,
+    viewingPlayer,
+  ]);
 
   return (
     <div className="app">
@@ -1480,20 +1505,25 @@ function AiActionBanner({
   state: GameState;
   active: boolean;
 }) {
-  if (!active) return null;
   const aiPlayer = state.activePlayer;
-  // Walk the log tail, scoped to the current turn, collecting up to
-  // AI_BANNER_TAIL recent AI/system entries. Order: oldest first, newest last.
-  const tail: { player: PlayerId | "system"; text: string }[] = [];
-  for (let i = state.log.length - 1; i >= 0; i--) {
-    const e = state.log[i];
-    if (e.turn !== state.turn) break;
-    if (e.player === aiPlayer || e.player === "system") {
-      tail.push({ player: e.player, text: e.text });
-      if (tail.length >= AI_BANNER_TAIL) break;
+  // Memoize the tail-walk so unrelated rerenders (mouse hover on a card,
+  // settings toggle) don't re-walk the log. Keyed on the values that can
+  // actually change the tail.
+  const tail = useMemo(() => {
+    if (!active) return [];
+    const out: { player: PlayerId | "system"; text: string }[] = [];
+    for (let i = state.log.length - 1; i >= 0; i--) {
+      const e = state.log[i];
+      if (e.turn !== state.turn) break;
+      if (e.player === aiPlayer || e.player === "system") {
+        out.push({ player: e.player, text: e.text });
+        if (out.length >= AI_BANNER_TAIL) break;
+      }
     }
-  }
-  tail.reverse();
+    out.reverse();
+    return out;
+  }, [active, state.log.length, state.turn, aiPlayer]);
+  if (!active) return null;
   const aiName = state.players[aiPlayer].name;
   return (
     <div className="ai-banner" role="status" aria-live="polite">
@@ -1725,7 +1755,7 @@ interface ActionBarProps {
   onCancelTarget?: () => void;
 }
 
-function ActionBar({
+function ActionBarInner({
   myTurn,
   promoteOpen,
   statusMsg,
@@ -1862,6 +1892,44 @@ function ActionBar({
     </div>
   );
 }
+
+// Memoized: ActionBar renders attack/ability buttons that re-evaluate every
+// parent render. Most parent renders during gameplay don't change the visible
+// action set (mouse hovers, pending pickers, etc.). We compare the action-
+// driving slices explicitly and ignore callback identities (closures still
+// reach the latest stateRef-backed handlers).
+const ActionBar = memo(ActionBarInner, (prev, next) => {
+  if (prev.myTurn !== next.myTurn) return false;
+  if (prev.promoteOpen !== next.promoteOpen) return false;
+  if (prev.statusMsg !== next.statusMsg) return false;
+  if (prev.canUndo !== next.canUndo) return false;
+  if (prev.pendingTargetActive !== next.pendingTargetActive) return false;
+  if (prev.stadiumButton !== next.stadiumButton) return false;
+  if (prev.me !== next.me) return false;
+  // Player turn-flag fields drive the chip row.
+  if (prev.me.energyAttachedThisTurn !== next.me.energyAttachedThisTurn) return false;
+  if (prev.me.supporterPlayedThisTurn !== next.me.supporterPlayedThisTurn) return false;
+  if (prev.me.retreatedThisTurn !== next.me.retreatedThisTurn) return false;
+  // Attacks: same length + same payable/estimated values per row.
+  if (prev.attacks.length !== next.attacks.length) return false;
+  for (let i = 0; i < prev.attacks.length; i++) {
+    const a = prev.attacks[i], b = next.attacks[i];
+    if (a.name !== b.name) return false;
+    if (a.payable !== b.payable) return false;
+    if (a.estimated !== b.estimated) return false;
+    if (a.damage !== b.damage) return false;
+  }
+  // Activatables: same shape (length + names + per-Pokémon abilityUsed flags).
+  if (prev.activatable.length !== next.activatable.length) return false;
+  for (let i = 0; i < prev.activatable.length; i++) {
+    const a = prev.activatable[i], b = next.activatable[i];
+    if (a.a.name !== b.a.name) return false;
+    if (a.p !== b.p) return false;
+    if (a.location !== b.location) return false;
+    if (a.p.abilityUsedThisTurn !== b.p.abilityUsedThisTurn) return false;
+  }
+  return true;
+});
 
 // ---------------------------------------------------------------------------
 //  Deck picker — grouped preset + imported decks

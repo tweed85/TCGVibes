@@ -19,7 +19,6 @@ import type {
   TrainerCard,
   WeaknessResistance,
 } from "../engine/types";
-import { extractEffects } from "./effectPatterns";
 import { detectTrainerEffect } from "../engine/trainerEffects";
 import { annotateAbilities } from "../engine/abilities";
 import { cardImageUrl } from "./cardImages";
@@ -30,20 +29,14 @@ export interface ApiCard {
   supertype: string;
   subtypes?: string[];
   number?: string;
-  rarity?: string;
   regulation_mark?: string;
   set_code?: string;
-  set_name?: string;
-  series?: string;
-  release_date?: string;
   hp?: string;
   types?: string[];
   evolves_from?: string | null;
-  evolves_to?: string[];
   attacks?: {
     name: string;
     cost?: string[];
-    convertedEnergyCost?: number;
     damage?: string;
     text?: string;
   }[];
@@ -51,9 +44,7 @@ export interface ApiCard {
   weaknesses?: { type: string; value: string }[];
   resistances?: { type: string; value: string }[];
   retreat_cost?: string[];
-  converted_retreat_cost?: number;
   rules?: string[];
-  legalities?: { standard?: string };
 }
 
 const ENERGY_TYPES = new Set<EnergyType>([
@@ -95,14 +86,14 @@ function parseDamage(raw: string | undefined): { damage: number; text?: string }
 
 function mapAttack(a: NonNullable<ApiCard["attacks"]>[number]): Attack {
   const parsed = parseDamage(a.damage);
-  const { effects, baseDamageOverride } = extractEffects(a);
+  // Effects are detected on first use via getAttackEffects(), not at load
+  // time. Most attacks never fire in any given game.
   return {
     name: a.name,
     cost: asEnergyTypes(a.cost),
-    damage: baseDamageOverride ?? parsed.damage,
+    damage: parsed.damage,
     damageText: parsed.text,
     text: a.text,
-    effects: effects.length > 0 ? effects : undefined,
   };
 }
 
@@ -136,7 +127,6 @@ export function mapCard(c: ApiCard): Card {
     name: c.name,
     setCode: c.set_code,
     number: c.number,
-    rarity: c.rarity,
     regulationMark: c.regulation_mark,
     imageSmall: img,
     imageLarge: img,

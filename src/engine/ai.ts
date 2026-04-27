@@ -40,6 +40,7 @@ import {
   abilitiesActiveOn,
 } from "./ongoingEffects";
 import { resolvePendingPick, resolvePendingSearchNotice } from "./pendingPick";
+import { getAttackEffects } from "../data/effectPatterns";
 import { resolveAiHandReveal } from "./trainerEffects";
 import { logEvent } from "./rules";
 import type {
@@ -69,6 +70,8 @@ const isTool = (c: Card): c is TrainerCard =>
   isTrainer(c) && (c.subtypes.includes("Pokémon Tool") || c.subtypes.includes("Tool"));
 
 const RULE_BOX = ["ex", "EX", "V", "VMAX", "VSTAR", "V-UNION", "GX"];
+// Hoisted out of the evolve-scoring hot loop.
+const MEGA_SUBTYPE_RE = /^Mega/i;
 const isRuleBox = (c: PokemonCard): boolean =>
   (c.subtypes ?? []).some((s) => RULE_BOX.includes(s));
 
@@ -95,7 +98,7 @@ export function resolveAiSetup(state: GameState, player: PlayerId): boolean {
     .filter((x) => isPokemon(x.c) && isBasic(x.c));
   if (basics.length === 0) return false;
 
-  const primaryEnergy = deckPrimaryEnergy(pl.deck.concat(pl.hand));
+  const primaryEnergy = deckPrimaryEnergy(pl.deck, pl.hand);
   const scored = basics.map(({ c, i }) => ({ i, score: scoreOpeningActive(c, primaryEnergy) }));
   scored.sort((a, b) => b.score - a.score);
 
@@ -180,11 +183,15 @@ function scorePromoteCandidate(p: PokemonInPlay, state: GameState): number {
 
 // Primary energy = most-common basic energy type in the deck/hand combined.
 // Used to pick an attacker/setup that actually matches the deck.
-export function deckPrimaryEnergy(cards: Card[]): EnergyType | null {
+// Accepts up to two card arrays so callers can avoid allocating a combined
+// array (deck.concat(hand)) on each call from a hot path.
+export function deckPrimaryEnergy(...sources: Card[][]): EnergyType | null {
   const counts = new Map<EnergyType, number>();
-  for (const c of cards) {
-    if (isBasicEnergy(c)) {
-      for (const t of c.provides) counts.set(t, (counts.get(t) ?? 0) + 1);
+  for (const cards of sources) {
+    for (const c of cards) {
+      if (isBasicEnergy(c)) {
+        for (const t of c.provides) counts.set(t, (counts.get(t) ?? 0) + 1);
+      }
     }
   }
   let best: EnergyType | null = null;
@@ -206,11 +213,13 @@ function estimateDamage(
   move: Attack,
   defender: PokemonInPlay | null,
 ): number {
+  // Resolve effects first so baseDamageOverride lands before we read damage.
+  const effects = getAttackEffects(move);
   let damage = move.damage;
   damage += stadiumAttackBonus(state, attacker, defender);
   damage += turnAttackBonus(state, attackerOwner, attacker, defender);
 
-  for (const e of move.effects ?? []) {
+  for (const e of effects) {
     switch (e.kind) {
       case "flipHeadsBonus":
         damage += e.bonus / 2;
@@ -221,6 +230,12 @@ function estimateDamage(
       case "flipHeadsDouble":
         damage = (damage + damage * 2) / 2;
         break;
+      case "flipAllHeadsBonus": {
+        // Probability of all heads = 1 / 2^coins.
+        const p = 1 / Math.pow(2, e.coins);
+        damage += e.bonus * p;
+        break;
+      }
       case "perAttachedEnergy": {
         const energies = attacker.attachedEnergy;
         const matching = e.energyType
@@ -292,7 +307,7 @@ function attackValue(
   // Self-damage / self-discard / self-locks are negatives — opening value lost.
   let hasSelfLock = false;
   let hasSetupEffect = false;
-  for (const e of move.effects ?? []) {
+  for (const e of getAttackEffects(move)) {
     if (e.kind === "selfDamage") v -= e.damage * 0.7;
     if (e.kind === "discardOwnEnergy") v -= e.count * 15; // losing setup hurts
     if (e.kind === "drawCards") v += e.count * 8; // free card draw is nice
@@ -753,11 +768,19 @@ function scoreEnergyTarget(
   // Simulate attaching by adding the energy to the provided pool.
   const simulated = [...provided, ...energy.provides];
 
+  // Cache effectiveAttackCost per attack — same attack was hitting the
+  // resolver three times (unlock check, usableAttacks, bestRemaining) which
+  // is real cost on full-bench mid-game scoring passes.
+  const costs = p.card.attacks.map((a) => effectiveAttackCost(state, p, a.cost));
+
   // Does this new energy *unlock* an attack that wasn't usable before?
   let unlocks = false;
   let unlockDamage = 0;
-  for (const atk of p.card.attacks) {
-    const cost = effectiveAttackCost(state, p, atk.cost);
+  let usableCount = 0;
+  let bestRemaining = p.card.attacks.length === 0 ? 99 : Infinity;
+  for (let i = 0; i < p.card.attacks.length; i++) {
+    const atk = p.card.attacks[i];
+    const cost = costs[i];
     const wasUsable = canPayCost(provided, cost);
     const nowUsable = canPayCost(simulated, cost);
     if (!wasUsable && nowUsable) {
@@ -765,6 +788,9 @@ function scoreEnergyTarget(
       const def = state.players[opponentOf(player)].active;
       unlockDamage = Math.max(unlockDamage, estimateDamage(state, player, p, atk, def));
     }
+    if (nowUsable) usableCount++;
+    const remaining = Math.max(0, cost.length - simulated.length);
+    if (remaining < bestRemaining) bestRemaining = remaining;
   }
 
   let s = 0;
@@ -773,29 +799,17 @@ function scoreEnergyTarget(
   // Any unlock at all (even bench) is good — sets up next-turn plays.
   else if (unlocks) s += 100 + unlockDamage / 2;
 
-  // Colorless-only attacks: the energy types don't matter, just count.
-  const usableAttacks = p.card.attacks.filter((a) =>
-    canPayCost(simulated, effectiveAttackCost(state, p, a.cost)),
-  );
-  s += usableAttacks.length * 10;
+  s += usableCount * 10;
 
   // Reward matching the Pokémon's own type so rainbow decks don't dump Water
   // on a Fire attacker "just because."
   if (p.card.types.some((t) => energy.provides.includes(t))) s += 20;
 
-  // Penalize "hopeless" cases: attacks still need way more energy.
-  const bestRemaining = Math.min(
-    ...(p.card.attacks.length
-      ? p.card.attacks.map((a) =>
-          Math.max(0, effectiveAttackCost(state, p, a.cost).length - simulated.length),
-        )
-      : [99]),
-  );
   s -= bestRemaining * 5;
 
   // Don't pour more energy onto a Pokémon that already has enough for every
   // attack — diminishing returns.
-  if (usableAttacks.length === p.card.attacks.length && p.card.attacks.length > 0) {
+  if (usableCount === p.card.attacks.length && p.card.attacks.length > 0) {
     s -= 30;
   }
 
@@ -910,7 +924,7 @@ function resolveAiPendingPickSmart(state: GameState, player: PlayerId): boolean 
 
   const pl = state.players[player];
   const label = pick.label.toLowerCase();
-  const primaryEnergy = deckPrimaryEnergy([...pl.deck, ...pl.hand]);
+  const primaryEnergy = deckPrimaryEnergy(pl.deck, pl.hand);
 
   const eligible = pick.eligibleIndexes ?? pick.pool.map((_, i) => i);
   const max = Math.min(pick.max, eligible.length);
@@ -922,13 +936,21 @@ function resolveAiPendingPickSmart(state: GameState, player: PlayerId): boolean 
   // Special handling: Buddy-Buddy Poffin — pick TWO DIFFERENT low-HP Basics
   // that set up evolution lines.
   if (label.startsWith("buddy-buddy poffin")) {
+    // Precompute the set of "evolves-from" names available in deck+hand once,
+    // turning the per-candidate scan into an O(1) Set.has() lookup.
+    const evolvesFromSet = new Set<string>();
+    for (const c of pl.deck) {
+      if (isPokemonCard(c) && c.evolvesFrom) evolvesFromSet.add(c.evolvesFrom);
+    }
+    for (const c of pl.hand) {
+      if (isPokemonCard(c) && c.evolvesFrom) evolvesFromSet.add(c.evolvesFrom);
+    }
     const scored = eligible.map((i) => {
       const c = pick.pool[i];
       let s = 0;
       if (isPokemonCard(c)) {
         s = scorePickedPokemon(state, player, c, primaryEnergy);
-        // Prefer basics whose evolution we have in hand/deck.
-        if (hasEvolutionForInDeckOrHand(pl, c.name)) s += 40;
+        if (evolvesFromSet.has(c.name)) s += 40;
       }
       return { i, c, s };
     });
@@ -962,12 +984,6 @@ function resolveAiPendingPickSmart(state: GameState, player: PlayerId): boolean 
   return true;
 }
 
-function hasEvolutionForInDeckOrHand(pl: import("./types").PlayerState, baseName: string): boolean {
-  for (const c of [...pl.deck, ...pl.hand]) {
-    if (isPokemonCard(c) && c.evolvesFrom === baseName) return true;
-  }
-  return false;
-}
 
 // --- Main turn loop --------------------------------------------------------
 
@@ -1115,7 +1131,7 @@ function tryStepAiTurn(state: GameState, player: PlayerId): boolean {
 // chain bases, then type-matching).
 function findPrimaryBasic(state: GameState, player: PlayerId): number {
   const pl = state.players[player];
-  const primary = deckPrimaryEnergy([...pl.deck, ...pl.hand]);
+  const primary = deckPrimaryEnergy(pl.deck, pl.hand);
   let bestIdx = -1;
   let bestScore = -Infinity;
   for (let i = 0; i < pl.hand.length; i++) {
@@ -1211,7 +1227,7 @@ function tryEvolve(state: GameState, player: PlayerId): boolean {
       if (c.subtypes.includes("Stage 2")) s += 30;
       // Mega Evolution ends the turn — only evolve to Mega if we can attack
       // right after (has energy, the Mega itself can use an attack).
-      const isMega = (c.subtypes ?? []).some((st) => /^Mega/i.test(st));
+      const isMega = (c.subtypes ?? []).some((st) => MEGA_SUBTYPE_RE.test(st));
       if (isMega) {
         const provided = energyProvidedBy(t);
         const canAttackImmediately = c.attacks.some((a) =>
@@ -1279,7 +1295,7 @@ function opponentMaxDamageNextTurn(state: GameState, player: PlayerId): number {
   if (!oppAct || !ourAct) return 0;
 
   const provided = energyProvidedBy(oppAct);
-  const primary = deckPrimaryEnergy(opp.deck.concat(opp.hand));
+  const primary = deckPrimaryEnergy(opp.deck, opp.hand);
   // One-extra-energy hypothetical: if the opp has that energy type available
   // (deck or hand), assume they'll attach it.
   const hasExtraAvailable =

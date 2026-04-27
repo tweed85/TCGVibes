@@ -33,6 +33,7 @@ import {
   fireTriggeredOnMoveToBench,
 } from "./abilities";
 import { setDeckSearchPick } from "./pendingPick";
+import { getAttackEffects } from "../data/effectPatterns";
 import {
   applySurvivalBrace,
   applyAbilityKoSurvival,
@@ -373,7 +374,15 @@ export function playTrainer(
     pl.supporterPlayedThisTurn = true;
     pl.lastSupporterNameThisTurn = t.name;
   }
-  pl.discard.push(t);
+  // Antique Fossils transform into Bench Pokémon — the card itself rides
+  // along on the new PokemonInPlay (its TrainerCard surfaces in p.card via
+  // the synthesized Pokémon). It must NOT also go to the discard pile, or
+  // the engine would have two copies (one in play, one discarded). The
+  // discard happens later when the Fossil leaves play (KO / voluntary
+  // discard / KO-prize-grab — same flow as any Pokémon).
+  if (t.effectId !== "playFossilAsBasic") {
+    pl.discard.push(t);
+  }
   logEvent(state, player, `plays ${t.name}.`);
   return ok;
 }
@@ -404,6 +413,10 @@ export function retreat(
     state.turn <= pl.active.cantRetreatUntilTurn
   ) {
     return fail("This Pokémon can't retreat this turn.");
+  }
+  // Antique Fossils — "This card can't retreat."
+  if ((pl.active.card.subtypes ?? []).includes("Fossil")) {
+    return fail("Fossil Pokémon can't retreat.");
   }
   if (benchIndex < 0 || benchIndex >= pl.bench.length)
     return fail("Invalid bench slot.");
@@ -503,6 +516,9 @@ function executeAttackHit(
   // Doing W/R after step 3 is critical: e.g., Dipplin "Do the Wave" adds
   // +20 per bench inside resolveAttackEffects, and that full total must be
   // doubled against a Grass-weak Lunatone, not just the base.
+  // Resolve effects up front so any baseDamageOverride (e.g. "20×" zeros the
+  // base for per-energy / per-bench scaling) lands before we read move.damage.
+  getAttackEffects(move);
   let damage = move.damage;
   damage += stadiumAttackBonus(state, atk, def);
   damage += passiveAttackBonus(state, player, atk, def);
@@ -612,9 +628,28 @@ function executeAttackHit(
           atk.damage += metal * 20;
           logEvent(state, "system", `Pummeling Payback: ${atk.card.name} takes ${metal * 20} damage.`);
         }
+      } else if (a.name === "Counterattack" || a.name === "Counterattack Quills" || a.name === "Automated Combat") {
+        atk.damage += 30;
+        logEvent(state, "system", `${a.name}: ${atk.card.name} takes 30 counter damage.`);
+      } else if (a.name === "Exploding Needles") {
+        // Only fires when this Active is KO'd by the incoming damage.
+        if (def.damage >= effectiveMaxHp(def, state)) {
+          atk.damage += 60;
+          logEvent(state, "system", `Exploding Needles: ${atk.card.name} takes 60 counter damage.`);
+        }
+      } else if (a.name === "Shell Spikes") {
+        // Discard 1 energy from the attacker (random; AI doesn't pick).
+        if (atk.attachedEnergy.length > 0) {
+          const removed = atk.attachedEnergy.shift()!;
+          state.players[player].discard.push(removed);
+          logEvent(state, "system", `Shell Spikes: ${atk.card.name} loses ${removed.name}.`);
+        }
       }
     }
   }
+  // Bench-side on-damaged: Spiteful Swirl on Active fires already; some
+  // abilities ("Exploding Needles") fire ONLY on KO — handled in postDamage
+  // path below where KO is detected.
   // Tool "on damage" triggers (Lucky Helmet draw, Punk Helmet counter,
   // Team Rocket's Hypnotizer asleep, Deluxe Bomb counter). Deluxe Bomb
   // self-discards after triggering.

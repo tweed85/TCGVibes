@@ -10,6 +10,7 @@ import type {
   StatusCondition,
 } from "./types";
 import {
+  canBeAfflictedBy,
   effectiveMaxHp,
   enforceAreaZeroBench,
   isStatusImmune,
@@ -403,9 +404,14 @@ export function addStatus(
   s: StatusCondition,
 ): void {
   // Festival Grounds: Pokémon with Energy attached can't be affected by
-  // Special Conditions.
+  // Special Conditions. Per-status ability immunity (e.g. Insomnia) handled
+  // by canBeAfflictedBy.
   if (isStatusImmune(p, state)) {
     logEvent(state, "system", `${p.card.name} is immune to ${s} (Festival Grounds).`);
+    return;
+  }
+  if (!canBeAfflictedBy(p, s, state)) {
+    logEvent(state, "system", `${p.card.name} is immune to ${s}.`);
     return;
   }
   if (EXCLUSIVE_STATUSES.includes(s)) {
@@ -716,6 +722,29 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
       logEvent(state, ownerId, `Oh No You Don't: opp takes 1 fewer Prize.`);
     }
   }
+  // Final Chain — if KO'd by opp's attack, search deck for any 1 card and
+  // put into hand. AI auto-picks the most useful card (any draw / energy / ex);
+  // simplest heuristic: pick the first ex Pokémon, else first energy, else
+  // first card.
+  if ((ko.card.abilities ?? []).some((a) => a.name === "Final Chain")) {
+    const deck = owner.deck;
+    if (deck.length > 0) {
+      const isEx = (c: import("./types").Card) =>
+        c.supertype === "Pokémon" && (c.subtypes ?? []).some((s) => /^(?:ex|EX)$/.test(s));
+      const isEnergy = (c: import("./types").Card) => c.supertype === "Energy";
+      let idx = deck.findIndex(isEx);
+      if (idx < 0) idx = deck.findIndex(isEnergy);
+      if (idx < 0) idx = 0;
+      const [picked] = deck.splice(idx, 1);
+      owner.hand.push(picked);
+      // Shuffle the rest.
+      shuffleInPlace(state, deck);
+      logEvent(state, ownerId, `Final Chain: searches deck for ${picked.name}.`);
+    }
+  }
+  // Infinite Shadow — if KO'd by opp's attack, return this card to hand
+  // instead of the discard pile (attached cards still go to discard).
+  const infiniteShadow = (ko.card.abilities ?? []).some((a) => a.name === "Infinite Shadow");
   const prizes = Math.max(0, basePrizes - reduction + bonus);
   if (prizes !== basePrizes) {
     logEvent(state, "system", `${ko.card.name} Knocked Out — prizes reduced.`);
@@ -726,12 +755,24 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
     `${ko.card.name} is Knocked Out! (${prizes} Prize${prizes !== 1 ? "s" : ""})`,
   );
   // Move active + evolution stack + attached energy + tools to discard.
-  owner.discard.push(
-    ko.card,
-    ...ko.evolvedFrom,
-    ...ko.attachedEnergy,
-    ...(ko.tools ?? []),
-  );
+  // Infinite Shadow returns the KO'd card to hand instead; attached cards
+  // and pre-evolutions still go to discard.
+  if (infiniteShadow) {
+    owner.hand.push(ko.card);
+    owner.discard.push(
+      ...ko.evolvedFrom,
+      ...ko.attachedEnergy,
+      ...(ko.tools ?? []),
+    );
+    logEvent(state, ownerId, `Infinite Shadow: ${ko.card.name} returns to hand.`);
+  } else {
+    owner.discard.push(
+      ko.card,
+      ...ko.evolvedFrom,
+      ...ko.attachedEnergy,
+      ...(ko.tools ?? []),
+    );
+  }
   owner.active = null;
   // Area Zero Underdepths — if the KO'd Pokémon was the holder's only Tera,
   // their bench cap drops back to 5 and excess bench Pokémon are discarded.

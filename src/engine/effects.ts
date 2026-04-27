@@ -12,6 +12,7 @@
 
 import { addStatus, drawCards, flipCoin, logEvent } from "./rules";
 import { benchDamageBlocked, benchDamageBlockedByFlowerCurtain } from "./ongoingEffects";
+import { getAttackEffects } from "../data/effectPatterns";
 import type {
   Attack,
   AttackEffect,
@@ -355,7 +356,7 @@ export function resolveAttackEffects(
   state: GameState,
   ctx: AttackContext,
 ): ResolvedAttack {
-  const effects = ctx.move.effects ?? [];
+  const effects = getAttackEffects(ctx.move);
   let damage = ctx.damage;
   const postHooks: (() => void)[] = [];
   let ignoreWeakness = false;
@@ -990,6 +991,20 @@ export function resolveAttackEffects(
         }
         damage += e.perHeads * heads;
         logEvent(state, "system", `${ctx.move.name}: ${heads}/${e.coins} heads → +${e.perHeads * heads}.`);
+        break;
+      }
+
+      case "flipAllHeadsBonus": {
+        let heads = 0;
+        for (let i = 0; i < e.coins; i++) {
+          if (flipCoin(state, `${ctx.move.name} coin ${i + 1}`)) heads++;
+        }
+        if (heads === e.coins) {
+          damage += e.bonus;
+          logEvent(state, "system", `${ctx.move.name}: all ${e.coins} heads → +${e.bonus}.`);
+        } else {
+          logEvent(state, "system", `${ctx.move.name}: ${heads}/${e.coins} heads → no bonus.`);
+        }
         break;
       }
 

@@ -6,6 +6,7 @@
 // it, the engine just doesn't evaluate it.
 
 import type {
+  Attack,
   AttackEffect,
   AttackPredicate,
   AttackSearchFilter,
@@ -42,6 +43,34 @@ const ENERGY_TYPES: EnergyType[] = [
 function matchEnergyType(s: string): EnergyType | undefined {
   const hit = ENERGY_TYPES.find((t) => s.toLowerCase().includes(t.toLowerCase()));
   return hit;
+}
+
+// Lazy resolver: most attacks never fire in any given game, so we defer the
+// regex pattern detection from dataset-load time to first inspection. The
+// caller passes an Attack; we cache the result on the Attack object itself.
+//
+// Synthetic attacks (e.g. tool-granted Geobuster) ship with `effects`
+// pre-populated; we still mark them resolved so we don't re-detect.
+//
+// `baseDamageOverride` (when extractEffects returns one for "30×"-style
+// per-attached-energy attacks) is applied here by mutating attack.damage.
+// The mapping is deterministic: the same attack always overrides to the same
+// value, so re-resolving on a different copy produces the same result.
+export function getAttackEffects(attack: Attack): AttackEffect[] {
+  if (attack.effectsResolved) return attack.effects ?? [];
+  if (attack.effects && attack.effects.length > 0) {
+    attack.effectsResolved = true;
+    return attack.effects;
+  }
+  const { effects, baseDamageOverride } = extractEffects({
+    name: attack.name,
+    damage: attack.damageText,
+    text: attack.text,
+  });
+  if (baseDamageOverride !== undefined) attack.damage = baseDamageOverride;
+  attack.effects = effects.length > 0 ? effects : undefined;
+  attack.effectsResolved = true;
+  return attack.effects ?? [];
 }
 
 export function extractEffects(atk: ApiAttack): PatternMatch {
@@ -601,6 +630,21 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
       const additive = !!m[3];
       effects.push({ kind: "flipMultiCoinsPerHeads", coins, perHeads });
       if (!additive) baseDamageOverride = 0;
+    }
+  }
+  // ---- "Flip N coins. If all of them are heads, this attack does M more damage." ----
+  // Common variants: "Flip 2 coins. If both of them are heads, ..." / "Flip 3
+  // coins. If all of them are heads, ...".
+  {
+    const m = text.match(
+      /flip (\d+) coins?\. if (?:all|both) of them are heads, this attack does (\d+) more damage/i,
+    );
+    if (m) {
+      effects.push({
+        kind: "flipAllHeadsBonus",
+        coins: parseInt(m[1], 10),
+        bonus: parseInt(m[2], 10),
+      });
     }
   }
   // ---- "Flip N coins. For each heads, <action>." ---------------------------

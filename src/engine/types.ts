@@ -22,7 +22,16 @@ export interface Attack {
   damage: number; // parsed base damage; modifiers (+, ×, -) live in text
   damageText?: string; // original API string, e.g. "30+", "20×"
   text?: string;
-  effects?: AttackEffect[]; // resolved at attack time (coin flips, statuses, etc.)
+  // Resolved lazily by getAttackEffects(): we used to run extractEffects()
+  // on every attack of every card during dataset load (~5,000 regex passes
+  // at boot). Most attacks are never used in any given game, so detection
+  // is now deferred until the engine or AI first inspects the attack.
+  // Synthetic attacks (e.g. tool-granted Geobuster) bypass this and ship
+  // their own effects array.
+  effects?: AttackEffect[];
+  // True once getAttackEffects has populated `effects`. Distinguishes "no
+  // effects detected" from "not yet detected".
+  effectsResolved?: boolean;
 }
 
 // Discriminated union of engine-understood attack effects. Text for effects
@@ -170,6 +179,8 @@ export type AttackEffect =
   | { kind: "drawUntilHandSize"; targetSize: number; optional?: boolean } // "Draw cards until you have N in hand."
   | { kind: "blockOppItemsNextTurn" } // Budew Itchy Pollen — opp can't play Items next turn.
   | { kind: "flipMultiCoinsPerHeads"; coins: number; perHeads: number } // "Flip N coins. N damage per heads."
+  // "Flip N coins. If all of them are heads, this attack does M more damage."
+  | { kind: "flipAllHeadsBonus"; coins: number; bonus: number }
   | { kind: "selfCantAttackNextTurn" } // During your next turn, this Pokémon can't attack.
   | { kind: "defenderCantRetreatNextTurn" } // During opp's next turn, Defending can't retreat.
   | { kind: "defenderCantAttackNextTurn" } // During opp's next turn, Defending can't use attacks.
@@ -436,7 +447,6 @@ interface CardBase {
   name: string;
   setCode?: string;
   number?: string;
-  rarity?: string;
   regulationMark?: string;
   imageSmall?: string;
   imageLarge?: string;

@@ -10,7 +10,7 @@
 // "if Community Center is in play") are mostly approximated or skipped; the
 // core draw/search/heal behaviors are correct.
 
-import { enforceSpecialEnergyAttachRules, logEvent, makePokemonInPlay } from "./rules";
+import { enforceSpecialEnergyAttachRules, logEvent, makePokemonInPlay, newInstanceId } from "./rules";
 import { clearAllStatuses } from "./rules";
 import {
   fireTriggeredOnEvolve,
@@ -192,7 +192,12 @@ export type TrainerEffectId =
   | "trArcherShuffleDraw" // Both shuffle, you 5 / opp 3 (gated on KO last turn)
   | "ogresMaskSwapOgerpon" // Swap Ogerpon ex in discard with Ogerpon ex in play
   | "redeemableTicketReprize" // Shuffle prizes, take new ones from top of deck
-  | "tmFluoriteTool"; // Tool granting an attack — passive, handled at attach
+  | "tmFluoriteTool" // Tool granting an attack — passive, handled at attach
+  | "treasureTrackerToolSearch" // Search deck for up to 5 Pokémon Tools
+  | "maxRodRecoverPokemonOrEnergy" // Recover up to 5 Pokémon or Basic Energy from discard
+  | "secretBoxQuadSearch" // Discard 3, then search Item + Tool + Supporter + Stadium
+  | "rocketBotherBotPrizePeek" // Flip a prize face-up + reveal random opp hand card
+  | "playFossilAsBasic"; // Antique Cover/Jaw/Plume/Root/Sail Fossil — bench as 60HP Colorless
 
 export interface ApiTrainer {
   name: string;
@@ -506,6 +511,21 @@ export function detectTrainerEffect(t: ApiTrainer): TrainerEffectId | undefined 
   if (t.name === "Ogre's Mask") return "ogresMaskSwapOgerpon";
   if (t.name === "Redeemable Ticket") return "redeemableTicketReprize";
   if (t.name === "Technical Machine: Fluorite") return "tmFluoriteTool";
+
+  // ACE SPEC items.
+  if (t.name === "Treasure Tracker") return "treasureTrackerToolSearch";
+  if (t.name === "Max Rod") return "maxRodRecoverPokemonOrEnergy";
+  if (t.name === "Secret Box") return "secretBoxQuadSearch";
+
+  // Team Rocket's Bother-Bot — flip a face-down Prize face up, reveal hand card.
+  if (t.name === "Team Rocket's Bother-Bot") return "rocketBotherBotPrizePeek";
+
+  // Antique Fossils — Items playable as 60-HP Basic Colorless Pokémon.
+  if (t.name === "Antique Cover Fossil" ||
+      t.name === "Antique Jaw Fossil" ||
+      t.name === "Antique Plume Fossil" ||
+      t.name === "Antique Root Fossil" ||
+      t.name === "Antique Sail Fossil") return "playFossilAsBasic";
 
   return undefined;
 }
@@ -959,6 +979,44 @@ function findAllStage2InHand(
     }
   }
   return out;
+}
+
+// -------- Antique Fossil → Pokémon-in-play synthesis ---------------------
+
+// Build a synthetic 60-HP Basic Colorless PokémonCard whose `id` and `name`
+// echo the Trainer card's so logs / lookups / discard-on-KO behave naturally.
+// The "Fossil" subtype tag is what the engine watches for in retreat / status
+// rules (effectiveRetreatCost, canBeAfflictedBy).
+function makeFossilPokemonInPlay(name: string, _state: GameState): PokemonInPlay {
+  const synthetic: PokemonCard = {
+    id: `fossil-${name.toLowerCase().replace(/\s+/g, "-")}`,
+    name,
+    supertype: "Pokémon",
+    subtypes: ["Basic", "Fossil"],
+    hp: 60,
+    types: ["Colorless"],
+    attacks: [],
+    abilities: [],
+    weaknesses: [],
+    resistances: [],
+    retreatCost: [],
+    rules: [
+      "Play this card as if it were a 60-HP Basic Colorless Pokémon.",
+      "This card can't be affected by any Special Conditions and can't retreat.",
+    ],
+  };
+  return {
+    instanceId: newInstanceId(),
+    card: synthetic,
+    damage: 0,
+    attachedEnergy: [],
+    evolvedFrom: [],
+    tools: [],
+    playedThisTurn: true,
+    evolvedThisTurn: false,
+    statuses: [],
+    abilityUsedThisTurn: false,
+  };
 }
 
 // -------- Dispatch --------------------------------------------------------
@@ -2717,6 +2775,124 @@ export function applyTrainerEffect(
       else drawUpTo(state, player, 4);
       return;
     }
+    case "treasureTrackerToolSearch": {
+      // ACE SPEC — search up to 5 Pokémon Tool cards from your deck.
+      const isTool = (c: Card) =>
+        c.supertype === "Trainer" &&
+        ((c.subtypes ?? []).includes("Pokémon Tool") || (c.subtypes ?? []).includes("Tool"));
+      if (!setDeckSearchPick(state, player, isTool, 5, "Treasure Tracker: pick up to 5 Pokémon Tools")) {
+        logEvent(state, player, "Treasure Tracker: no Pokémon Tools in deck.");
+      }
+      return;
+    }
+
+    case "maxRodRecoverPokemonOrEnergy": {
+      // ACE SPEC — recover up to 5 cards (any Pokémon and/or Basic Energy) from discard.
+      const pred = (c: Card) =>
+        c.supertype === "Pokémon" ||
+        (c.supertype === "Energy" && (c.subtypes ?? []).includes("Basic"));
+      if (!setDiscardRecoveryPick(state, player, pred, 5, "Max Rod: pick up to 5 Pokémon or Basic Energy from discard")) {
+        logEvent(state, player, "Max Rod: nothing eligible in discard.");
+      }
+      return;
+    }
+
+    case "secretBoxQuadSearch": {
+      // ACE SPEC — discard 3 cards from hand (Secret Box itself is already
+      // out of pl.hand by the time this runs), then search deck for one
+      // Item, Pokémon Tool, Supporter, and Stadium. Auto-discards the 3
+      // lowest-priority cards (Basic Energy first, then by hand index).
+      // The 4-card search auto-takes the first match of each kind so the
+      // play resolves in one click.
+      if (pl.hand.length < 3) {
+        logEvent(state, player, "Secret Box: not enough cards in hand to discard 3.");
+        return;
+      }
+      const isBasicEn = (c: Card) =>
+        c.supertype === "Energy" && (c.subtypes ?? []).includes("Basic");
+      const sorted = pl.hand
+        .map((c, i) => ({ c, i }))
+        .sort((a, b) => {
+          const av = isBasicEn(a.c) ? 0 : 1;
+          const bv = isBasicEn(b.c) ? 0 : 1;
+          if (av !== bv) return av - bv;
+          return a.i - b.i;
+        });
+      const toDiscardIdxs = sorted.slice(0, 3).map((x) => x.i).sort((a, b) => b - a);
+      for (const i of toDiscardIdxs) {
+        const [c2] = pl.hand.splice(i, 1);
+        pl.discard.push(c2);
+      }
+      logEvent(state, player, "Secret Box: discards 3 cards.");
+      // Search for one of each: Item, Tool, Supporter, Stadium.
+      const grab = (label: string, pred: (c: Card) => boolean): void => {
+        const idx = pl.deck.findIndex(pred);
+        if (idx >= 0) {
+          pl.hand.push(pl.deck.splice(idx, 1)[0]);
+          logEvent(state, player, `Secret Box: takes ${label}.`);
+        }
+      };
+      const isItemOnly = (c: Card) =>
+        c.supertype === "Trainer" &&
+        (c.subtypes ?? []).includes("Item") &&
+        !(c.subtypes ?? []).includes("Pokémon Tool") &&
+        !(c.subtypes ?? []).includes("Tool");
+      const isTool = (c: Card) =>
+        c.supertype === "Trainer" &&
+        ((c.subtypes ?? []).includes("Pokémon Tool") || (c.subtypes ?? []).includes("Tool"));
+      const isSupp = (c: Card) =>
+        c.supertype === "Trainer" && (c.subtypes ?? []).includes("Supporter");
+      const isStadium = (c: Card) =>
+        c.supertype === "Trainer" && (c.subtypes ?? []).includes("Stadium");
+      grab("an Item", isItemOnly);
+      grab("a Pokémon Tool", isTool);
+      grab("a Supporter", isSupp);
+      grab("a Stadium", isStadium);
+      shuffleDeck(state, player);
+      return;
+    }
+
+    case "rocketBotherBotPrizePeek": {
+      // Team Rocket's Bother-Bot — flips one face-down Prize face up and
+      // peeks a random card from opp's hand. Our engine doesn't track
+      // face-up vs face-down Prize state; we still surface the information
+      // via log so the play has a visible effect. Auto-declines the
+      // optional swap (would require both UI + tracking-which-prize).
+      const opp = state.players[oppId];
+      if (opp.prizes.length === 0) {
+        logEvent(state, player, "Bother-Bot: opponent has no Prizes left.");
+        return;
+      }
+      // Peek the first Prize (positions are unordered to the player anyway).
+      const prizeCard = opp.prizes[0];
+      logEvent(state, player, `Bother-Bot: reveals opponent Prize card — ${prizeCard.name}.`);
+      // Reveal a random card from opp's hand.
+      if (opp.hand.length > 0) {
+        const idx = state.rng.int(opp.hand.length);
+        const handCard = opp.hand[idx];
+        logEvent(state, player, `Bother-Bot: reveals from ${opp.name}'s hand — ${handCard.name}.`);
+      } else {
+        logEvent(state, player, `Bother-Bot: ${opp.name} has no hand cards.`);
+      }
+      return;
+    }
+
+    case "playFossilAsBasic": {
+      // Antique Fossil items — play as a 60-HP Basic Colorless Pokémon onto
+      // the Bench. The Pokémon has no attacks, can't be afflicted by Special
+      // Conditions (handled by canBeAfflictedBy), and can't retreat (handled
+      // by effectiveRetreatCost). The voluntary "discard from play during
+      // your turn" is exposed via the standard discard route.
+      if (pl.bench.length >= 5) {
+        logEvent(state, player, "Fossil: bench is full.");
+        return;
+      }
+      const fossilPokemon = makeFossilPokemonInPlay(t.name, state);
+      pl.bench.push(fossilPokemon);
+      logEvent(state, player, `plays ${t.name} to the Bench as a Pokémon.`);
+      return;
+    }
+
     case "larrySkillDiscardSearch": {
       // Discard hand; search a Pokémon, a Supporter, and a Basic Energy.
       pl.discard.push(...pl.hand.splice(0));

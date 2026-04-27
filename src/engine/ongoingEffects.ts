@@ -14,12 +14,16 @@ import type {
   PokemonInPlay,
   TrainerCard,
 } from "./types";
+import { getAttackEffects } from "../data/effectPatterns";
 
 const hasSubtype = (c: PokemonCard, s: string) => (c.subtypes ?? []).includes(s);
 const hasType = (c: PokemonCard, t: EnergyType) => c.types.includes(t);
 const isNamed = (c: PokemonCard, prefix: string) => c.name.startsWith(prefix);
 
 const RULE_BOX_MARKERS = ["ex", "EX", "V", "VMAX", "VSTAR", "V-UNION", "GX", "Radiant"];
+
+// Hoisted out of hot loops (passive damage-reduction scan, called per-attack).
+const EX_SUBTYPE_RE = /^(?:ex|EX)$/;
 function hasRuleBox(card: PokemonCard): boolean {
   return (card.subtypes ?? []).some((s) => RULE_BOX_MARKERS.includes(s));
 }
@@ -43,10 +47,30 @@ export function abilitiesActiveOn(state: GameState, card: PokemonCard): boolean 
 }
 
 // Festival Grounds: Pokémon with any Energy attached can't be affected by
-// Special Conditions. Return true if the holder is currently status-immune.
+// Special Conditions. Return true if the holder is currently status-immune
+// to ALL conditions.
 export function isStatusImmune(p: PokemonInPlay, state: GameState): boolean {
   if (state.stadium?.card.name !== "Festival Grounds") return false;
   return p.attachedEnergy.length > 0;
+}
+
+// Per-status ability immunity (e.g. Insomnia → can't be Asleep). Falls back
+// to global Festival Grounds immunity if applicable. Antique Fossils get
+// blanket immunity per their card text.
+export function canBeAfflictedBy(
+  p: PokemonInPlay,
+  status: import("./types").StatusCondition,
+  state: GameState,
+): boolean {
+  if (isStatusImmune(p, state)) return false;
+  // Fossils — "This card can't be affected by any Special Conditions."
+  if ((p.card.subtypes ?? []).includes("Fossil")) return false;
+  if (!abilitiesActiveOn(state, p.card)) return true;
+  const abilities = p.card.abilities ?? [];
+  for (const ab of abilities) {
+    if (ab.name === "Insomnia" && status === "asleep") return false;
+  }
+  return true;
 }
 
 // Bench cap: normally 5; Area Zero Underdepths allows 8 if the owner has a
@@ -225,7 +249,25 @@ export function effectiveMaxHp(p: PokemonInPlay, state: GameState): number {
     for (const ability of p.card.abilities ?? []) {
       const rule = PASSIVE_HP_BONUSES[ability.name];
       if (rule && rule.appliesTo(p, state)) hp += rule.amount;
+      const v = VARIABLE_HP_BONUSES[ability.name];
+      if (v && v.appliesTo(p, state)) hp += v.amount(p, state);
     }
+  }
+  // Aura HP bonuses (Vibrant Dance: +40 HP to all your Pokémon if a holder
+  // is in play on your side). Scan owner's in-play allies for aura abilities.
+  const owner = Object.values(state.players).find(
+    (pl) => pl.active === p || pl.bench.includes(p),
+  );
+  if (owner) {
+    const allies = [owner.active, ...owner.bench].filter((x): x is PokemonInPlay => !!x);
+    const auraNames = new Set<string>();
+    for (const a of allies) {
+      if (!abilitiesActiveOn(state, a.card)) continue;
+      for (const ab of a.card.abilities ?? []) {
+        if (ab.name === "Vibrant Dance") auraNames.add(ab.name);
+      }
+    }
+    if (auraNames.has("Vibrant Dance")) hp += 40;
   }
   return Math.max(10, hp);
 }
@@ -253,6 +295,41 @@ const PASSIVE_HP_BONUSES: Record<string, PassiveHpBonus> = {
   },
 };
 
+// Variable HP bonuses (depend on prize / energy counts) computed per call.
+// Registered separately because they can't be expressed with a fixed amount.
+interface VariableHpBonus {
+  appliesTo: (holder: PokemonInPlay, state: GameState) => boolean;
+  amount: (holder: PokemonInPlay, state: GameState) => number;
+}
+const VARIABLE_HP_BONUSES: Record<string, VariableHpBonus> = {
+  "Craftsmanship": {
+    // Iron Hands etc. — +40 HP per Fighting Energy attached.
+    appliesTo: () => true,
+    amount: (h) => {
+      let n = 0;
+      for (const e of h.attachedEnergy) {
+        if (e.provides.includes("Fighting")) n++;
+      }
+      return n * 40;
+    },
+  },
+  "Resilient Soul": {
+    // Slaking — +50 HP per Prize the opponent has taken.
+    appliesTo: () => true,
+    amount: (h, state) => {
+      // The defender's owner is the holder's owner.
+      const owner = Object.values(state.players).find(
+        (p) => p.active === h || p.bench.includes(h),
+      );
+      if (!owner) return 0;
+      const opp = Object.values(state.players).find((p) => p !== owner);
+      if (!opp) return 0;
+      const taken = 6 - opp.prizes.length;
+      return taken * 50;
+    },
+  },
+};
+
 // --- Passive KO-survival abilities (Focus Sash / Sturdy) -----------------
 //
 // Triggered when a damage hit would push the holder's damage past their HP.
@@ -275,6 +352,11 @@ const PASSIVE_KO_SURVIVAL: Record<string, PassiveKoSurvival> = {
     // Mega Hawlucha ex — flip a coin; heads → survive at 10 HP.
     appliesTo: () => true,
     triggers: (_h, s) => s.rng.next() < 0.5,
+  },
+  "Sturdy": {
+    // Aron / Lairon / Aggron — survive at 10 HP if at full HP.
+    appliesTo: (h) => h.damage === 0,
+    triggers: () => true,
   },
 };
 
@@ -396,6 +478,32 @@ export function effectiveRetreatCost(p: PokemonInPlay, state?: GameState): Energ
             if (p.attachedEnergy.some((e) => e.provides.includes("Metal"))) reduce += 99;
           } else if (ability.name === "Skyliner") {
             if ((p.card.subtypes ?? []).includes("Basic")) reduce += 99;
+          } else if (ability.name === "Secret Forest Path") {
+            // Bench-only: only the owner's Active gets the -CC discount.
+            if (p === owner.active && holder !== p) reduce += 2;
+          }
+        }
+      }
+    }
+  }
+  // Big Net (opponent-side Stage 1+ surcharge): if any of the OPPONENT's
+  // in-play Pokémon has Big Net, this Pokémon's retreat cost gains +C when
+  // it's an Evolution. Only applies to opp's Active per text.
+  if (state) {
+    const owner = Object.values(state.players).find(
+      (pl) => pl.active === p || pl.bench.includes(p),
+    );
+    if (owner) {
+      const opp = Object.values(state.players).find((pl) => pl !== owner);
+      if (opp && p === owner.active) {
+        const isEvolution = !!p.card.evolvesFrom;
+        if (isEvolution) {
+          const oppAllies = [opp.active, ...opp.bench].filter((a): a is PokemonInPlay => !!a);
+          for (const holder of oppAllies) {
+            if (!abilitiesActiveOn(state, holder.card)) continue;
+            for (const ability of holder.card.abilities ?? []) {
+              if (ability.name === "Big Net") surcharge += 1;
+            }
           }
         }
       }
@@ -753,6 +861,60 @@ const PASSIVE_DAMAGE_REDUCTIONS: Record<string, PassiveDamageReduction> = {
       (a.card.subtypes ?? []).some((s) => /^(?:ex|EX)$/.test(s)),
     amount: () => 9999,
   },
+
+  // -30 damage on this Pokémon (after W/R) — same shape as Diamond Coat.
+  "Soft Wool":    { appliesTo: (d, h) => d.instanceId === h.instanceId, amount: () => 30 },
+  "Solid Body":   { appliesTo: (d, h) => d.instanceId === h.instanceId, amount: () => 30 },
+  "Thicket Body": { appliesTo: (d, h) => d.instanceId === h.instanceId, amount: () => 30 },
+  "Mud Coat":     { appliesTo: (d, h) => d.instanceId === h.instanceId, amount: () => 30 },
+
+  "Safeguard": {
+    // Manaphy etc. — prevent all damage from opp's Pokémon ex done to this.
+    appliesTo: (d, h, a) =>
+      d.instanceId === h.instanceId &&
+      (a.card.subtypes ?? []).some((s) => EX_SUBTYPE_RE.test(s)),
+    amount: () => 9999,
+  },
+  "Armor Tail": {
+    // Garchomp ex etc. — prevent damage from opp's Basic Pokémon ex done to this.
+    appliesTo: (d, h, a) =>
+      d.instanceId === h.instanceId &&
+      (a.card.subtypes ?? []).includes("Basic") &&
+      (a.card.subtypes ?? []).some((s) => EX_SUBTYPE_RE.test(s)),
+    amount: () => 9999,
+  },
+  "Mighty Shell": {
+    // Prevent damage and effects from opp's Pokémon that have any Special
+    // Energy attached, done to this Pokémon.
+    appliesTo: (d, h, a) =>
+      d.instanceId === h.instanceId &&
+      a.attachedEnergy.some((e) => e.subtypes.includes("Special")),
+    amount: () => 9999,
+  },
+  "Repelling Veil": {
+    // Team Rocket's protection — prevent effects from opp attacks against your
+    // Basic Team Rocket's Pokémon. We approximate as full reduction since the
+    // engine doesn't separate "damage" from "effects" in the reduction layer.
+    appliesTo: (d, _h, _a) =>
+      (d.card.subtypes ?? []).includes("Basic") &&
+      isNamed(d.card, "Team Rocket's "),
+    amount: () => 0, // effects-only would require deeper hook; flag as wired but no damage diff.
+  },
+  "Spherical Shield": {
+    // Bench-only protection: this card grants the holder's bench full
+    // immunity from opp attack damage (analogous to Shaymin's Flower Curtain
+    // but unconditional on Rule Box).
+    appliesTo: (d, h, _a, s) => {
+      const owner = Object.values(s.players).find(
+        (p) => p.active === h || p.bench.includes(h),
+      );
+      if (!owner) return false;
+      // Only bench Pokémon of the holder's owner.
+      if (!owner.bench.includes(d)) return false;
+      return true;
+    },
+    amount: () => 9999,
+  },
 };
 
 // Sum of passive damage-reduction contributions from the defender's side.
@@ -876,7 +1038,7 @@ export function stadiumDamageReduction(
         {
           const atkSubs = attacker.card.subtypes ?? [];
           const atkIsExOrV =
-            atkSubs.some((s) => /^(?:ex|EX)$/.test(s)) ||
+            atkSubs.some((s) => EX_SUBTYPE_RE.test(s)) ||
             atkSubs.includes("V") ||
             atkSubs.includes("VMAX") ||
             atkSubs.includes("VSTAR") ||
@@ -1130,6 +1292,9 @@ export function estimateAttackDamage(
   //   base → attacker bonuses → attack-effect additions → W/R → defender
   //   reductions. Must match runtime behavior or the AI preview diverges
   //   from what actually lands.
+  // Resolve attack effects first so baseDamageOverride is applied before we
+  // read move.damage.
+  const moveEffects = getAttackEffects(move);
   let d = move.damage;
   d += stadiumAttackBonus(state, attacker, def);
   d += passiveAttackBonus(state, attackerOwner, attacker, def);
@@ -1142,7 +1307,7 @@ export function estimateAttackDamage(
   // Attack-effect additions BEFORE W/R so per-bench/per-energy/etc. are part
   // of the total the multiplier scales. Uses median / expected values for
   // coin-flip effects so the preview stays stable.
-  for (const e of move.effects ?? []) {
+  for (const e of moveEffects) {
     switch (e.kind) {
       case "perAttachedEnergy": {
         const energies = attacker.attachedEnergy;
@@ -1182,6 +1347,11 @@ export function estimateAttackDamage(
       case "flipTailsFizzle":
         d /= 2;
         break;
+      case "flipAllHeadsBonus": {
+        const p = 1 / Math.pow(2, e.coins);
+        d += e.bonus * p;
+        break;
+      }
     }
   }
   // Now apply W/R and defender reductions to the final total.

@@ -1,4 +1,4 @@
-import { useRef, useState, type MouseEvent, type PointerEvent } from "react";
+import { memo, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 import type { Card, PokemonCard, PokemonInPlay } from "../engine/types";
 
 // Shared "zoom" subscriber — the top-level App wires a listener that
@@ -209,7 +209,7 @@ function CardTextBody({ card }: { card: Card }) {
   );
 }
 
-export function CardView({ card, selected, onClick }: Props) {
+function CardViewInner({ card, selected, onClick }: Props) {
   const cls = `card card-imaged${selected ? " selected" : ""}`;
   const tip = cardTooltip(card) + "\n\nShift+click (or long-press) to zoom";
   const { pointerProps, consumeNextClick } = useCardLongPress(card);
@@ -234,6 +234,16 @@ export function CardView({ card, selected, onClick }: Props) {
   );
 }
 
+// Memoized so static cards in hands / deck-tops / discard viewer don't
+// re-render every parent rerender. `onClick` is intentionally excluded from
+// the comparison: parents recreate it each render (closing over the latest
+// hand index), but the closure body always reads through stateRef so stale
+// closures behave identically to fresh ones.
+export const CardView = memo(
+  CardViewInner,
+  (prev, next) => prev.card === next.card && prev.selected === next.selected,
+);
+
 const STATUS_LABELS: Record<string, string> = {
   asleep: "ZZ",
   burned: "BRN",
@@ -242,13 +252,7 @@ const STATUS_LABELS: Record<string, string> = {
   poisoned: "PSN",
 };
 
-export function PokemonInPlayView({
-  p,
-  selected,
-  onClick,
-  maxHp,
-  legalTarget,
-}: {
+interface PokemonInPlayProps {
   p: PokemonInPlay;
   selected?: boolean;
   onClick?: () => void;
@@ -257,7 +261,15 @@ export function PokemonInPlayView({
    *  selected in hand. Drives a highlight so the player can see at a glance
    *  where the selected card can be played. */
   legalTarget?: boolean;
-}) {
+}
+
+export function PokemonInPlayView({
+  p,
+  selected,
+  onClick,
+  maxHp,
+  legalTarget,
+}: PokemonInPlayProps) {
   const cls =
     `card card-imaged in-play` +
     (selected ? " selected" : "") +
@@ -331,6 +343,13 @@ export function PokemonInPlayView({
     </div>
   );
 }
+
+// PokemonInPlayView intentionally NOT memoized: the engine mutates the
+// PokemonInPlay object in place (damage, attachedEnergy, statuses, tools),
+// so React.memo can't see changes — both `prev` and `next` props alias the
+// same object reference, and any custom comparator reading those fields is
+// already comparing post-mutation values to themselves. This component is
+// cheap enough that re-rendering on every parent render is fine.
 
 export function FaceDownCard() {
   return <div className="card facedown">TCG</div>;
