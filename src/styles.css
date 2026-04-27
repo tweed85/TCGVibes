@@ -600,8 +600,7 @@ body {
 /* Bench row — 5 slots in a horizontal line, centered. Floor to one
    card-height so cards can't bleed into the adjacent row. */
 .bench-slot {
-  display: flex;
-  justify-content: center;
+  display: block;
   min-width: 0;
   min-height: var(--card-h);
 }
@@ -614,8 +613,17 @@ body {
   overflow-y: visible;
   padding-bottom: 4px;
   align-items: center;
+  /* Explicit width cap so the row can never escape the side's content
+     box (which has padding-right reserved for the Stadium overlay). */
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
 }
+/* When the bench fits within its container, center the cards. When it
+   overflows, the flex children naturally start from the left so swipe
+   reveals cards on the right. `justify-content: safe center` falls back
+   to flex-start once content overflows on browsers that support it. */
+.bench-row { justify-content: safe center; }
 .bench-row > .card { flex: 0 0 auto; }
 
 /* Empty placeholder inside bench / active. */
@@ -1357,8 +1365,10 @@ button.secondary:hover:not(:disabled) {
   .zone-stack .zone-label { font-size: 8px; }
 
   /* Keep the Stadium pinned to the right edge of the board (matches desktop
-     layout). Sides reserve room on the right for it. */
-  .side { padding-right: calc(var(--mini-card-w) + 14px); }
+     layout). The side reserves enough right-padding to fully clear the
+     overlay so bench / Active cards never tuck behind it — match the
+     desktop reservation (mini-card width + 24px slack). */
+  .side { padding-right: calc(var(--mini-card-w) + 24px); }
   .stadium-slot { right: 6px; padding: 6px 8px; }
   .stadium-caption { font-size: 9px; }
 
