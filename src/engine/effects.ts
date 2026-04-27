@@ -10,8 +10,8 @@
 // Effects that the engine doesn't understand are preserved on the Attack as
 // plain `text` so the UI can display them even though they won't fire.
 
-import { addStatus, drawCards, flipCoin, logEvent } from "./rules";
-import { benchDamageBlocked, benchDamageBlockedByFlowerCurtain } from "./ongoingEffects";
+import { addStatus, drawCards, flipCoin, logEvent, prizeValue } from "./rules";
+import { benchDamageBlocked, benchDamageBlockedByFlowerCurtain, effectiveMaxHp } from "./ongoingEffects";
 import { applyTrainerEffect } from "./trainerEffects";
 import { getAttackEffects } from "../data/effectPatterns";
 import type {
@@ -1185,6 +1185,83 @@ export function resolveAttackEffects(
         break;
       }
 
+      case "distributeDamage": {
+        // Oil Salvo / Phantom Dive — N hits of M damage, each placed on an
+        // opp target chosen by the player. Humans get an interactive
+        // picker; the AI auto-distributes to maximize KOs / leverage.
+        postHooks.push(() => {
+          const opp = state.players[ctx.defenderOwner];
+          const targets = e.benchOnly
+            ? [...opp.bench]
+            : [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+          if (targets.length === 0) return;
+          const attackerOwner = ctx.attackerOwner;
+          const isHuman = !state.players[attackerOwner].isAI;
+          if (isHuman) {
+            const where = e.benchOnly ? "Benched Pokémon" : "Pokémon";
+            state.pendingInPlayTarget = {
+              player: attackerOwner,
+              label: `${ctx.move.name}: pick an opp ${where} to hit (${e.times} hits of ${e.perHit})`,
+              scope: "opp",
+              slot: e.benchOnly ? "bench" : "anywhere",
+              filter: "anyPokemon",
+              action: {
+                kind: "distributeDamage",
+                remaining: e.times,
+                perHit: e.perHit,
+                ignoreWR: e.ignoreWR,
+                benchOnly: e.benchOnly,
+                attackName: ctx.move.name,
+              },
+            };
+            return;
+          }
+          // AI: distribute the N hits to maximize prizes. Greedy strategy:
+          // for each hit, pick the target where landing `perHit` puts
+          // remaining HP closest to (or past) zero. After a target is KO'd,
+          // remove it from the pool. Prefer multi-prize targets.
+          const pool = targets.slice();
+          for (let i = 0; i < e.times; i++) {
+            if (pool.length === 0) break;
+            // Score each target: highest score = best place to hit.
+            let bestIdx = 0;
+            let bestScore = -Infinity;
+            for (let j = 0; j < pool.length; j++) {
+              const t = pool[j];
+              const remain = effectiveMaxHp(t, state) - t.damage;
+              const isKO = e.perHit >= remain;
+              const prize = prizeValue(t.card);
+              let score = 0;
+              if (isKO) score = 1000 + prize * 100 - remain; // closer to zero = better
+              else score = -remain + prize * 5; // chip closer to KO
+              if (score > bestScore) {
+                bestScore = score;
+                bestIdx = j;
+              }
+            }
+            const target = pool[bestIdx];
+            const isBench = opp.bench.includes(target);
+            if (isBench && benchDamageBlocked(state)) {
+              logEvent(state, "system", `Battle Cage protects ${target.card.name}.`);
+              continue;
+            }
+            if (isBench && benchDamageBlockedByFlowerCurtain(state, ctx.defenderOwner, target)) {
+              logEvent(state, "system", `Flower Curtain protects ${target.card.name}.`);
+              continue;
+            }
+            target.damage += e.perHit;
+            logEvent(
+              state,
+              "system",
+              `${ctx.move.name}: ${target.card.name} takes ${e.perHit} damage.`,
+            );
+            if (target.damage >= effectiveMaxHp(target, state)) {
+              pool.splice(bestIdx, 1);
+            }
+          }
+        });
+        break;
+      }
       case "damageMultipleTargets": {
         postHooks.push(() => {
           const opp = state.players[ctx.defenderOwner];

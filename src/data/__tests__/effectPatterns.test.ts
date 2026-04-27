@@ -420,6 +420,37 @@ describe("misc simple effects", () => {
     expect(e.effects).toContainEqual({ kind: "discardTopOfOwnDeckUseSupporterEffect" });
   });
 
+  it("Arboliva ex Oil Salvo → distributeDamage", () => {
+    const e = extractEffects(
+      mkAttack({
+        damage: "",
+        text: "Choose 1 of your opponent's Pokémon 6 times. (You can choose the same Pokémon more than once.) For each time you chose a Pokémon, do 20 damage to it. This damage isn't affected by Weakness or Resistance.",
+      }),
+    );
+    expect(e.effects).toContainEqual({
+      kind: "distributeDamage",
+      times: 6,
+      perHit: 20,
+      ignoreWR: true,
+    });
+  });
+
+  it("Dragapult ex Phantom Dive → distributeDamage benchOnly", () => {
+    const e = extractEffects(
+      mkAttack({
+        damage: "200",
+        text: "Put 6 damage counters on your opponent's Benched Pokémon in any way you like.",
+      }),
+    );
+    expect(e.effects).toContainEqual({
+      kind: "distributeDamage",
+      times: 6,
+      perHit: 10,
+      ignoreWR: true,
+      benchOnly: true,
+    });
+  });
+
   it("Team Rocket's Grimer Corrosive Sludge → discardDefenderEndOfOppNextTurn", () => {
     const e = extractEffects(
       mkAttack({

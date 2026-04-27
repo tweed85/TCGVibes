@@ -189,6 +189,14 @@ export type AttackEffect =
   // "This attack does N damage to 2/3 of your opponent's Pokémon." Hits both
   // Active + Bench; auto-picks the most-damaged targets.
   | { kind: "damageMultipleTargets"; damage: number; count: number; benchOnly: boolean }
+  // "Choose 1 of your opponent's Pokémon N times. ... For each time you
+  // chose a Pokémon, do M damage to it." (Arboliva ex Oil Salvo.) Damage
+  // is repeatable on the same target; bypasses Weakness/Resistance per
+  // standard ruling for these distributed-damage attacks.
+  // `benchOnly` covers "Put N damage counters on your opponent's BENCHED
+  // Pokémon in any way you like" (Dragapult ex Phantom Dive). counter
+  // placement always bypasses W/R, so we encode it as the same kind.
+  | { kind: "distributeDamage"; times: number; perHit: number; ignoreWR: boolean; benchOnly?: boolean }
   | { kind: "switchOutOpponent" } // Opp promotes new Active from bench
   | { kind: "selfSwitch" } // Switch attacker with a benched Pokémon
   | { kind: "discardOppEnergy"; count: number } // Discard N Energy from opp's Active
@@ -1245,7 +1253,12 @@ export interface PendingInPlayTarget {
     | { kind: "abilityMoveDamage"; counters: number; sourceInstanceId: string; abilityName: string }
     // Ability: place N counters on the clicked opp Pokémon, then KO the
     // ability holder. (Dusknoir Cursed Blast.)
-    | { kind: "abilityCursedBlast"; counters: number; holderInstanceId: string; ownerId: PlayerId; abilityName: string };
+    | { kind: "abilityCursedBlast"; counters: number; holderInstanceId: string; ownerId: PlayerId; abilityName: string }
+    // Distributed-damage attack picker (Oil Salvo / Phantom Dive). Each
+    // click hits the chosen opp Pokémon for `perHit` damage; `remaining`
+    // decrements. When remaining reaches 0, the picker closes. `benchOnly`
+    // restricts targets to the opp's Bench (Phantom Dive).
+    | { kind: "distributeDamage"; remaining: number; perHit: number; ignoreWR: boolean; benchOnly?: boolean; attackName: string };
 }
 
 export interface PendingPick {

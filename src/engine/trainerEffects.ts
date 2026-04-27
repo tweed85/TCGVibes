@@ -12,6 +12,7 @@
 
 import { enforceSpecialEnergyAttachRules, logEvent, makePokemonInPlay, newInstanceId } from "./rules";
 import { clearAllStatuses } from "./rules";
+import { benchDamageBlocked, benchDamageBlockedByFlowerCurtain } from "./ongoingEffects";
 import {
   fireTriggeredOnEvolve,
   fireTriggeredOnMoveToActive,
@@ -3587,6 +3588,37 @@ export function resolveInPlayTarget(
         `uses ${pending.action.abilityName}: moves ${moved} damage counter(s) from ${source.card.name} to ${target.card.name}.`,
       );
       state.pendingInPlayTarget = null;
+      knockOutFromAbilityCounters(state, targetOwner, target);
+      return { ok: true };
+    }
+    case "distributeDamage": {
+      // Each click delivers `perHit` damage to the chosen opp Pokémon.
+      // Decrement remaining; close the picker when we run out.
+      const action = pending.action;
+      const isBench = state.players[targetOwner].bench.includes(target);
+      // Bench-protection auras can still deflect the chip.
+      if (isBench && benchDamageBlocked(state)) {
+        logEvent(state, "system", `Battle Cage protects ${target.card.name}.`);
+      } else if (isBench && benchDamageBlockedByFlowerCurtain(state, targetOwner, target)) {
+        logEvent(state, "system", `Flower Curtain protects ${target.card.name}.`);
+      } else {
+        target.damage += action.perHit;
+        logEvent(
+          state,
+          clicker,
+          `${action.attackName}: ${target.card.name} takes ${action.perHit} damage.`,
+        );
+      }
+      const remaining = action.remaining - 1;
+      if (remaining > 0) {
+        state.pendingInPlayTarget = {
+          ...pending,
+          label: `${action.attackName}: ${remaining} hit${remaining === 1 ? "" : "s"} of ${action.perHit} left`,
+          action: { ...action, remaining },
+        };
+      } else {
+        state.pendingInPlayTarget = null;
+      }
       knockOutFromAbilityCounters(state, targetOwner, target);
       return { ok: true };
     }

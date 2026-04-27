@@ -1667,6 +1667,13 @@ export function estimateAttackDamage(
     if (e.kind === "placeCountersPerHandCard") {
       d += e.countersPerCard * 10 * atkPl.hand.length;
     }
+    if (e.kind === "distributeDamage") {
+      // Total potential damage spread across the opp's Pokémon. Bypasses
+      // W/R when ignoreWR is set (Oil Salvo); even otherwise, the per-hit
+      // amount applies separately and may overlap KOs — total is still a
+      // useful upper-bound for the preview.
+      d += e.times * e.perHit;
+    }
   }
   return Math.max(0, Math.floor(d));
 }

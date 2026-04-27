@@ -803,6 +803,46 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
     }
   }
 
+  // ---- Distributed damage: "Choose N times, do M damage each" -------------
+  // Arboliva ex "Oil Salvo": "Choose 1 of your opponent's Pokémon N times.
+  // ... For each time you chose a Pokémon, do M damage to it. This damage
+  // isn't affected by Weakness or Resistance."
+  {
+    const m = text.match(
+      /choose 1 of your opponent'?s pok[eé]mon (\d+) times[\s\S]*?for each time you chose a pok[eé]mon,? do (\d+) damage to it/i,
+    );
+    if (m) {
+      const ignoreWR = /isn'?t affected by weakness or resistance|don'?t apply weakness/i.test(text);
+      effects.push({
+        kind: "distributeDamage",
+        times: parseInt(m[1], 10),
+        perHit: parseInt(m[2], 10),
+        ignoreWR,
+      });
+      baseDamageOverride = 0;
+    }
+  }
+
+  // ---- Distributed counters on Benched: "Put N damage counters …" ---------
+  // Dragapult ex "Phantom Dive": "Put 6 damage counters on your opponent's
+  // Benched Pokémon in any way you like." Counter placement always bypasses
+  // W/R; we model it as N hits of 10 damage on the bench only. The base
+  // attack damage (200 for Dragapult) still hits the Active normally.
+  {
+    const m = text.match(
+      /put (\d+) damage counters? on your opponent'?s benched pok[eé]mon in any way you like/i,
+    );
+    if (m) {
+      effects.push({
+        kind: "distributeDamage",
+        times: parseInt(m[1], 10),
+        perHit: 10,
+        ignoreWR: true,
+        benchOnly: true,
+      });
+    }
+  }
+
   // ---- Fizzle if no Stadium in play ---------------------------------------
   // Fan Rotom "Assault Landing": "If there is no Stadium in play, this
   // attack does nothing."
