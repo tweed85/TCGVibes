@@ -90,9 +90,9 @@ interface PersistedSettings {
 // the latest-action banner before the next play resolves.
 const AI_STEP_DELAY_MS: Record<AiSpeed, number> = {
   instant: 0,
-  fast: 500,
-  normal: 1200,
-  slow: 2200,
+  fast: 1000,
+  normal: 3000,
+  slow: 5000,
 };
 
 function loadSettings(): PersistedSettings {

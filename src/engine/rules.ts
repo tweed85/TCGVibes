@@ -1037,6 +1037,34 @@ export function endTurn(state: GameState): void {
       }
     }
   }
+  // Corrosive Sludge — discard the marked Pokémon (treated as a KO) at the
+  // end of its owner's next turn after the attack. The flag stores the
+  // absolute turn number on which it should fire.
+  {
+    const justEnded = prev;
+    if (justEnded.active && justEnded.active.scheduledKoOnTurn === state.turn) {
+      // Force lethal damage so the standard KO flow handles discard,
+      // attached cards, prizes, and the promote pause.
+      justEnded.active.scheduledKoOnTurn = undefined;
+      justEnded.active.damage = effectiveMaxHp(justEnded.active, state) + 9999;
+      logEvent(state, "system", `Corrosive Sludge: ${justEnded.active.card.name} is discarded.`);
+      knockOutIfNeeded(state, justEnded.id);
+    }
+    // The defender may have retreated — check the bench too.
+    for (let i = justEnded.bench.length - 1; i >= 0; i--) {
+      const p = justEnded.bench[i];
+      if (p.scheduledKoOnTurn === state.turn) {
+        p.scheduledKoOnTurn = undefined;
+        const oppId = opponentOf(justEnded.id);
+        // Bench-side discard: card + evolved-from + attached + tools to
+        // the discard pile; attacker takes prizes per rule-box value.
+        justEnded.bench.splice(i, 1);
+        justEnded.discard.push(p.card, ...p.evolvedFrom, ...p.attachedEnergy, ...p.tools);
+        logEvent(state, "system", `Corrosive Sludge: ${p.card.name} is discarded from the bench.`);
+        takePrizes(state, oppId, prizeValue(p.card));
+      }
+    }
+  }
   // Pokémon Checkup: process status effects on both actives. A status KO here
   // pauses on pendingPromote; once resolved, `passTurn` continues the flow.
   pokemonCheckup(state);

@@ -409,4 +409,24 @@ describe("misc simple effects", () => {
       target: "opponentBench",
     });
   });
+
+  it("Ninetales Supernatural Shapeshifter → discardTopOfOwnDeckUseSupporterEffect", () => {
+    const e = extractEffects(
+      mkAttack({
+        damage: "",
+        text: "Discard the top card of your deck, and if that card is a Supporter card, use the effect of that card as the effect of this attack.",
+      }),
+    );
+    expect(e.effects).toContainEqual({ kind: "discardTopOfOwnDeckUseSupporterEffect" });
+  });
+
+  it("Team Rocket's Grimer Corrosive Sludge → discardDefenderEndOfOppNextTurn", () => {
+    const e = extractEffects(
+      mkAttack({
+        damage: "",
+        text: "At the end of your opponent's next turn, discard the Defending Pokémon and all attached cards.",
+      }),
+    );
+    expect(e.effects).toContainEqual({ kind: "discardDefenderEndOfOppNextTurn" });
+  });
 });

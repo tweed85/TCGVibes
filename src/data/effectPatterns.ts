@@ -2166,6 +2166,28 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
     if (m) effects.push({ kind: "useAttackFromOppDeckTop", revealCount: parseInt(m[1], 10) });
   }
 
+  // Ninetales me1-20 Supernatural Shapeshifter: "Discard the top card of
+  // your deck, and if that card is a Supporter card, use the effect of
+  // that card as the effect of this attack."
+  if (
+    text.match(
+      /discard the top card of your deck,? and if that card is a supporter card,? use the effect of that card as the effect of this attack/i,
+    )
+  ) {
+    effects.push({ kind: "discardTopOfOwnDeckUseSupporterEffect" });
+  }
+
+  // Team Rocket's Grimer sv10-123 Corrosive Sludge: "At the end of your
+  // opponent's next turn, discard the Defending Pokémon and all attached
+  // cards."
+  if (
+    text.match(
+      /at the end of your opponent'?s next turn,? discard the defending pok[eé]mon and all attached cards/i,
+    )
+  ) {
+    effects.push({ kind: "discardDefenderEndOfOppNextTurn" });
+  }
+
   // Scream Tail ex Scream: "...your opponent can't play any Supporter cards
   // from their hand during their next turn." (Engine doesn't separately
   // gate "go second + first turn"; the predicate is enforced by the player

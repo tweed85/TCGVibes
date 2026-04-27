@@ -12,6 +12,7 @@
 
 import { addStatus, drawCards, flipCoin, logEvent } from "./rules";
 import { benchDamageBlocked, benchDamageBlockedByFlowerCurtain } from "./ongoingEffects";
+import { applyTrainerEffect } from "./trainerEffects";
 import { getAttackEffects } from "../data/effectPatterns";
 import type {
   Attack,
@@ -3974,6 +3975,45 @@ export function resolveAttackEffects(
         const opp = state.players[ctx.defenderOwner];
         (opp as typeof opp & { supportersBlockedNextTurn?: boolean }).supportersBlockedNextTurn = true;
         logEvent(state, "system", `${ctx.move.name}: opp can't play Supporters next turn.`);
+        break;
+      }
+
+      case "discardTopOfOwnDeckUseSupporterEffect": {
+        // Ninetales Supernatural Shapeshifter. Resolved as a postHook so
+        // damage (zero, in this attack's case) lands first.
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          const c = pl.deck.shift();
+          if (!c) {
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: deck is empty.`);
+            return;
+          }
+          pl.discard.push(c);
+          logEvent(state, ctx.attackerOwner, `discards ${c.name} from the top of the deck.`);
+          if (
+            c.supertype === "Trainer" &&
+            (c as import("./types").TrainerCard).subtypes.includes("Supporter")
+          ) {
+            const tc = c as import("./types").TrainerCard;
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: uses ${tc.name}'s effect.`);
+            applyTrainerEffect(state, ctx.attackerOwner, tc);
+          }
+        });
+        break;
+      }
+
+      case "discardDefenderEndOfOppNextTurn": {
+        // Team Rocket's Grimer Corrosive Sludge. Mark the defender so the
+        // end-of-turn cleanup in rules.ts fires the discard at the end of
+        // the defender owner's next turn. attacker.turn = T → trigger at T+1.
+        if (ctx.defender) {
+          ctx.defender.scheduledKoOnTurn = state.turn + 1;
+          logEvent(
+            state,
+            "system",
+            `${ctx.move.name}: ${ctx.defender.card.name} will be discarded at end of opp's next turn.`,
+          );
+        }
         break;
       }
 

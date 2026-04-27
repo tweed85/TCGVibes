@@ -775,7 +775,15 @@ export type AttackEffect =
   | { kind: "moveOwnEnergyToBench"; count: number | "all" }
   // "You may move an Energy from your opponent's Active Pokémon to 1 of
   // their Benched Pokémon." (Gengar ex Tricky Steps.)
-  | { kind: "moveOppEnergyToBench"; count: number };
+  | { kind: "moveOppEnergyToBench"; count: number }
+  // Discard the top card of YOUR deck. If it's a Supporter, use its effect
+  // as the effect of this attack. (Ninetales me1-20 Supernatural
+  // Shapeshifter.)
+  | { kind: "discardTopOfOwnDeckUseSupporterEffect" }
+  // At the end of opp's NEXT turn, discard the Defending Pokémon and all
+  // attached cards (treated as a KO — prizes are taken). (Team Rocket's
+  // Grimer sv10-123 Corrosive Sludge.)
+  | { kind: "discardDefenderEndOfOppNextTurn" };
 
 export type PokemonFilter =
   | { kind: "any" }
@@ -1075,6 +1083,11 @@ export interface PokemonInPlay {
   // ("If this Pokémon used Spiky Rolling during your last turn, ..."). Set
   // when an attack resolves; consumed/preserved across the next attack.
   lastAttackUsedNamePriorTurn?: string;
+  // Set by Corrosive Sludge: at endTurn() when state.turn === this value,
+  // KO this Pokémon (and discard attached). Stored as the absolute turn
+  // number on which the trigger fires (= attacker's turn + 1). Cleared on
+  // KO.
+  scheduledKoOnTurn?: number;
 }
 
 export type PlayerId = "p1" | "p2";
