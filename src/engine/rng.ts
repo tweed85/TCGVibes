@@ -1,9 +1,14 @@
-// Small seeded RNG so games are reproducible when desired.
+// Small seeded RNG so games are reproducible when desired. The internal
+// state is exposed via `getState()` / `setState()` so callers can snapshot
+// + restore the RNG cursor — this is what the App's undo stack uses to
+// make undo+retry deterministic instead of randomized.
 export interface Rng {
   next(): number; // [0, 1)
   int(maxExclusive: number): number;
   pick<T>(arr: T[]): T;
   shuffle<T>(arr: T[]): T[];
+  getState(): number;
+  setState(s: number): void;
 }
 
 export function makeRng(seed: number = Date.now()): Rng {
@@ -28,6 +33,10 @@ export function makeRng(seed: number = Date.now()): Rng {
         [out[i], out[j]] = [out[j], out[i]];
       }
       return out;
+    },
+    getState: () => state,
+    setState: (s: number) => {
+      state = s >>> 0;
     },
   };
 }

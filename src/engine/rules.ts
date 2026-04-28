@@ -138,6 +138,7 @@ export function setupGame(
     firstTurnNoAttack: true,
     stadium: null,
     pendingPromote: null,
+    pendingPromoteQueue: [],
     onPromoteResolved: null,
     pendingSecondAttack: null,
     pendingPick: null,
@@ -440,6 +441,29 @@ export function removeStatus(p: PokemonInPlay, s: StatusCondition): void {
 
 export function clearAllStatuses(p: PokemonInPlay): void {
   p.statuses = [];
+}
+
+// Standard post-evolve cleanup. Used by both the regular evolve action and
+// Rare Candy paths so the rules stay in lockstep:
+//   - Special Conditions clear (except Confused under Dizzying Valley)
+//   - abilityUsedThisTurn resets so the evolved form's ability is fresh
+//   - evolvedThisTurn flag set
+//   - Per-turn / per-instance flags scheduled on the prior card clear
+//     (Corrosive Sludge schedule, shield, attack lock, weakness suppression)
+export function applyEvolveSideEffects(state: GameState, target: PokemonInPlay): void {
+  if (state.stadium?.card.name === "Dizzying Valley") {
+    const wasConfused = target.statuses.includes("confused");
+    target.statuses = [];
+    if (wasConfused) target.statuses.push("confused");
+  } else {
+    target.statuses = [];
+  }
+  target.abilityUsedThisTurn = false;
+  target.evolvedThisTurn = true;
+  target.scheduledKoOnTurn = undefined;
+  target.shieldedUntilTurn = undefined;
+  target.cantAttackUntilTurn = undefined;
+  target.noWeaknessUntilTurn = undefined;
 }
 
 // Called after damage-from-status so we honor KO timing.
@@ -906,8 +930,24 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
   }
   // Pause the game for the owner to pick a new active (UI / AI resolves it
   // via promoteBenchToActive). The activePlayer is unchanged.
-  state.pendingPromote = ownerId;
+  setPendingPromote(state, ownerId);
   state.phase = "promoteActive";
+}
+
+// Schedule `ownerId` to promote a benched Pokémon. If another player is
+// already pending (both-Active-KO from Dark Pulse, attacker self-bounce while
+// defender is also KO'd, etc.), queue this one — promoteBenchToActive drains
+// the queue in FIFO order. Caller is responsible for setting state.phase
+// (terminal promotes use "promoteActive"; non-terminal — e.g. Run Away Draw,
+// Cursed Blast — keep phase="main" so the player can keep playing).
+export function setPendingPromote(state: GameState, ownerId: PlayerId): void {
+  if (state.pendingPromote && state.pendingPromote !== ownerId) {
+    if (!state.pendingPromoteQueue.includes(ownerId)) {
+      state.pendingPromoteQueue.push(ownerId);
+    }
+  } else {
+    state.pendingPromote = ownerId;
+  }
 }
 
 // Knock out benched Pokémon whose damage >= HP (e.g., bench snipe damage).

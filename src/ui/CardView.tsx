@@ -16,6 +16,27 @@ export function triggerCardZoom(card: Card): void {
   zoomHandler?.(card);
 }
 
+// Energy-pip glyph. Distinct 1-2-letter codes per type so the pip is readable
+// without relying on color (Fire/Fighting both red, Darkness/Dragon both
+// dark-purple). Centralized so both in-play pips and any future surface
+// agree on the same legend.
+const ENERGY_GLYPH: Record<string, string> = {
+  Fire: "Fr",
+  Water: "W",
+  Grass: "G",
+  Lightning: "L",
+  Psychic: "P",
+  Fighting: "Ft",
+  Darkness: "Dk",
+  Metal: "M",
+  Dragon: "Dr",
+  Fairy: "Fy",
+  Colorless: "C",
+};
+function energyGlyph(type: string): string {
+  return ENERGY_GLYPH[type] ?? type.slice(0, 2);
+}
+
 function maybeZoom(card: Card, ev: MouseEvent): boolean {
   if (!zoomHandler) return false;
   if (ev.shiftKey || ev.metaKey || ev.button === 2) {
@@ -276,19 +297,17 @@ export function PokemonInPlayView({
     (legalTarget ? " legal-target" : "");
   const tip = cardTooltip(p.card);
 
-  // Render each attached Energy as a colored pip showing its type initial.
-  // For special energies with a wild or multi-type provides, we render a
-  // rainbow pip marked `*`.
+  // Render each attached Energy as a colored pip with a distinctive label.
+  // Colorblind users can't separate Fire/Fighting (both red-warm) or
+  // Darkness/Dragon by color alone, so we use two-letter codes to
+  // disambiguate. Wildcard / multi-type energies render rainbow with `*`.
   const pips = p.attachedEnergy.map((e, i) => {
     const types = e.provides ?? ["Colorless"];
     const primary = types[0] ?? "Colorless";
-    // Team Rocket's Energy (P/D), Prism, Luminous, etc. share multi-type
-    // provides; show the first type's color but tag as wild when there are
-    // more than one distinct types.
     const distinct = new Set(types);
     const isWild = distinct.size > 1;
     const cls = `energy-pip energy-${isWild ? "wild" : primary}`;
-    const glyph = isWild ? "*" : (primary[0] ?? "C");
+    const glyph = isWild ? "*" : energyGlyph(primary);
     return (
       <span
         key={`${e.id}-${i}`}

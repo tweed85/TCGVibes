@@ -36,7 +36,7 @@ import {
 import { effectiveAttacks, effectiveMaxHp, energyPoolForCost, estimateAttackDamage } from "./engine/ongoingEffects";
 import type { ActionResult } from "./engine/actions";
 import type { Ability, Card, GameState, PlayerId, PokemonInPlay } from "./engine/types";
-import { buildDeck, validatedDeckSpecs } from "./data/decks";
+import { buildDeck, validateDeckForPlay, validatedDeckSpecs } from "./data/decks";
 import { datasetAsOf, datasetFormat } from "./data/cards";
 import { getAttackEffects } from "./data/effectPatterns";
 import { loadImportedDecks, saveImportedDecks, type PersistedImport } from "./data/persistence";
@@ -217,11 +217,16 @@ export default function App() {
   // Set to true once the mulligan-summary modal has been dismissed for the
   // current game; prevents reopening on every rerender. Reset by onReset.
   const [mulliganNoticeDismissed, setMulliganNoticeDismissed] = useState(false);
-  // Serialized snapshot of the game state at the start of the viewingPlayer's
-  // current turn. Click "Undo" to restore. Invalidated each time a new turn
-  // begins for the viewing player. Doesn't rewind the RNG (we preserve the
-  // current rng instance), so re-rolled actions after undo will differ.
-  const turnSnapshotRef = useRef<string | null>(null);
+  // Stack of pre-action snapshots for Undo. Each entry captures both the
+  // serialized GameState (rng stripped, since rng is a function-bearing
+  // closure that JSON-clone can't preserve) AND the RNG's internal cursor
+  // position via `getState()`. On undo, we pop the most recent entry and
+  // restore both pieces — including rewinding the rng cursor — so a retried
+  // action consumes the same entropy and produces deterministic results
+  // instead of randomized ones. The stack is reset at the start of each new
+  // turn for the viewing player.
+  const undoStackRef = useRef<Array<{ state: string; rngState: number; label: string }>>([]);
+  const undoTurnRef = useRef<{ turn: number; player: PlayerId | null }>({ turn: -1, player: null });
   const [canUndo, setCanUndo] = useState(false);
   // Game mode: "vsCPU" leaves p2 as AI; "local" makes both sides human and
   // enables hotseat device-handoff between turns.
@@ -272,21 +277,42 @@ export default function App() {
     return () => setCardZoomHandler(null);
   }, []);
 
-  // Snapshot state whenever a fresh turn begins for the viewing player, so
-  // the Undo button has a target. Skip during modal-blocked phases.
+  // Reset the undo stack at the start of each fresh turn for the viewing
+  // player. We don't push an initial snapshot — the stack only gets entries
+  // when the player actually takes an action (via `snapshotForUndo` below).
+  // After a turn flip, the previous turn's actions are no longer reversible.
   useEffect(() => {
     if (preGameOpen) return;
     if (state.winner !== null) return;
     if (pendingHandoff) return;
     if (state.phase !== "main") return;
     if (state.activePlayer !== viewingPlayer) return;
-    // Only save once at the start; later mutations within the turn happen
-    // against the same snapshot until the turn flips.
+    const turnKey = undoTurnRef.current;
+    if (turnKey.turn !== state.turn || turnKey.player !== viewingPlayer) {
+      undoTurnRef.current = { turn: state.turn, player: viewingPlayer };
+      undoStackRef.current = [];
+      setCanUndo(false);
+    }
+  }, [state.turn, state.activePlayer, viewingPlayer, preGameOpen, pendingHandoff]);
+
+  // Snapshot the current state + RNG cursor before a player action runs.
+  // Called from each action handler (play / attach / evolve / retreat /
+  // attack / playTrainer / activateAbility / promote). Pushes onto the
+  // undo stack so the player can step back through their own actions.
+  // Captures the rng cursor via `getState()` so re-execution after undo
+  // consumes the same entropy and is deterministic.
+  const snapshotForUndo = (label: string): void => {
+    if (state.activePlayer !== viewingPlayer) return;
+    if (state.phase !== "main") return;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { rng: _rng, ...serializable } = state;
-    turnSnapshotRef.current = JSON.stringify(serializable);
+    undoStackRef.current.push({
+      state: JSON.stringify(serializable),
+      rngState: state.rng.getState(),
+      label,
+    });
     setCanUndo(true);
-  }, [state.turn, state.activePlayer, viewingPlayer, preGameOpen, pendingHandoff]);
+  };
 
   // Export the current game log as a downloadable JSON file. Lightweight
   // "replay mode" — reading through the log lets you reconstruct the play.
@@ -315,15 +341,23 @@ export default function App() {
   };
 
   const onUndo = () => {
-    if (!turnSnapshotRef.current) return;
+    const stack = undoStackRef.current;
+    if (stack.length === 0) return;
+    const entry = stack.pop()!;
     try {
-      const restored = JSON.parse(turnSnapshotRef.current);
-      // Preserve the live RNG instance — we're not rewinding entropy, only
-      // board state, so a retried search / coin flip will use fresh rolls.
-      stateRef.current = { ...restored, rng: stateRef.current.rng };
+      const restored = JSON.parse(entry.state);
+      // Reuse the live RNG instance but rewind its internal cursor to where
+      // it was before the undone action. Without this rewind, re-rolling
+      // (e.g., a deck shuffle, coin flip, or random search pick) would
+      // consume different entropy each time, making undo behave like a
+      // randomizer instead of a real reversal.
+      const rng = stateRef.current.rng;
+      rng.setState(entry.rngState);
+      stateRef.current = { ...restored, rng };
       setSelected(null);
-      setStatusMsg("Undid turn.");
+      setStatusMsg(`Undid: ${entry.label}.`);
       setPendingSnipeAttack(null);
+      setCanUndo(stack.length > 0);
       rerender();
     } catch {
       setStatusMsg("Undo failed.");
@@ -370,6 +404,11 @@ export default function App() {
     if (preGameOpen) return;
     if (state.winner !== null) return;
     if (pendingHandoff) return; // freeze AI while waiting on hotseat handoff
+    // Pause the AI while the user is inspecting something modal — zooming a
+    // card, browsing a discard pile, or working in the deck-builder. The
+    // useEffect re-runs when these flip back to false, picking up where the
+    // AI left off without losing the in-flight delay timer.
+    if (zoomCard || discardViewer || importOpen || buildOpen) return;
     // AI-won coin toss: auto-pick first/second after a short delay.
     if (
       state.phase === "coinFlip" &&
@@ -620,6 +659,7 @@ export default function App() {
     }
 
     if (isPokemon(card) && isBasic(card)) {
+      snapshotForUndo(`play ${card.name} to bench`);
       handle(playBasicToBench(state, viewingPlayer, i), `Played ${card.name} to bench.`);
       return;
     }
@@ -642,6 +682,7 @@ export default function App() {
         );
         return;
       }
+      snapshotForUndo(`play ${card.name}`);
       handle(playTrainer(state, viewingPlayer, i), `Played ${card.name}.`);
       return;
     }
@@ -690,10 +731,12 @@ export default function App() {
       const card = me.hand[selected.index];
       if (!card) return;
       if (card.supertype === "Energy" && side === "me") {
+        snapshotForUndo(`attach ${card.name} to ${p.card.name}`);
         handle(attachEnergy(state, viewingPlayer, selected.index, p.instanceId), `Attached ${card.name}.`);
         return;
       }
       if (card.supertype === "Pokémon" && card.evolvesFrom && side === "me") {
+        snapshotForUndo(`evolve ${p.card.name} → ${card.name}`);
         handle(evolve(state, viewingPlayer, selected.index, p.instanceId), `Evolved into ${card.name}.`);
         return;
       }
@@ -702,6 +745,7 @@ export default function App() {
           card.subtypes.includes("Pokémon Tool") || card.subtypes.includes("Tool");
         if (isTool && side === "me") {
           const target: TrainerTarget = { kind: "inPlay", instanceId: p.instanceId };
+          snapshotForUndo(`attach ${card.name} to ${p.card.name}`);
           handle(
             playTrainer(state, viewingPlayer, selected.index, target),
             `Attached ${card.name} to ${p.card.name}.`,
@@ -710,6 +754,7 @@ export default function App() {
         }
         if (card.effectId === "gustOppBenched" && side === "opp") {
           const target: TrainerTarget = { kind: "oppInPlay", instanceId: p.instanceId };
+          snapshotForUndo(`play ${card.name} on ${p.card.name}`);
           handle(
             playTrainer(state, viewingPlayer, selected.index, target),
             `Played ${card.name}.`,
@@ -718,6 +763,7 @@ export default function App() {
         }
         if (card.effectId === "rareCandyEvolve" && side === "me") {
           const target: TrainerTarget = { kind: "inPlay", instanceId: p.instanceId };
+          snapshotForUndo(`Rare Candy ${p.card.name}`);
           handle(
             playTrainer(state, viewingPlayer, selected.index, target),
             `Used Rare Candy on ${p.card.name}.`,
@@ -731,11 +777,24 @@ export default function App() {
 
   const onActivateAbility = (p: PokemonInPlay, abilityIndex: number) => {
     if (!myTurn) return;
+    const abName = p.card.abilities?.[abilityIndex]?.name ?? "ability";
+    snapshotForUndo(`activate ${abName}`);
     const r = activateAbility(state, viewingPlayer, p.instanceId, abilityIndex);
     handle(
       r.ok ? { ok: true } : { ok: false, reason: r.reason ?? "Cannot activate." },
       r.ok ? `Activated ${p.card.abilities![abilityIndex].name}.` : undefined,
     );
+  };
+
+  // Attack is the commit point — once it succeeds, side effects (damage, KOs,
+  // prizes, opp's response turn) make pre-attack actions irreversible. Lock
+  // the undo stack so the player can't accidentally roll back earlier plays
+  // (attach energy, evolve) while a post-attack picker like Phantom Dive's
+  // bench-distribute is still open. Failed attacks (insufficient energy etc.)
+  // leave the stack intact so the player can still undo what came before.
+  const lockUndoAfterAttack = () => {
+    undoStackRef.current = [];
+    setCanUndo(false);
   };
 
   const onAttack = (atkIndex: number) => {
@@ -748,7 +807,9 @@ export default function App() {
       setPendingSnipeAttack(atkIndex);
       return;
     }
-    handle(attack(state, viewingPlayer, atkIndex));
+    const r = attack(state, viewingPlayer, atkIndex);
+    if (r.ok) lockUndoAfterAttack();
+    handle(r);
   };
 
   const commitSnipeAttack = (benchIdx: number | null) => {
@@ -756,11 +817,15 @@ export default function App() {
     state.snipeTargetOverride = benchIdx;
     const atk = pendingSnipeAttack;
     setPendingSnipeAttack(null);
-    handle(attack(state, viewingPlayer, atk));
+    const r = attack(state, viewingPlayer, atk);
+    if (r.ok) lockUndoAfterAttack();
+    handle(r);
   };
 
   const onRetreat = (benchIdx: number) => {
     if (!myTurn) return;
+    const promoter = me.bench[benchIdx];
+    snapshotForUndo(`retreat to ${promoter?.card.name ?? "bench"}`);
     handle(retreat(state, viewingPlayer, benchIdx), "Retreated.");
   };
 
@@ -1105,6 +1170,13 @@ export default function App() {
           oppDeckId={oppDeckId}
           openHands={openHands}
           gameMode={gameMode}
+          deckIssue={(id: string): string | null => {
+            const fallback = buildDeck(deckSpecs[0]);
+            // Random sentinel resolves to a preset; trust presets always validate.
+            if (id === "__random__") return null;
+            const deck = deckForId(id, fallback);
+            return validateDeckForPlay(deck);
+          }}
           onChangeMyDeck={setMyDeckId}
           onChangeOppDeck={setOppDeckId}
           onToggleOpenHands={setOpenHands}
@@ -2302,6 +2374,11 @@ function MulliganNoticeModal({
           <h2>Mulligan</h2>
         </div>
         <div className="mulligan-body">
+          <p className="muted">
+            If your opening hand has no Basic Pokémon, you reveal it, shuffle
+            it back into your deck, and draw a new 7 — that's a "mulligan."
+            Your opponent draws one extra card for each mulligan you take.
+          </p>
           {lines.map((l, i) => (
             <p key={i}>{l}</p>
           ))}
@@ -2329,6 +2406,7 @@ function PreGameModal({
   oppDeckId,
   openHands,
   gameMode,
+  deckIssue,
   onChangeMyDeck,
   onChangeOppDeck,
   onToggleOpenHands,
@@ -2343,6 +2421,7 @@ function PreGameModal({
   oppDeckId: string;
   openHands: boolean;
   gameMode: "vsCPU" | "local";
+  deckIssue: (id: string) => string | null;
   onChangeMyDeck: (id: string) => void;
   onChangeOppDeck: (id: string) => void;
   onToggleOpenHands: (v: boolean) => void;
@@ -2356,6 +2435,9 @@ function PreGameModal({
     if (imp) return `Imported · ${imp.cards.length} cards`;
     return null;
   };
+  const myIssue = deckIssue(myDeckId);
+  const oppIssue = deckIssue(oppDeckId);
+  const startBlocked = !!(myIssue || oppIssue);
   const opponentLabel = gameMode === "local" ? "Player 2" : "CPU";
   return (
     <div className="modal-backdrop">
@@ -2400,6 +2482,7 @@ function PreGameModal({
               imports={imports}
             />
             {describe(myDeckId) && <div className="pregame-slot-note">{describe(myDeckId)}</div>}
+            {myIssue && <div className="pregame-slot-note error">⚠ {myIssue}</div>}
           </div>
           <div className="pregame-vs">vs</div>
           <div className="pregame-slot">
@@ -2418,6 +2501,7 @@ function PreGameModal({
             ) : (
               describe(oppDeckId) && <div className="pregame-slot-note">{describe(oppDeckId)}</div>
             )}
+            {oppIssue && <div className="pregame-slot-note error">⚠ {oppIssue}</div>}
           </div>
         </div>
         <div className="pregame-options">
@@ -2440,7 +2524,14 @@ function PreGameModal({
           <button onClick={onOpenImport}>Import Deck…</button>
         </div>
         <div className="modal-actions">
-          <button className="primary" onClick={onStart}>Start Game</button>
+          <button
+            className="primary"
+            onClick={onStart}
+            disabled={startBlocked}
+            title={startBlocked ? "Fix the deck issue(s) above before starting." : undefined}
+          >
+            Start Game
+          </button>
         </div>
       </div>
     </div>

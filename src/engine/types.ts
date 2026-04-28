@@ -1326,6 +1326,11 @@ export interface LogEntry {
 export interface GameRng {
   next(): number;
   int(maxExclusive: number): number;
+  // Snapshot + restore the internal PRNG cursor. Used by the App's undo
+  // stack so a re-executed action consumes the same entropy as the original
+  // (otherwise undo+retry randomizes results).
+  getState(): number;
+  setState(s: number): void;
 }
 
 export interface GameState {
@@ -1345,6 +1350,11 @@ export interface GameState {
   stadium: StadiumInPlay | null;
   // If non-null, game is paused waiting for this player to pick a new Active from their Bench.
   pendingPromote: PlayerId | null;
+  // FIFO of additional players queued to promote after `pendingPromote` resolves.
+  // Both-Active-KO (Houndoom-style mutual KO) sets this — defender promotes
+  // first (real-TCG rule: non-active-player promotes first), then the active
+  // player drains the queue. Empty array when no queue.
+  pendingPromoteQueue: PlayerId[];
   // What to do once the promote resolves.
   //  - "endTurn": KO happened during attack, run endTurn next
   //  - "passTurn": KO happened during checkup, skip cleanup and pass to opponent

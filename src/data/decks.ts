@@ -183,6 +183,20 @@ export const DECK_SPECS: DeckSpec[] = [
 // Builders
 // ---------------------------------------------------------------------------
 
+// Defense-in-depth check before a deck reaches setupGame. Curated presets
+// always validate; the surface for failure is imported decks where dataset
+// drift between when the user imported the deck and the current card pool
+// dropped some cards (rehydrateImports keeps decks of any non-zero size, so
+// a 59-card or zero-Basic deck can survive into the picker). Returns null
+// if the deck is legal; otherwise a short reason for the UI.
+export function validateDeckForPlay(cards: Card[]): string | null {
+  if (cards.length !== 60) return `Deck has ${cards.length} cards (needs 60).`;
+  if (!cards.some((c) => c.supertype === "Pokémon" && (c.subtypes ?? []).includes("Basic"))) {
+    return "Deck has no Basic Pokémon — game cannot start.";
+  }
+  return null;
+}
+
 export function buildDeck(spec: DeckSpec): Card[] {
   const built = importDecklist(spec.decklist);
   if (built.unmatched.length > 0) {

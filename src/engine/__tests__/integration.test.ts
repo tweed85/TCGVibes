@@ -667,3 +667,226 @@ describe("Import decklist → valid 60-card deck", () => {
     expect(names.size).toBeGreaterThanOrEqual(3);
   });
 });
+
+describe("applyEvolveSideEffects (M1) — Dizzying Valley preserves Confused", () => {
+  it("clears Confused on evolve when no Dizzying Valley is in play", async () => {
+    const { applyEvolveSideEffects } = await import("../rules");
+    const state = bootGameToMain(11);
+    const target = state.players[state.activePlayer].active!;
+    target.statuses = ["confused", "burned"];
+    applyEvolveSideEffects(state, target);
+    expect(target.statuses).toEqual([]);
+    expect(target.evolvedThisTurn).toBe(true);
+  });
+
+  it("preserves Confused on evolve when Dizzying Valley is the active Stadium", async () => {
+    const { applyEvolveSideEffects } = await import("../rules");
+    const state = bootGameToMain(12);
+    state.stadium = { card: mkStadium("Dizzying Valley"), controller: state.activePlayer };
+    const target = state.players[state.activePlayer].active!;
+    target.statuses = ["confused", "burned"];
+    applyEvolveSideEffects(state, target);
+    // Confused stays; Burned (and any other) is cleared.
+    expect(target.statuses).toEqual(["confused"]);
+  });
+
+  it("clears scheduled-flag carryover on evolve (Corrosive Sludge, shield, attack lock)", async () => {
+    const { applyEvolveSideEffects } = await import("../rules");
+    const state = bootGameToMain(13);
+    const target = state.players[state.activePlayer].active!;
+    target.scheduledKoOnTurn = state.turn + 1;
+    target.shieldedUntilTurn = state.turn + 1;
+    target.cantAttackUntilTurn = state.turn + 1;
+    target.noWeaknessUntilTurn = state.turn + 1;
+    applyEvolveSideEffects(state, target);
+    expect(target.scheduledKoOnTurn).toBeUndefined();
+    expect(target.shieldedUntilTurn).toBeUndefined();
+    expect(target.cantAttackUntilTurn).toBeUndefined();
+    expect(target.noWeaknessUntilTurn).toBeUndefined();
+  });
+});
+
+describe("Sticky Bind suppresses triggered-on-bench abilities (C2)", () => {
+  it("a benched Stage 2 with a triggered-on-bench ability does not fire while opp has Sticky Bind", async () => {
+    const { fireTriggeredOnBench } = await import("../abilities");
+    const state = bootGameToMain(123);
+    const ap = state.activePlayer;
+    const oppId = ap === "p1" ? "p2" : "p1";
+
+    // Synthetic Stage 2 with a triggered-on-bench ability the engine knows
+    // about. "Last-Ditch Catch" is on Meowth ex IRL (Basic) but for the
+    // suppressor test we need Stage 2 — Sticky Bind only targets Stage 2.
+    const trigStage2: PokemonCard = {
+      id: "test-trig",
+      name: "TestStage2",
+      supertype: "Pokémon",
+      subtypes: ["Stage 2"],
+      hp: 180,
+      types: ["Colorless"],
+      attacks: [],
+      retreatCost: [],
+      abilities: [{ name: "Last-Ditch Catch", text: "test", type: "Ability" }],
+    } as PokemonCard;
+
+    // Place trigStage2 on the active player's bench, freshly played.
+    const benchedTrig = {
+      instanceId: "trig-bench",
+      card: trigStage2,
+      damage: 0,
+      attachedEnergy: [],
+      evolvedFrom: [],
+      tools: [],
+      playedThisTurn: true,
+      evolvedThisTurn: false,
+      statuses: [],
+      abilityUsedThisTurn: false,
+    };
+    state.players[ap].bench.push(benchedTrig as typeof state.players.p1.bench[0]);
+
+    // Klefki-style Sticky Bind holder on opponent's bench.
+    const klefkiCard: PokemonCard = {
+      id: "test-klefki",
+      name: "Klefki",
+      supertype: "Pokémon",
+      subtypes: ["Basic"],
+      hp: 70,
+      types: ["Metal"],
+      attacks: [],
+      retreatCost: [],
+      abilities: [{ name: "Sticky Bind", text: "test", type: "Ability" }],
+    } as PokemonCard;
+    state.players[oppId].bench.push({
+      instanceId: "klefki-bench",
+      card: klefkiCard,
+      damage: 0,
+      attachedEnergy: [],
+      evolvedFrom: [],
+      tools: [],
+      playedThisTurn: false,
+      evolvedThisTurn: false,
+      statuses: [],
+      abilityUsedThisTurn: false,
+    } as typeof state.players.p1.bench[0]);
+
+    fireTriggeredOnBench(state, ap, benchedTrig as typeof state.players.p1.bench[0]);
+
+    // Pre-fix: this would have fired Last-Ditch Catch (which sets
+    // lastDitchUsedThisTurn AND opens a deck-search pick). With C2, the
+    // suppressor blocks the trigger before run() executes.
+    expect(state.players[ap].lastDitchUsedThisTurn).toBeFalsy();
+    expect(benchedTrig.abilityUsedThisTurn).toBe(false);
+  });
+
+  it("the same Stage 2 fires its trigger normally without Sticky Bind on the field", async () => {
+    const { fireTriggeredOnBench } = await import("../abilities");
+    const state = bootGameToMain(124);
+    const ap = state.activePlayer;
+    const trigStage2: PokemonCard = {
+      id: "test-trig-2",
+      name: "TestStage2",
+      supertype: "Pokémon",
+      subtypes: ["Stage 2"],
+      hp: 180,
+      types: ["Colorless"],
+      attacks: [],
+      retreatCost: [],
+      abilities: [{ name: "Last-Ditch Catch", text: "test", type: "Ability" }],
+    } as PokemonCard;
+    const benchedTrig = {
+      instanceId: "trig-bench-2",
+      card: trigStage2,
+      damage: 0,
+      attachedEnergy: [],
+      evolvedFrom: [],
+      tools: [],
+      playedThisTurn: true,
+      evolvedThisTurn: false,
+      statuses: [],
+      abilityUsedThisTurn: false,
+    };
+    state.players[ap].bench.push(benchedTrig as typeof state.players.p1.bench[0]);
+    fireTriggeredOnBench(state, ap, benchedTrig as typeof state.players.p1.bench[0]);
+    // Last-Ditch Catch's `run` sets lastDitchUsedThisTurn on the player.
+    expect(state.players[ap].lastDitchUsedThisTurn).toBe(true);
+  });
+});
+
+describe("bothActiveKnockedOut — promote queue resolves both players in sequence", () => {
+  it("queues the second promote instead of dropping it; both Actives are replaced", async () => {
+    const state = bootGameToMain(99);
+    const ap = state.activePlayer;
+    const oppId = ap === "p1" ? "p2" : "p1";
+    // Mutual-KO attacker: damage=0 + bothActiveKnockedOut postHook sets
+    // both Actives to 9999 damage so the KO pipeline catches both.
+    state.players[ap].active!.card = {
+      id: "selfdestruct-test",
+      name: "MutualKO",
+      supertype: "Pokémon",
+      subtypes: ["Basic"],
+      hp: 100,
+      types: ["Colorless"],
+      attacks: [
+        {
+          name: "Final Strike",
+          cost: [],
+          damage: 0,
+          effects: [{ kind: "bothActiveKnockedOut" }],
+        },
+      ],
+      retreatCost: [],
+    };
+    // Make sure both players have at least one bench Pokémon to promote into.
+    const benchTemplate = (id: string): typeof state.players.p1.active => ({
+      instanceId: id,
+      card: {
+        id: `bench-${id}`,
+        name: `Bench-${id}`,
+        supertype: "Pokémon",
+        subtypes: ["Basic"],
+        hp: 60,
+        types: ["Colorless"],
+        attacks: [],
+        retreatCost: [],
+      } as PokemonCard,
+      damage: 0,
+      attachedEnergy: [],
+      evolvedFrom: [],
+      tools: [],
+      playedThisTurn: false,
+      evolvedThisTurn: false,
+      statuses: [],
+      abilityUsedThisTurn: false,
+    });
+    state.players[ap].bench = [benchTemplate("ap-bench")!];
+    state.players[oppId].bench = [benchTemplate("opp-bench")!];
+
+    attack(state, ap, 0);
+
+    // After the attack, exactly one player should be in the pendingPromote
+    // slot and the OTHER should be queued. Critically, *both* show up — the
+    // pre-fix behavior would silently drop one.
+    const inSlot = state.pendingPromote;
+    expect(inSlot).not.toBeNull();
+    expect([ap, oppId]).toContain(inSlot!);
+    const queued = state.pendingPromoteQueue;
+    expect(queued).toHaveLength(1);
+    const otherPlayer = inSlot === ap ? oppId : ap;
+    expect(queued[0]).toBe(otherPlayer);
+    expect(state.phase).toBe("promoteActive");
+
+    // Resolve first promote → queue should drain into pendingPromote.
+    const { promoteBenchToActive } = await import("../actions");
+    promoteBenchToActive(state, inSlot!, 0);
+    expect(state.players[inSlot!].active).not.toBeNull();
+    expect(state.pendingPromote).toBe(otherPlayer);
+    expect(state.pendingPromoteQueue).toHaveLength(0);
+    expect(state.phase).toBe("promoteActive");
+
+    // Resolve second promote → both players have an Active again, queue empty.
+    promoteBenchToActive(state, otherPlayer, 0);
+    expect(state.players[ap].active).not.toBeNull();
+    expect(state.players[oppId].active).not.toBeNull();
+    expect(state.pendingPromote).toBeNull();
+    expect(state.pendingPromoteQueue).toHaveLength(0);
+  });
+});

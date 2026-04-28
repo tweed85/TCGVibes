@@ -142,14 +142,28 @@ export function buildDeckFromEntries(entries: DeckListEntry[]): BuildResult {
     const isRadiant = resolved.subtypes.includes("Radiant");
     const isAceSpec = resolved.subtypes.includes("ACE SPEC");
 
-    nameCounts.set(entry.name, (nameCounts.get(entry.name) ?? 0) + entry.count);
+    const priorCount = nameCounts.get(entry.name) ?? 0;
+    nameCounts.set(entry.name, priorCount + entry.count);
     if (isRadiant) radiantTotal += entry.count;
     if (isAceSpec) aceSpecTotal += entry.count;
 
-    if (!isBasicEnergy && (nameCounts.get(entry.name) ?? 0) > 4) {
-      ruleViolations.push(`More than 4 copies of ${entry.name}.`);
+    // Per-name cap: 4 copies (basic Energy excluded). Truncate at the parser
+    // so an over-cap decklist always produces a legal 60-card-or-less deck —
+    // record the violation so the UI surfaces it but never push more than
+    // the cap into the engine. Without this, a programmatic caller that
+    // skipped the import-modal validation could feed an illegal deck into
+    // setupGame.
+    let allowedFromEntry = entry.count;
+    if (!isBasicEnergy) {
+      const remainingCap = Math.max(0, 4 - priorCount);
+      if (entry.count > remainingCap) {
+        ruleViolations.push(
+          `More than 4 copies of ${entry.name} — extra ${entry.count - remainingCap} dropped.`,
+        );
+      }
+      allowedFromEntry = Math.min(entry.count, remainingCap);
     }
-    for (let i = 0; i < entry.count; i++) {
+    for (let i = 0; i < allowedFromEntry; i++) {
       deck.push({ ...resolved } as Card);
     }
   }

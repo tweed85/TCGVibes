@@ -8,8 +8,8 @@
 // generic text patterns and a hand-picked set of common cards where the
 // exact wording is specific (e.g. Thwackey's conditional search).
 
-import { knockOut, logEvent, makePokemonInPlay, prizeValue, resolveBenchKOs } from "./rules";
-import { abilitiesActiveOn, effectiveMaxHp } from "./ongoingEffects";
+import { knockOut, logEvent, makePokemonInPlay, prizeValue, resolveBenchKOs, setPendingPromote } from "./rules";
+import { abilitiesActiveOn, abilitiesActiveOnInstance, effectiveMaxHp } from "./ongoingEffects";
 import { setDeckSearchPick, setTopPeekPick } from "./pendingPick";
 import type {
   Ability,
@@ -706,7 +706,7 @@ export function activateAbility(
         // abilities, etc. before choosing the new Active. Action Bar's
         // attack/retreat/end-turn buttons are gated on `promoteOpen` so
         // those are blocked until a Bench Pokémon is promoted.
-        state.pendingPromote = player;
+        setPendingPromote(state, player);
         state.onPromoteResolved = null;
         // (Intentionally NOT setting phase = "promoteActive" — that phase
         // is reserved for terminal promotes like attack-KO / checkup-KO
@@ -1460,7 +1460,7 @@ export function activateAbility(
       if (opp.active && opp.bench.length > 0) {
         opp.bench.push(opp.active);
         opp.active = null;
-        state.pendingPromote = oppId;
+        setPendingPromote(state, oppId);
         state.phase = "promoteActive";
         state.onPromoteResolved = null;
       }
@@ -2264,8 +2264,8 @@ export function fireTriggeredOnEvolve(
   for (const ab of abilities) {
     const trig = TRIGGERED_ON_EVOLVE[ab.name];
     if (!trig) continue;
-    if (!abilitiesActiveOn(state, evolved.card)) {
-      logEvent(state, "system", `${ab.name} suppressed by current Stadium.`);
+    if (!abilitiesActiveOnInstance(state, evolved)) {
+      logEvent(state, "system", `${ab.name} suppressed.`);
       continue;
     }
     if (trig.condition && !trig.condition(state, player)) {
@@ -2440,8 +2440,8 @@ export function fireTriggeredOnBench(
   for (const ab of abilities) {
     const trig = TRIGGERED_ON_BENCH[ab.name];
     if (!trig) continue;
-    if (!abilitiesActiveOn(state, benched.card)) {
-      logEvent(state, "system", `${ab.name} suppressed by current Stadium.`);
+    if (!abilitiesActiveOnInstance(state, benched)) {
+      logEvent(state, "system", `${ab.name} suppressed.`);
       continue;
     }
     if (trig.condition && !trig.condition(state, player)) continue;
@@ -2575,8 +2575,8 @@ export function fireTriggeredOnMoveToActive(
   for (const ab of abilities) {
     const trig = TRIGGERED_ON_MOVE_TO_ACTIVE[ab.name];
     if (!trig) continue;
-    if (!abilitiesActiveOn(state, promoted.card)) {
-      logEvent(state, "system", `${ab.name} suppressed by current Stadium.`);
+    if (!abilitiesActiveOnInstance(state, promoted)) {
+      logEvent(state, "system", `${ab.name} suppressed.`);
       continue;
     }
     if (trig.condition && !trig.condition(state, player, promoted)) continue;
@@ -2637,8 +2637,8 @@ export function fireTriggeredOnMoveToBench(
   for (const ab of abilities) {
     const trig = TRIGGERED_ON_MOVE_TO_BENCH[ab.name];
     if (!trig) continue;
-    if (!abilitiesActiveOn(state, moved.card)) {
-      logEvent(state, "system", `${ab.name} suppressed by current Stadium.`);
+    if (!abilitiesActiveOnInstance(state, moved)) {
+      logEvent(state, "system", `${ab.name} suppressed.`);
       continue;
     }
     if (trig.condition && !trig.condition(state, player, moved)) continue;

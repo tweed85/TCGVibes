@@ -106,11 +106,17 @@ function mkState(overrides: Partial<GameState> = {}): GameState {
     firstTurnNoAttack: false,
     stadium: null,
     pendingPromote: null,
+    pendingPromoteQueue: [],
     onPromoteResolved: null,
     pendingSecondAttack: null,
     pendingPick: null,
     coinFlip: null,
-    rng: { next: () => 0.5, int: (n) => Math.floor(0.5 * n) },
+    rng: {
+      next: () => 0.5,
+      int: (n) => Math.floor(0.5 * n),
+      getState: () => 0,
+      setState: () => {},
+    },
     ...overrides,
   } as GameState;
 }

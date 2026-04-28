@@ -1157,18 +1157,23 @@ body {
   max-width: 70%;
 }
 .card.in-play .in-play-overlay .energy-pip {
-  width: 14px;
+  /* Sized for 2-letter codes (Fr / Ft / Dk / Dr / Fy) so colorblind users can
+     read the type without relying on color alone. Letterforms stay legible
+     at 9px when the pip is wide enough not to crop them. */
+  min-width: 18px;
   height: 14px;
-  border-radius: 50%;
+  padding: 0 3px;
+  border-radius: 7px;
   font-size: 9px;
   font-weight: 700;
   color: #fff;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.75);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.22);
   line-height: 1;
+  letter-spacing: 0.02em;
 }
 .card.in-play .in-play-overlay .energy-pip.energy-Fire { background: var(--energy-fire); }
 .card.in-play .in-play-overlay .energy-pip.energy-Water { background: var(--energy-water); }
@@ -2081,6 +2086,10 @@ button.secondary:hover:not(:disabled) {
   /* Let long deck descriptions wrap inside the cell instead of overflowing
      to the right. */
   overflow-wrap: break-word;
+}
+.pregame-slot-note.error {
+  color: var(--danger);
+  font-weight: 600;
 }
 .pregame-vs {
   font-size: 14px;

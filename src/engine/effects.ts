@@ -10,7 +10,7 @@
 // Effects that the engine doesn't understand are preserved on the Attack as
 // plain `text` so the UI can display them even though they won't fire.
 
-import { addStatus, drawCards, flipCoin, logEvent, prizeValue } from "./rules";
+import { addStatus, drawCards, flipCoin, logEvent, prizeValue, setPendingPromote } from "./rules";
 import { benchDamageBlocked, benchDamageBlockedByFlowerCurtain, effectiveMaxHp } from "./ongoingEffects";
 import { applyTrainerEffect } from "./trainerEffects";
 import { getAttackEffects } from "../data/effectPatterns";
@@ -708,7 +708,7 @@ export function resolveAttackEffects(
           pl.discard.push(...ctx.attacker.evolvedFrom, ...ctx.attacker.attachedEnergy, ...ctx.attacker.tools);
           pl.active = null;
           if (pl.bench.length > 0) {
-            state.pendingPromote = ctx.attackerOwner;
+            setPendingPromote(state, ctx.attackerOwner);
             state.phase = "promoteActive";
             state.onPromoteResolved = null;
           }
@@ -1201,7 +1201,12 @@ export function resolveAttackEffects(
             const where = e.benchOnly ? "Benched Pokémon" : "Pokémon";
             state.pendingInPlayTarget = {
               player: attackerOwner,
-              label: `${ctx.move.name}: pick an opp ${where} to hit (${e.times} hits of ${e.perHit})`,
+              // Label is read by `formatPickerLabel` in App.tsx, which appends
+              // "— N left". So this string is the *per-click* description: one
+              // click places `perHit` damage on the picked target. Keep the
+              // wording explicit so the player doesn't think the total damage
+              // gets dropped on the first click.
+              label: `${ctx.move.name}: click an opp ${where} to place ${e.perHit} damage`,
               scope: "opp",
               slot: e.benchOnly ? "bench" : "anywhere",
               filter: "anyPokemon",
@@ -1323,7 +1328,7 @@ export function resolveAttackEffects(
           const oldActive = opp.active;
           opp.bench.push(oldActive);
           opp.active = null;
-          state.pendingPromote = ctx.defenderOwner;
+          setPendingPromote(state, ctx.defenderOwner);
           state.phase = "promoteActive";
           logEvent(state, "system", `${oldActive.card.name} is switched out — opponent picks new Active.`);
         });
@@ -1981,7 +1986,7 @@ export function resolveAttackEffects(
           pl.active = null;
           // Force a promote so the player can still make a legal turn end.
           if (pl.bench.length > 0) {
-            state.pendingPromote = ctx.attackerOwner;
+            setPendingPromote(state, ctx.attackerOwner);
             state.phase = "promoteActive";
             state.onPromoteResolved = null;
           }
@@ -2366,7 +2371,7 @@ export function resolveAttackEffects(
           const target = opp.active;
           opp.discard.push(target.card, ...target.evolvedFrom, ...target.attachedEnergy, ...target.tools);
           opp.active = null;
-          state.pendingPromote = ctx.defenderOwner;
+          setPendingPromote(state, ctx.defenderOwner);
           state.phase = "promoteActive";
           logEvent(state, "system", `${ctx.move.name}: KOs ${target.card.name} and discards all attached.`);
         });
@@ -2455,7 +2460,7 @@ export function resolveAttackEffects(
           pl.discard.push(ctx.attacker.card, ...ctx.attacker.evolvedFrom, ...ctx.attacker.attachedEnergy, ...ctx.attacker.tools);
           pl.active = null;
           if (pl.bench.length > 0) {
-            state.pendingPromote = ctx.attackerOwner;
+            setPendingPromote(state, ctx.attackerOwner);
             state.phase = "promoteActive";
             state.onPromoteResolved = null;
           }
@@ -2678,7 +2683,7 @@ export function resolveAttackEffects(
             logEvent(state, ctx.attackerOwner, `${ctx.move.name}: shuffles ${a.card.name} into deck.`);
             // Trigger a promote from bench (no prize awarded — not a KO).
             if (pl.bench.length > 0) {
-              state.pendingPromote = ctx.attackerOwner;
+              setPendingPromote(state, ctx.attackerOwner);
               state.phase = "promoteActive";
             }
           }
@@ -3341,7 +3346,7 @@ export function resolveAttackEffects(
           opp.deck.push(target.card, ...target.evolvedFrom, ...target.attachedEnergy, ...(target.tools ?? []));
           if (opp.active === target) {
             opp.active = null;
-            state.pendingPromote = ctx.defenderOwner;
+            setPendingPromote(state, ctx.defenderOwner);
             state.phase = "promoteActive";
           } else {
             opp.bench = opp.bench.filter((p) => p !== target);

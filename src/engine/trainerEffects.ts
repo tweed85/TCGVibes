@@ -10,7 +10,7 @@
 // "if Community Center is in play") are mostly approximated or skipped; the
 // core draw/search/heal behaviors are correct.
 
-import { enforceSpecialEnergyAttachRules, isPlayersFirstTurn, logEvent, makePokemonInPlay, newInstanceId } from "./rules";
+import { applyEvolveSideEffects, enforceSpecialEnergyAttachRules, isPlayersFirstTurn, logEvent, makePokemonInPlay, newInstanceId, setPendingPromote } from "./rules";
 import { clearAllStatuses } from "./rules";
 import { benchDamageBlocked, benchDamageBlockedByFlowerCurtain } from "./ongoingEffects";
 import {
@@ -1502,9 +1502,7 @@ export function applyTrainerEffect(
         const [stage2Card] = pl.hand.splice(chosen.idx, 1) as [PokemonCard];
         basic.evolvedFrom.push(basic.card);
         basic.card = stage2Card;
-        clearAllStatuses(basic);
-        basic.abilityUsedThisTurn = false;
-        basic.evolvedThisTurn = true;
+        applyEvolveSideEffects(state, basic);
         logEvent(state, player, `uses Rare Candy to evolve into ${stage2Card.name}.`);
         // Fire any triggered-on-evolve ability the Stage 2 has (Alakazam's
         // Psychic Draw, Noctowl's Jewel Seeker, Emergency Evolution, etc.).
@@ -2535,7 +2533,7 @@ export function applyTrainerEffect(
       const oldActive = opp.active;
       opp.bench.push(oldActive);
       opp.active = null;
-      state.pendingPromote = oppId;
+      setPendingPromote(state, oppId);
       state.phase = "promoteActive";
       state.onPromoteResolved = null;
       logEvent(state, player, `${opp.name} must choose a new Active.`);
@@ -3637,7 +3635,11 @@ export function resolveInPlayTarget(
       if (remaining > 0) {
         state.pendingInPlayTarget = {
           ...pending,
-          label: `${action.attackName}: ${remaining} hit${remaining === 1 ? "" : "s"} of ${action.perHit} left`,
+          // Same per-click wording the picker opened with — `formatPickerLabel`
+          // appends the "— N left" progress so the player can see how many
+          // clicks remain. Saying "click to place X damage" up front prevents
+          // the "did the engine just auto-apply everything?" misread.
+          label: `${action.attackName}: click an opp ${pending.slot === "bench" ? "Benched Pokémon" : "Pokémon"} to place ${action.perHit} damage`,
           action: { ...action, remaining },
         };
       } else {
@@ -3846,9 +3848,7 @@ export function resolveRareCandyChoice(
   pl.hand.splice(handIndex, 1);
   basic.evolvedFrom.push(basic.card);
   basic.card = card as PokemonCard;
-  clearAllStatuses(basic);
-  basic.abilityUsedThisTurn = false;
-  basic.evolvedThisTurn = true;
+  applyEvolveSideEffects(state, basic);
   logEvent(state, clicker, `uses Rare Candy to evolve into ${card.name}.`);
   fireTriggeredOnEvolve(state, clicker, basic);
   state.pendingRareCandyChoice = null;

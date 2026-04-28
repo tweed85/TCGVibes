@@ -65,5 +65,8 @@ export default defineConfig({
   },
   test: {
     setupFiles: ["./src/test-setup.ts"],
+    // Playwright e2e specs live under /e2e and need a real browser; vitest
+    // would try (and fail) to import @playwright/test in node mode.
+    exclude: ["**/node_modules/**", "**/dist/**", "**/e2e/**"],
   },
 });

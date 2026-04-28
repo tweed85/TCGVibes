@@ -10,6 +10,7 @@ import type {
 } from "./types";
 import {
   applyDamage,
+  applyEvolveSideEffects,
   canPayCost,
   clearAllStatuses,
   endTurn as endTurnRule,
@@ -40,7 +41,6 @@ import {
   actionBlockedByOppActive,
   benchPlacementDamage,
   canEvolveOnPlayTurn,
-  confusedPersistsOnEvolve,
   effectiveAttackCost,
   effectiveAttacks,
   effectiveMaxHp,
@@ -189,24 +189,7 @@ export function evolve(
   pl.hand.splice(handIndex, 1);
   target.evolvedFrom.push(target.card);
   target.card = card;
-  // Evolving clears Special Conditions — except Confused under Dizzying Valley.
-  if (confusedPersistsOnEvolve(state)) {
-    const wasConfused = target.statuses.includes("confused");
-    clearAllStatuses(target);
-    if (wasConfused) target.statuses.push("confused");
-  } else {
-    clearAllStatuses(target);
-  }
-  // Tools carry over; abilities reset. Evolution treats this as a "new" Pokémon
-  // for purposes of effects scheduled on the previous stage — Corrosive Sludge
-  // (scheduled discard), shielded turns, attack locks, weakness suppression
-  // tied to the prior card all clear here.
-  target.abilityUsedThisTurn = false;
-  target.evolvedThisTurn = true;
-  target.scheduledKoOnTurn = undefined;
-  target.shieldedUntilTurn = undefined;
-  target.cantAttackUntilTurn = undefined;
-  target.noWeaknessUntilTurn = undefined;
+  applyEvolveSideEffects(state, target);
   logEvent(state, player, `evolves into ${card.name}.`);
 
   // Darkest Impulse (Mega Banette etc.) — opp-side reaction: when YOU evolve
@@ -593,6 +576,17 @@ export function promoteBenchToActive(
   state.phase = "main";
   logEvent(state, player, `promotes ${promoted.card.name} to Active.`);
   fireTriggeredOnMoveToActive(state, player, promoted);
+
+  // If another player is queued to promote (both-Active-KO), pop them next
+  // and stay in the promoteActive phase. The original onPromoteResolved
+  // continuation runs only after every queued promote drains. Skip if the
+  // game ended during the just-completed promote (fireTriggeredOnMoveToActive
+  // can cause a KO that ends the game).
+  if ((state.phase as string) !== "gameOver" && state.pendingPromoteQueue.length > 0) {
+    state.pendingPromote = state.pendingPromoteQueue.shift()!;
+    state.phase = "promoteActive";
+    return ok;
+  }
 
   const cont = state.onPromoteResolved;
   state.onPromoteResolved = null;
