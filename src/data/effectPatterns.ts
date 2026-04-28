@@ -125,8 +125,15 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
         effects.push({ kind: "perAttachedEnergy", perEnergy: base, energyType });
         baseDamageOverride = 0;
       } else if (multEachHeads) {
-        // Coin-flip multiplier damage — unimplemented; fall back to base.
-        baseDamageOverride = base;
+        // Coin-flip multiplier damage with "N×" base — alt phrasing that uses
+        // "times the number of heads" instead of "for each heads". Push the
+        // effect explicitly; the standard "for each heads" path below catches
+        // the more common phrasing. Zero the base since "N×" implies no-damage
+        // without the multiplier.
+        const m = multEachHeads;
+        const coins = m[1] === "a" ? 1 : parseInt(m[1], 10);
+        effects.push({ kind: "flipMultiCoinsPerHeads", coins, perHeads: base });
+        baseDamageOverride = 0;
       } else {
         // Generic per-thing multiplier; treat as flat base for safety.
         baseDamageOverride = base;

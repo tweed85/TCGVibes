@@ -39,6 +39,8 @@ import {
   turnAttackBonus,
   turnDamageReduction,
   abilitiesActiveOn,
+  passiveAttackBonus,
+  passiveDamageReduction,
 } from "./ongoingEffects";
 import { resolvePendingPick, resolvePendingSearchNotice } from "./pendingPick";
 import { getAttackEffects } from "../data/effectPatterns";
@@ -255,6 +257,7 @@ function estimateDamage(
   let damage = move.damage;
   damage += stadiumAttackBonus(state, attacker, defender);
   damage += turnAttackBonus(state, attackerOwner, attacker, defender);
+  damage += passiveAttackBonus(state, attackerOwner, attacker, defender);
 
   for (const e of effects) {
     switch (e.kind) {
@@ -273,6 +276,10 @@ function estimateDamage(
         damage += e.bonus * p;
         break;
       }
+      case "flipMultiCoinsPerHeads":
+        // Expected heads = coins / 2.
+        damage += (e.perHeads * e.coins) / 2;
+        break;
       case "perAttachedEnergy": {
         const energies = attacker.attachedEnergy;
         const matching = e.energyType
@@ -322,7 +329,8 @@ function estimateDamage(
     }
     const reduction = stadiumDamageReduction(state, attacker, defender);
     const turnRed = turnDamageReduction(state, opponentOf(attackerOwner), defender);
-    damage = Math.max(0, damage - reduction - turnRed);
+    const passiveRed = passiveDamageReduction(state, opponentOf(attackerOwner), defender, attacker);
+    damage = Math.max(0, damage - reduction - turnRed - passiveRed);
   }
   return Math.round(damage);
 }

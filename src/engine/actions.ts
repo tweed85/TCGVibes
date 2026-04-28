@@ -197,9 +197,16 @@ export function evolve(
   } else {
     clearAllStatuses(target);
   }
-  // Tools carry over; abilities reset.
+  // Tools carry over; abilities reset. Evolution treats this as a "new" Pokémon
+  // for purposes of effects scheduled on the previous stage — Corrosive Sludge
+  // (scheduled discard), shielded turns, attack locks, weakness suppression
+  // tied to the prior card all clear here.
   target.abilityUsedThisTurn = false;
   target.evolvedThisTurn = true;
+  target.scheduledKoOnTurn = undefined;
+  target.shieldedUntilTurn = undefined;
+  target.cantAttackUntilTurn = undefined;
+  target.noWeaknessUntilTurn = undefined;
   logEvent(state, player, `evolves into ${card.name}.`);
 
   // Darkest Impulse (Mega Banette etc.) — opp-side reaction: when YOU evolve
@@ -997,12 +1004,28 @@ export function attack(
 
 // Resume a queued Festival Lead second hit after the opponent has promoted a
 // new Active. Called by promoteBenchToActive when onPromoteResolved is
-// "secondAttack".
+// "secondAttack". Re-checks legality: the attacker may have been KO'd by an
+// on-damage / passive trigger; the opp may have no Active to receive the hit
+// (game-over edge); the attacker may have been put Asleep/Paralyzed by an
+// ongoing condition that landed mid-promote.
 export function resumeSecondAttack(state: GameState): void {
   const queued = state.pendingSecondAttack;
   if (!queued) return;
   const { player, attackIndex } = queued;
   state.pendingSecondAttack = null;
+  if ((state.phase as string) === "gameOver") return;
+  const attacker = state.players[player].active;
+  const defender = state.players[player === "p1" ? "p2" : "p1"].active;
+  if (!attacker || !defender) {
+    logEvent(state, "system", "Second hit canceled — no valid attacker/defender.");
+    if ((state.phase as string) !== "gameOver") endTurnRule(state);
+    return;
+  }
+  if (hasStatus(attacker, "asleep") || hasStatus(attacker, "paralyzed")) {
+    logEvent(state, "system", `${attacker.card.name} can't follow up — status prevented it.`);
+    if ((state.phase as string) !== "gameOver") endTurnRule(state);
+    return;
+  }
   executeAttackHit(state, player, attackIndex);
   finishHit(state, player, attackIndex, true);
   state.snipeTargetOverride = null;

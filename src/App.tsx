@@ -1425,11 +1425,12 @@ export default function App() {
       <ActionBar
         myTurn={myTurn}
         promoteOpen={promoteOpen}
+        terminalPromote={state.phase === "promoteActive"}
         statusMsg={
           state.pendingRareCandyChoice?.player === viewingPlayer
             ? "Click a Stage 2 in your hand to use with Rare Candy."
             : state.pendingInPlayTarget?.player === viewingPlayer
-              ? state.pendingInPlayTarget.label
+              ? formatPickerLabel(state.pendingInPlayTarget)
               : state.pendingSwitchTarget === viewingPlayer
                 ? "Click a Benched Pokémon to promote to Active."
                 : statusMsg
@@ -1532,6 +1533,18 @@ export default function App() {
 // pending-search) — showing the tail lets the user follow the sequence
 // instead of catching only the very last line before the next step renders.
 const AI_BANNER_TAIL = 4;
+
+// Append "(N left)" progress to multi-pick picker labels. The picker re-arms
+// itself between clicks with `remaining` decremented, so showing the live
+// count tells the player how many more clicks the effect will consume.
+function formatPickerLabel(t: NonNullable<GameState["pendingInPlayTarget"]>): string {
+  const a = t.action as { remaining?: number; counters?: number };
+  const n = a.remaining ?? a.counters;
+  if (typeof n === "number" && n > 0) {
+    return `${t.label} — ${n} left`;
+  }
+  return t.label;
+}
 
 function AiActionBanner({
   state,
@@ -1774,6 +1787,7 @@ function DiscardStack({
 interface ActionBarProps {
   myTurn: boolean;
   promoteOpen: boolean;
+  terminalPromote: boolean;
   statusMsg: string;
   me: GameState["players"]["p1"];
   attacks: { index: number; name: string; damage: number; damageText?: string; cost: string[]; payable: boolean; estimated: number }[];
@@ -1793,6 +1807,7 @@ interface ActionBarProps {
 function ActionBarInner({
   myTurn,
   promoteOpen,
+  terminalPromote,
   statusMsg,
   me,
   attacks,
@@ -1813,7 +1828,9 @@ function ActionBarInner({
       <div className="status-line">
         {promoteOpen ? (
           <span className="promote-msg">
-            Your Active was KO'd — click a Benched Pokémon to promote.
+            {terminalPromote
+              ? "Your Active was KO'd — click a Benched Pokémon to promote."
+              : "Your Active left the field — pick a Benched Pokémon to promote (you can still play other cards first)."}
           </span>
         ) : (
           <span className={`msg${pendingTargetActive || !myTurn ? " waiting" : ""}`}>
@@ -1936,6 +1953,7 @@ function ActionBarInner({
 const ActionBar = memo(ActionBarInner, (prev, next) => {
   if (prev.myTurn !== next.myTurn) return false;
   if (prev.promoteOpen !== next.promoteOpen) return false;
+  if (prev.terminalPromote !== next.terminalPromote) return false;
   if (prev.statusMsg !== next.statusMsg) return false;
   if (prev.canUndo !== next.canUndo) return false;
   if (prev.pendingTargetActive !== next.pendingTargetActive) return false;
