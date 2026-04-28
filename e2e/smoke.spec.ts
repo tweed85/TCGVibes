@@ -154,4 +154,26 @@ test.describe("App boots and the action bar wires up correctly", () => {
     await expect(undoBtn).toBeDisabled({ timeout: 2000 });
     expect(errors).toEqual([]);
   });
+
+  test("Mobile viewport: app boots cleanly at 375px (iPhone SE / iPhone 12 mini)", async ({ page }) => {
+    // Regression guard for the mobile UI cleanup pass — verifies the page
+    // loads at iPhone SE 3rd gen width without runtime errors and the body
+    // fits within the viewport. Doesn't drive setup-phase clicks since
+    // those flake on cold-start at narrow widths; the boot-path coverage
+    // is in the desktop-viewport tests above.
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto(APP_URL);
+    await expect(page.getByRole("heading", { name: /Start a game/i })).toBeVisible();
+
+    // Body must not overflow the viewport — `body { overflow-x: hidden }`
+    // clips children but bodyWidth still reports clientWidth. If a layout
+    // change caused the body itself to exceed 375px, this catches it.
+    const bodyWidth = await page.evaluate(() => document.body.clientWidth);
+    expect(bodyWidth).toBeLessThanOrEqual(375);
+
+    expect(errors).toEqual([]);
+  });
 });

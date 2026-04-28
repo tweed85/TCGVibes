@@ -237,7 +237,24 @@ stay in node for speed. `npm run test` / `npm run test:watch` /
 - Deck imports persist to IndexedDB (`idb-keyval`); UI settings to
   localStorage.
 - Mobile-responsive CSS: floating Stadium overlay, horizontal bench
-  scroll, right-to-left hand scroll, vertical action bar.
+  scroll with right-edge fade mask, right-to-left hand scroll with
+  fade + scroll-snap, vertical action bar.
+- Touch + safe-area hardening: `env(safe-area-inset-right)` baked
+  into `.side` padding (clears iPhone X+ landscape notch and iPad
+  Pro rounded corner); `touch-action: manipulation` on every
+  interactive (kills the 300ms double-tap-zoom delay); landscape
+  phones use a 40px action-bar button minimum.
+- Side-distinction tinting: opponent side has a slightly darker
+  background + 1px red top accent vs the player side, so "your /
+  their" reads at a glance on a small screen.
+- Narrow-width tightening (≤360px): energy pip min-width 14px and
+  HP-badge font-size 11px so 2-3 pips fit alongside status badges
+  on a 70px-wide bench card; modal padding drops to 10px to leave
+  usable content width on iPhone SE-class viewports.
+- Status-message dwell: the action-bar status line holds each
+  non-empty message for at least 2.5s before allowing it to be
+  overwritten, so rapid plays don't wipe what just happened. Empty
+  clears bypass the dwell.
 
 ## Open pressure-test findings
 

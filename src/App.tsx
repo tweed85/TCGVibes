@@ -204,7 +204,33 @@ export default function App() {
   // Used to glow the source Pokémon in the play area so multiple same-named
   // cards (e.g. two Teal Mask Ogerpon ex) are immediately distinguishable.
   const [hoveredAbilitySource, setHoveredAbilitySource] = useState<string | null>(null);
-  const [statusMsg, setStatusMsg] = useState<string>("");
+  const [statusMsg, setStatusMsgRaw] = useState<string>("");
+  // Dwell-aware setter. The status-line at the top of the action bar is the
+  // primary feedback channel for what just happened; rapid-clicking actions
+  // would replace prior messages before the user could read them. Hold each
+  // non-empty message for at least 2500ms before allowing it to be
+  // overwritten — empty strings (explicit clears) bypass the dwell so
+  // turn-end / modal-close paths still react instantly.
+  const lastStatusAtRef = useRef<number>(0);
+  const pendingStatusTimerRef = useRef<number | null>(null);
+  const setStatusMsg = (msg: string): void => {
+    if (pendingStatusTimerRef.current !== null) {
+      clearTimeout(pendingStatusTimerRef.current);
+      pendingStatusTimerRef.current = null;
+    }
+    const now = Date.now();
+    const elapsed = now - lastStatusAtRef.current;
+    if (msg === "" || elapsed >= 2500) {
+      setStatusMsgRaw(msg);
+      lastStatusAtRef.current = msg === "" ? 0 : now;
+      return;
+    }
+    pendingStatusTimerRef.current = window.setTimeout(() => {
+      setStatusMsgRaw(msg);
+      lastStatusAtRef.current = Date.now();
+      pendingStatusTimerRef.current = null;
+    }, 2500 - elapsed);
+  };
   const [openHands, setOpenHands] = useState(savedSettings.openHands ?? false);
   const [importOpen, setImportOpen] = useState(false);
   const [buildOpen, setBuildOpen] = useState(false);

@@ -75,6 +75,14 @@ body {
   overflow-x: hidden;
 }
 
+/* Kill the 300ms double-tap-zoom delay on interactive elements across
+   older Android WebView and iOS — taps register immediately. `.card`
+   already sets this further down; re-applying here for buttons/selects
+   /inputs is cheap and consistent. */
+button, select, input, [role="button"] {
+  touch-action: manipulation;
+}
+
 /* -------------------------------------------------------------------------- */
 /*  App shell                                                                 */
 /* -------------------------------------------------------------------------- */
@@ -423,9 +431,12 @@ body {
 .side.opponent { grid-area: opp-side; }
 .side.me { grid-area: my-side; }
 /* Leave enough room on the right of each side that the Stadium overlay
-   doesn't obscure the ends of the benches. */
+   doesn't obscure the ends of the benches. The `env(safe-area-inset-right,
+   0px)` matters in landscape on iPhone X+ (notch on the right) and iPad
+   Pro (rounded-corner inset) — without it, the rightmost bench card
+   clips into the device-reserved area. */
 .side {
-  padding-right: calc(var(--mini-card-w) + 30px);
+  padding-right: calc(var(--mini-card-w) + 30px + env(safe-area-inset-right, 0px));
 }
 
 /* Each side is a 3-row strip:
@@ -442,9 +453,17 @@ body {
   grid-template-rows: auto auto auto;
   gap: 10px;
   padding: 8px;
-  background: rgba(15, 23, 42, 0.35);
+  /* Default (player) side. Bumped from 0.35 → 0.50 so the side reads as a
+     distinct play area against the dark mat. The opponent side overrides
+     below with slightly more opacity + a top accent so "your side" /
+     "their side" is unmistakable at a glance, especially on phones. */
+  background: rgba(15, 23, 42, 0.50);
   border-radius: 8px;
   min-width: 0;
+}
+.side.opponent {
+  background: rgba(15, 23, 42, 0.55);
+  border-top: 1px solid rgba(220, 38, 38, 0.25);
 }
 
 .side.opponent > .back-row { order: 1; }
@@ -618,6 +637,13 @@ body {
   width: 100%;
   max-width: 100%;
   min-width: 0;
+  /* Right-edge fade so players know the row scrolls when more bench
+     Pokémon are off-screen. Mirrors the hand row's mask treatment.
+     Kept on at all widths (not gated by media query) since the bench
+     can overflow on tablets too. */
+  -webkit-mask-image: linear-gradient(to right, #000, #000 calc(100% - 18px), transparent);
+  mask-image: linear-gradient(to right, #000, #000 calc(100% - 18px), transparent);
+  overscroll-behavior-x: contain;
 }
 /* When the bench fits within its container, center the cards. When it
    overflows, the flex children naturally start from the left so swipe
@@ -1298,8 +1324,10 @@ button.secondary:hover:not(:disabled) {
   }
   .header h1 { font-size: 14px; }
   .header .meta { font-size: 10px; }
-  /* Narrower padding reservation so bench keeps width on ~tablet widths. */
-  .side { padding-right: calc(var(--mini-card-w) + 18px); }
+  /* Narrower padding reservation so bench keeps width on ~tablet widths.
+     `env(safe-area-inset-right)` keeps the rightmost bench off the iPad
+     Pro rounded corner / iPhone landscape notch. */
+  .side { padding-right: calc(var(--mini-card-w) + 18px + env(safe-area-inset-right, 0px)); }
   .stadium-slot { right: 8px; padding: 6px 8px; }
 }
 
@@ -1372,8 +1400,9 @@ button.secondary:hover:not(:disabled) {
   /* Keep the Stadium pinned to the right edge of the board (matches desktop
      layout). The side reserves enough right-padding to fully clear the
      overlay so bench / Active cards never tuck behind it — match the
-     desktop reservation (mini-card width + 24px slack). */
-  .side { padding-right: calc(var(--mini-card-w) + 24px); }
+     desktop reservation (mini-card width + 24px slack). The safe-area
+     inset clears the iPhone X+ landscape notch when held right-side-up. */
+  .side { padding-right: calc(var(--mini-card-w) + 24px + env(safe-area-inset-right, 0px)); }
   .stadium-slot { right: 6px; padding: 6px 8px; }
   .stadium-caption { font-size: 9px; }
 
@@ -1435,6 +1464,12 @@ button.secondary:hover:not(:disabled) {
   .my-hand-row > .card {
     scroll-snap-align: start;
   }
+  /* Ability buttons get a 140px desktop minimum that pushes them off-screen
+     when multiple are stacked on a 320-360px phone. Drop the floor on
+     mobile and let the flexbox decide; padding still keeps them readable. */
+  .action-bar button.ability {
+    min-width: 0;
+  }
 }
 
 /* Phone (≤480px): minor header polish; action-bar layout already inherits
@@ -1451,6 +1486,26 @@ button.secondary:hover:not(:disabled) {
     --card-h: 96px;
     --hand-card-w: 60px;
     --hand-card-h: 82px;
+  }
+  /* Bench cards top out at 70px wide here. Default pip min-width 18px and
+     HP badge font-size 12px crowd each other plus the status badges at
+     this size, forcing 3-4 pip rows to wrap awkwardly. Tighten both so
+     2-3 pips can sit alongside the HP badge and status row. */
+  .card.in-play .in-play-overlay .energy-pip {
+    min-width: 14px;
+    font-size: 8px;
+    padding: 0 2px;
+  }
+  .card.in-play .hp-badge {
+    font-size: 11px;
+    min-width: 32px;
+    padding: 2px 5px;
+  }
+  /* Modal padding override — combined modal + safe-area inset on iPhone
+     SE-class viewports leaves <300px content width otherwise. */
+  .modal {
+    padding: 10px;
+    gap: 8px;
   }
 }
 
@@ -1481,7 +1536,11 @@ button.secondary:hover:not(:disabled) {
   .header .meta { font-size: 9px; }
   .opp-strip { padding: 2px 4px; }
   .action-bar { padding: 2px 4px; }
-  .action-bar button { min-height: 36px; padding: 4px 8px; font-size: 11px; }
+  /* Landscape phones: vertical space is tight (<500px tall), so 44px isn't
+     achievable across all action-bar rows. 40px is the practical minimum
+     that keeps thumb targets reliable while leaving room for the rest of
+     the board. */
+  .action-bar button { min-height: 40px; padding: 4px 8px; font-size: 11px; }
   .log-details { font-size: 10px; }
 }
 
