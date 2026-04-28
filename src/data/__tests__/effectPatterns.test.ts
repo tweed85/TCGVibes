@@ -420,6 +420,20 @@ describe("misc simple effects", () => {
     expect(e.effects).toContainEqual({ kind: "discardTopOfOwnDeckUseSupporterEffect" });
   });
 
+  it("Mega Lucario ex Aura Jab → attachNFromDiscardToBench(max=3, Fighting)", () => {
+    const e = extractEffects(
+      mkAttack({
+        damage: "130",
+        text: "Attach up to 3 Basic Fighting Energy cards from your discard pile to your Benched Pokémon in any way you like.",
+      }),
+    );
+    expect(e.effects).toContainEqual({
+      kind: "attachNFromDiscardToBench",
+      energyType: "Fighting",
+      max: 3,
+    });
+  });
+
   it("Arboliva ex Oil Salvo → distributeDamage", () => {
     const e = extractEffects(
       mkAttack({

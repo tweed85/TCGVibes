@@ -330,29 +330,29 @@ describe("Aura Jab — human picks where each Energy goes", () => {
     const ap = state.activePlayer;
     const opp = ap === "p1" ? "p2" : "p1";
     state.players[ap].isAI = false;
-    // Two Fighting Energy in discard, ready to be pulled.
+    // Three Fighting Energy in discard so the full Aura Jab cap (up to 3)
+    // can be exercised.
     state.players[ap].discard = [
       { id: "f1", name: "Basic Fighting Energy", supertype: "Energy", subtypes: ["Basic"], provides: ["Fighting"] },
       { id: "f2", name: "Basic Fighting Energy", supertype: "Energy", subtypes: ["Basic"], provides: ["Fighting"] },
+      { id: "f3", name: "Basic Fighting Energy", supertype: "Energy", subtypes: ["Basic"], provides: ["Fighting"] },
     ];
-    // Mega Lucario-like attacker with Aura Jab.
+    // Mega Lucario-like attacker with Aura Jab. max:3 mirrors the real card.
     state.players[ap].active!.card = {
       id: "ml-test", name: "Mega Lucario ex", supertype: "Pokémon",
-      subtypes: ["Stage 2", "Mega Evolution", "ex"], hp: 320, types: ["Fighting"],
+      subtypes: ["Stage 1", "MEGA", "ex"], hp: 320, types: ["Fighting"],
       attacks: [{
         name: "Aura Jab",
-        cost: ["Fighting", "Fighting", "Colorless"],
-        damage: 120,
-        effects: [{ kind: "attachNFromDiscardToBench", energyType: "Fighting", max: 2 }],
+        cost: ["Fighting"],
+        damage: 130,
+        effects: [{ kind: "attachNFromDiscardToBench", energyType: "Fighting", max: 3 }],
       }],
       retreatCost: ["Colorless", "Colorless"],
     };
     state.players[ap].active!.attachedEnergy = [
       { id: "e-f1", name: "Basic Fighting Energy", supertype: "Energy", subtypes: ["Basic"], provides: ["Fighting"] },
-      { id: "e-f2", name: "Basic Fighting Energy", supertype: "Energy", subtypes: ["Basic"], provides: ["Fighting"] },
-      { id: "e-c", name: "Basic Psychic Energy", supertype: "Energy", subtypes: ["Basic"], provides: ["Psychic"] },
     ];
-    // Two distinguishable benched Pokémon to pick from.
+    // Three distinguishable benched Pokémon to pick from.
     const benchTemplate: PokemonCard = {
       id: "bench-t", name: "Bench Buddy", supertype: "Pokémon",
       subtypes: ["Basic"], hp: 80, types: ["Colorless"], attacks: [], retreatCost: [],
@@ -360,6 +360,7 @@ describe("Aura Jab — human picks where each Energy goes", () => {
     state.players[ap].bench = [
       { instanceId: "b1", card: benchTemplate, damage: 0, attachedEnergy: [], evolvedFrom: [], tools: [], playedThisTurn: false, evolvedThisTurn: false, statuses: [], abilityUsedThisTurn: false },
       { instanceId: "b2", card: benchTemplate, damage: 0, attachedEnergy: [], evolvedFrom: [], tools: [], playedThisTurn: false, evolvedThisTurn: false, statuses: [], abilityUsedThisTurn: false },
+      { instanceId: "b3", card: benchTemplate, damage: 0, attachedEnergy: [], evolvedFrom: [], tools: [], playedThisTurn: false, evolvedThisTurn: false, statuses: [], abilityUsedThisTurn: false },
     ];
     // Give opp some bench so the game doesn't end on the active KO.
     const oppFiller: PokemonCard = {
@@ -371,20 +372,23 @@ describe("Aura Jab — human picks where each Energy goes", () => {
     ];
     const ar = attack(state, ap, 0);
     expect(ar.ok).toBe(true);
-    // Picker is now open with 2 picks remaining.
+    // Picker is now open with 3 picks remaining.
     expect(state.pendingInPlayTarget).not.toBeNull();
     expect(state.pendingInPlayTarget!.action.kind).toBe("attachEnergyFromDiscardPicker");
-    // First click: send to bench[0].
+    expect((state.pendingInPlayTarget!.action as { remaining: number }).remaining).toBe(3);
+    // Three clicks, three different Bench Pokémon.
     let r = resolveInPlayTarget(state, ap, ap, "b1");
     expect(r.ok).toBe(true);
     expect(state.players[ap].bench[0].attachedEnergy.length).toBe(1);
-    // Picker still open with 1 left.
     expect(state.pendingInPlayTarget).not.toBeNull();
-    // Second click: send to bench[1].
     r = resolveInPlayTarget(state, ap, ap, "b2");
     expect(r.ok).toBe(true);
     expect(state.players[ap].bench[1].attachedEnergy.length).toBe(1);
-    // Picker closes.
+    expect(state.pendingInPlayTarget).not.toBeNull();
+    r = resolveInPlayTarget(state, ap, ap, "b3");
+    expect(r.ok).toBe(true);
+    expect(state.players[ap].bench[2].attachedEnergy.length).toBe(1);
+    // Picker closes after the third click (remaining hits 0).
     expect(state.pendingInPlayTarget).toBeNull();
   });
 });
