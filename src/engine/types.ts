@@ -1150,6 +1150,16 @@ export interface PlayerState {
   // 1 fewer Prize" effect. "Can't be applied more than once per game."
   legacyEnergyUsed: boolean;
   isAI: boolean;
+  // AI strategy version. "v1" is the original greedy + 1-ply lookahead.
+  // "v2" enables the strengthened heuristics (archetype awareness,
+  // threat-aware eval, etc.) — fast, no extra search cost. Defaults to
+  // "v1" when unset so existing tests don't change behavior.
+  aiVersion?: "v1" | "v2";
+  // Per-aiStep MCTS time budget in milliseconds. 0 (default) = MCTS off.
+  // >0 enables MCTS at the v2 path. Kept separate from `aiVersion` so the
+  // heuristic improvements ship without the search cost; MCTS is opt-in
+  // for benchmarking, scenario tests, and the production app.
+  mctsBudgetMs?: number;
 }
 
 export interface TurnAttackBonus {

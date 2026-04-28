@@ -46,6 +46,17 @@ import { resolvePendingPick, resolvePendingSearchNotice } from "./pendingPick";
 import { getAttackEffects } from "../data/effectPatterns";
 import { resolveAiHandReveal } from "./trainerEffects";
 import { logEvent } from "./rules";
+import {
+  archetypeOf,
+  archetypeAbilityBonus,
+  archetypeAttachBonus,
+  archetypeBenchBonus,
+  archetypeTrainerBonus,
+  playbookAbilityBonusFromState,
+  playbookCardBonusFromState,
+  v2Active,
+} from "./aiArchetype";
+import { runMcts, type McAction } from "./mcts";
 import type {
   Attack,
   Card,
@@ -769,11 +780,18 @@ function bestGustTarget(state: GameState, player: PlayerId): PokemonInPlay | nul
   );
   if (usable.length === 0) return null;
 
+  // v2: also weight gust targets that are "engine pieces" — ramp Pokémon
+  // (Teal Mask Ogerpon ex, Bibarel-equivalents, Dudunsparce, Fan Rotom)
+  // that drive the opp's plan. Removing one of those cripples tempo for
+  // multiple turns, even if the gust target itself doesn't yield a KO.
+  const v2 = v2Active(state, player);
+
   let best: PokemonInPlay | null = null;
   let bestScore = 0;
   for (const b of opp.bench) {
     for (const move of usable) {
-      const score = gustValue(state, player, atk, move, b);
+      let score = gustValue(state, player, atk, move, b);
+      if (v2) score += rampEngineBonus(b);
       if (score > bestScore) {
         bestScore = score;
         best = b;
@@ -781,6 +799,24 @@ function bestGustTarget(state: GameState, player: PlayerId): PokemonInPlay | nul
     }
   }
   return bestScore >= 120 ? best : null;
+}
+
+// Pokémon that act as engine pieces in their decks. Targeting one with a
+// gust + KO removes 1-2 turns of opp tempo. v2-only: v1 already KOs them
+// when they happen to be the weakest target, but doesn't seek them out.
+function rampEngineBonus(target: PokemonInPlay): number {
+  const name = target.card.name;
+  // Energy ramp / search engines.
+  if (name === "Teal Mask Ogerpon ex") return 60;
+  if (name === "Bibarel") return 60;
+  if (name === "Dudunsparce") return 50; // Roll Out draw engine
+  if (name === "Fan Rotom") return 40; // Fan Call deck thin
+  if (name === "Fezandipiti ex") return 50; // Flip the Script
+  if (name === "Munkidori") return 40; // Adrena-Brain
+  // Stage-2 setup pieces still on bench (means opp is mid-evolve).
+  const subtypes = target.card.subtypes ?? [];
+  if (subtypes.includes("Stage 2") && target.attachedEnergy.length === 0) return 30;
+  return 0;
 }
 
 // Value of gusting up `target`, attacking with `move`, weighted by prize swing.
@@ -830,10 +866,16 @@ function pickEnergyAttachTarget(
   candidates.push(...pl.bench);
   if (candidates.length === 0) return null;
 
+  // v2: bias attach toward the archetype's planned attacker. Without this,
+  // the AI may attach to a tanky bench Basic that isn't part of the deck's
+  // game plan (e.g., attaching to a Manaphy on an Arboliva deck instead of
+  // the Teal Mask Ogerpon ex that drives the plan).
+  const arch = v2Active(state, player) ? archetypeOf(state, player) : "generic";
   let best: PokemonInPlay | null = null;
   let bestScore = -Infinity;
   for (const p of candidates) {
-    const s = scoreEnergyTarget(state, player, p, energy);
+    let s = scoreEnergyTarget(state, player, p, energy);
+    s += archetypeAttachBonus(arch, p);
     if (s > bestScore) { bestScore = s; best = p; }
   }
   return best;
@@ -1098,6 +1140,56 @@ export function aiStep(state: GameState, player: PlayerId): boolean {
     return true;
   }
 
+  // v2 with MCTS: search for the best single action with a 600ms budget.
+  // If MCTS returns endTurn, fall through to the greedy attack-then-end
+  // path so existing attack-handling stays consistent. If MCTS returns a
+  // non-attack action, apply it and let the loop re-evaluate. If MCTS
+  // returns null (no candidates / exhausted budget), fall through to
+  // greedy. The lookaheadActive guard prevents re-entering MCTS during
+  // its own greedy rollouts.
+  // MCTS hook — only runs when `mctsBudgetMs > 0` (opt-in per-player).
+  // v2 heuristics run regardless via the score adjustments above. MCTS
+  // adds wall-clock cost; gating it explicitly keeps `npm run test` fast
+  // while still allowing benchmarks / production to enable it.
+  // Phase 6 (endgame solver): when prizes ≤ 2 on either side, the game
+  // is in lethal-math territory. Champions calculate exhaustively here.
+  // We approximate by bumping the MCTS budget 4× so more iterations land
+  // in the closing window. Cheaper than a separate exhaustive search.
+  const baseBudget = state.players[player].mctsBudgetMs ?? 0;
+  const opp = state.players[opponentOf(player)];
+  const inEndgame =
+    state.players[player].prizes.length <= 2 || opp.prizes.length <= 2;
+  const mctsBudget = baseBudget > 0 && inEndgame ? baseBudget * 4 : baseBudget;
+  if (
+    !lookaheadActive &&
+    mctsBudget > 0 &&
+    state.players[player].aiVersion === "v2" &&
+    state.phase === "main" &&
+    state.activePlayer === player
+  ) {
+    // Set lookaheadActive BEFORE running MCTS so the rollouts (which call
+    // back into takeAiTurn → aiStep) skip the MCTS branch and use greedy
+    // instead. Without this guard MCTS would recurse infinitely.
+    lookaheadActive = true;
+    let result: McAction | null = null;
+    try {
+      result = runMctsForTurn(state, player, mctsBudget);
+    } finally {
+      lookaheadActive = false;
+    }
+    if (result && result.kind !== "endTurn") {
+      lookaheadActive = true;
+      try {
+        applyMctsAction(state, player, result);
+      } finally {
+        lookaheadActive = false;
+      }
+      return true;
+    }
+    // MCTS chose endTurn or returned null → fall through to greedy. The
+    // greedy path will pick the best attack (or end the turn cleanly).
+  }
+
   if (tryStepAiTurn(state, player)) return true;
 
   // Nothing productive left — try to attack, then end. Either path ends the
@@ -1107,8 +1199,61 @@ export function aiStep(state: GameState, player: PlayerId): boolean {
   return false;
 }
 
+// Wraps `runMcts` with the engine-specific eval + clone. Uses depth=0
+// rollouts (no greedy playout — just leaf eval via scorePosition) so each
+// iteration is cheap (~1-2ms). With 200ms budget that's ~100 iterations,
+// enough for UCB to differentiate the top moves. A greedy-playout variant
+// is available via `rolloutPolicy` but at this codebase's clone cost it
+// only affords ~1-2 iterations per call, defeating MCTS's exploration.
+function runMctsForTurn(
+  state: GameState,
+  player: PlayerId,
+  budgetMs: number,
+): McAction | null {
+  const result = runMcts(state, player, {
+    budgetMs,
+    explorationC: 350,
+    rolloutDepthTurns: 0,
+    topK: 8,
+    cloneStateForSearchWithSeed,
+    leafEval: (s, p) => scorePosition(s, p),
+  });
+  return result.bestAction;
+}
+
+function applyMctsAction(state: GameState, player: PlayerId, a: McAction): boolean {
+  switch (a.kind) {
+    case "attack":
+      return attack(state, player, a.attackIndex).ok;
+    case "attachEnergy":
+      return attachEnergy(state, player, a.handIdx, a.targetInstanceId).ok;
+    case "evolve":
+      return evolve(state, player, a.handIdx, a.targetInstanceId).ok;
+    case "playBasic":
+      return playBasicToBench(state, player, a.handIdx).ok;
+    case "playTrainer":
+      return playTrainer(state, player, a.handIdx, a.target).ok;
+    case "retreat":
+      return retreat(state, player, a.benchIdx).ok;
+    case "activateAbility":
+      return activateAbility(state, player, a.holderInstanceId, a.abilityIdx).ok;
+    case "endTurn":
+      endTurn(state, player);
+      return true;
+  }
+}
+
 export function takeAiTurn(state: GameState, player: PlayerId): void {
   if (state.pendingPromote === player) resolveAiPendingPromote(state, player);
+
+  // v2: try MCTS first to plan the whole turn. The MCTS picks a single
+  // best first action; we apply it then loop back into the greedy step
+  // logic for follow-up actions. Each `aiStep` iteration may re-invoke
+  // MCTS — bounded by `mctsBudget` per call. If MCTS produces no result
+  // (e.g., search exhausted before any iteration completed), fall back
+  // to greedy. The lookaheadActive guard prevents recursive MCTS during
+  // its own simulations.
+  // (MCTS hook lives inside aiStep — see below.)
 
   const MAX_ITERS = 60;
   let safety = MAX_ITERS;
@@ -1232,12 +1377,16 @@ function tryStepAiTurn(state: GameState, player: PlayerId): boolean {
 function findPrimaryBasic(state: GameState, player: PlayerId): number {
   const pl = state.players[player];
   const primary = deckPrimaryEnergy(pl.deck, pl.hand);
+  // v2: bias bench picks toward archetype-defining Basics so the AI always
+  // sets up its plan first (Riolu for Lucario, Smoliv for Arboliva, etc.).
+  const arch = v2Active(state, player) ? archetypeOf(state, player) : "generic";
   let bestIdx = -1;
   let bestScore = -Infinity;
   for (let i = 0; i < pl.hand.length; i++) {
     const c = pl.hand[i];
     if (!isPokemonCard(c) || !isBasic(c)) continue;
-    const s = scorePickedPokemon(state, player, c, primary);
+    let s = scorePickedPokemon(state, player, c, primary);
+    s += archetypeBenchBonus(arch, c);
     if (s > bestScore) { bestScore = s; bestIdx = i; }
   }
   return bestIdx;
@@ -1248,6 +1397,11 @@ function findPrimaryBasic(state: GameState, player: PlayerId): number {
 function tryActivateAbility(state: GameState, player: PlayerId): boolean {
   const pl = state.players[player];
   const holders = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+  // v2: signature abilities (Teal Dance, Psychic Draw, Heave-Ho Catcher)
+  // get a top-priority bonus so the archetype's engine fires before any
+  // generic free-value ability competes for the same turn slot.
+  const v2 = v2Active(state, player);
+  const arch = v2 ? archetypeOf(state, player) : "generic";
   let bestTarget: { holder: PokemonInPlay; abilityIdx: number; score: number } | null = null;
 
   for (const holder of holders) {
@@ -1257,7 +1411,9 @@ function tryActivateAbility(state: GameState, player: PlayerId): boolean {
     for (let ai = 0; ai < abilities.length; ai++) {
       const ab = abilities[ai];
       if (!ab.effect) continue;
-      const score = scoreAbility(state, player, holder, ab.effect);
+      let score = scoreAbility(state, player, holder, ab.effect);
+      score += archetypeAbilityBonus(arch, ab.name);
+      if (v2) score += playbookAbilityBonusFromState(state, player, ab.name);
       if (score > 0 && (!bestTarget || score > bestTarget.score)) {
         bestTarget = { holder, abilityIdx: ai, score };
       }
@@ -1621,11 +1777,19 @@ function pickBestTrainer(
   kind: (c: Card) => c is TrainerCard,
 ): { index: number; score: number } | null {
   const pl = state.players[player];
+  // v2: archetype-defining Trainers get a fixed bonus so the AI prefers
+  // its plan's signature cards over generic alternatives (e.g., Festival
+  // Grounds over Apple Acid for festival-leads). Playbook adds turn-aware
+  // priority on top so e.g. T1 Battle Cage drops before T1 Lana's Aid.
+  const v2 = v2Active(state, player);
+  const arch = v2 ? archetypeOf(state, player) : "generic";
   let best: { index: number; score: number } | null = null;
   for (let i = 0; i < pl.hand.length; i++) {
     const c = pl.hand[i];
     if (!kind(c)) continue;
-    const s = scoreTrainerForNow(state, player, c);
+    let s = scoreTrainerForNow(state, player, c);
+    s += archetypeTrainerBonus(arch, c as TrainerCard);
+    if (v2) s += playbookCardBonusFromState(state, player, c.name);
     if (s > (best?.score ?? 0)) best = { index: i, score: s };
   }
   return best;
@@ -1892,28 +2056,94 @@ function tryAttack(state: GameState, player: PlayerId): boolean {
 
 let lookaheadActive = false;
 
-// JSON-clone the parts of GameState that mutate during a turn. The Rng has
-// non-serializable closures (and we don't want simulated coin flips to
-// disturb the real game's RNG sequence anyway), so we strip it and fit a
-// fresh deterministic Rng. The log is also dropped — it's expensive to clone
-// and irrelevant to evaluation.
-//
+// Shallow-clone the parts of GameState that mutate during simulation.
 // Card objects are immutable in this codebase (deck/hand/etc. just reorder
-// references), so the JSON deep-copy duplicates them but doesn't break
-// anything. Cost is bounded by deck+hand size (~140 cards/state) and is
-// well within budget for ≤3 attack candidates per decision.
+// references), so we share Card refs across the clone. Mutable shape:
+//   - `PokemonInPlay` (damage, attachedEnergy, statuses, tools, etc.)
+//   - PlayerState arrays (hand, deck, discard, prizes, bench)
+//   - PlayerState scalar flags (energyAttachedThisTurn, etc.)
+//   - GameState scalars (turn, phase, etc.)
+//   - Pending state objects (pendingPick, pendingPromote, etc.)
+//
+// Replacing the prior JSON.parse(JSON.stringify(state)) with explicit
+// field-by-field copies is the #1 perf lever for both the existing 1-ply
+// lookahead (~5-15ms → ~0.3-1ms per clone) AND for the MCTS that builds
+// on top of this. Verified by the agent audit as the bottleneck.
+//
+// The Rng is replaced with a fresh deterministic seed; the log is dropped
+// (expensive and irrelevant to eval). Both sides are forced to AI so the
+// simulation drives itself.
 function cloneStateForSearch(state: GameState): GameState {
-  const stripped = { ...state, rng: undefined, log: undefined };
-  const cloned = JSON.parse(JSON.stringify(stripped)) as Omit<GameState, "rng" | "log">;
-  // Force both sides to AI so all auto-pickers fire and the simulation
-  // drives itself without waiting for human input.
-  cloned.players.p1.isAI = true;
-  cloned.players.p2.isAI = true;
+  return cloneStateForSearchWithSeed(state, 0xBADC0FFE);
+}
+
+// Variant used by MCTS to determinize coin flips and shuffles per
+// iteration. Each iteration passes a unique seed so different rollouts
+// experience different chance outcomes.
+export function cloneStateForSearchWithSeed(state: GameState, seed: number): GameState {
   return {
-    ...cloned,
-    rng: makeRng(0xBADC0FFE),
+    players: {
+      p1: clonePlayer(state.players.p1, true),
+      p2: clonePlayer(state.players.p2, true),
+    },
+    activePlayer: state.activePlayer,
+    turn: state.turn,
+    phase: state.phase,
+    winner: state.winner,
     log: [],
+    firstPlayer: state.firstPlayer,
+    firstTurnNoAttack: state.firstTurnNoAttack,
+    stadium: state.stadium ? { ...state.stadium } : null,
+    pendingPromote: state.pendingPromote,
+    pendingPromoteQueue: [...state.pendingPromoteQueue],
+    pendingHeavyBaton: state.pendingHeavyBaton
+      ? { ...state.pendingHeavyBaton, energies: [...state.pendingHeavyBaton.energies] }
+      : null,
+    onPromoteResolved: state.onPromoteResolved,
+    pendingSecondAttack: state.pendingSecondAttack ? { ...state.pendingSecondAttack } : null,
+    pendingPick: state.pendingPick ? { ...state.pendingPick, pool: [...state.pendingPick.pool] } : null,
+    pendingSwitchTarget: state.pendingSwitchTarget,
+    pendingInPlayTarget: state.pendingInPlayTarget ? { ...state.pendingInPlayTarget } : null,
+    pendingHandReveal: state.pendingHandReveal ? { ...state.pendingHandReveal } : null,
+    pendingSearchNotice: state.pendingSearchNotice ? { ...state.pendingSearchNotice } : null,
+    pendingRareCandyChoice: state.pendingRareCandyChoice
+      ? { ...state.pendingRareCandyChoice, handIndexes: [...state.pendingRareCandyChoice.handIndexes] }
+      : null,
+    snipeTargetOverride: state.snipeTargetOverride,
+    coinFlip: state.coinFlip ? { ...state.coinFlip } : null,
+    rng: makeRng(seed),
   } as GameState;
+}
+
+function clonePlayer(
+  pl: GameState["players"]["p1"],
+  forceAi: boolean,
+): GameState["players"]["p1"] {
+  return {
+    ...pl,
+    hand: [...pl.hand],
+    deck: [...pl.deck],
+    discard: [...pl.discard],
+    prizes: [...pl.prizes],
+    bench: pl.bench.map(clonePokemonInPlay),
+    active: pl.active ? clonePokemonInPlay(pl.active) : null,
+    thisTurnAttackBonuses: pl.thisTurnAttackBonuses.map((b) => ({ ...b })),
+    nextOpponentTurnDamageReductions: pl.nextOpponentTurnDamageReductions.map((b) => ({ ...b })),
+    isAI: forceAi ? true : pl.isAI,
+    aiVersion: pl.aiVersion,
+  };
+}
+
+function clonePokemonInPlay(p: import("./types").PokemonInPlay): import("./types").PokemonInPlay {
+  // Card refs are immutable — share. attachedEnergy + tools + evolvedFrom
+  // are arrays of immutable Card refs; copy the array but not the cards.
+  return {
+    ...p,
+    attachedEnergy: [...p.attachedEnergy],
+    evolvedFrom: [...p.evolvedFrom],
+    tools: [...p.tools],
+    statuses: [...p.statuses],
+  };
 }
 
 // Drive the engine past any pending* state until either (a) a player can
@@ -1953,12 +2183,21 @@ function scorePosition(state: GameState, player: PlayerId): number {
 
   const me = state.players[player];
   const opp = state.players[opponentOf(player)];
+  const v2 = me.aiVersion === "v2";
   let s = 0;
 
   // Prize differential — the central currency of the game. Each prize the
-  // opponent owes is worth more than HP or energy.
-  s += (6 - me.prizes.length) * 250;
-  s -= (6 - opp.prizes.length) * 250;
+  // opponent owes is worth more than HP or energy. v2: non-linear endgame
+  // weighting (the last prize is worth more than the first; champions
+  // play harder for prizes 4→6 than for 0→1).
+  const prizeWeight = (prizesTaken: number): number => {
+    if (!v2) return prizesTaken * 250;
+    // Linear 250 per prize, plus a curve that rewards being closer to
+    // closing out the game.
+    return prizesTaken * 250 + Math.max(0, prizesTaken - 2) * 60;
+  };
+  s += prizeWeight(6 - me.prizes.length);
+  s -= prizeWeight(6 - opp.prizes.length);
 
   // Total HP on board (active + bench), proxied by max - damage.
   const hpSum = (pl: typeof me): number => {
@@ -1990,6 +2229,58 @@ function scorePosition(state: GameState, player: PlayerId): number {
   // Hand size (mild — too much hand is a Marnie/N/Iono target).
   s += Math.min(me.hand.length, 7) * 3;
   s -= Math.min(opp.hand.length, 7) * 2;
+
+  if (v2) {
+    // v2: threat-aware position eval. Penalize positions where our Active
+    // is in OHKO range from the opponent's projected next attack and we
+    // have no safer bench option to retreat into. Symmetrically reward
+    // positions where opp's Active is in our OHKO range. This is the
+    // single biggest gap the agent audit identified — `scorePosition` was
+    // counting raw board state without considering "which side is about
+    // to lose a 2-prize attacker."
+    if (me.active) {
+      const incoming = opponentMaxDamageNextTurn(state, player);
+      const myActiveRemaining = effectiveMaxHp(me.active, state) - me.active.damage;
+      if (incoming >= myActiveRemaining) {
+        // Penalty scales with the prize value of the at-risk Pokémon.
+        const prizeAtRisk = prizeValue(me.active.card);
+        s -= 60 + prizeAtRisk * 80;
+      }
+    }
+    if (opp.active) {
+      // Estimate our peak damage to opp Active. Reuse `estimateDamage`
+      // over our active's attacks if any energy is sufficient.
+      const ourPeak = me.active
+        ? Math.max(
+            0,
+            ...me.active.card.attacks.map((a) =>
+              estimateDamage(state, player, me.active!, a, opp.active),
+            ),
+          )
+        : 0;
+      const oppActiveRemaining = effectiveMaxHp(opp.active, state) - opp.active.damage;
+      if (ourPeak >= oppActiveRemaining) {
+        const oppPrize = prizeValue(opp.active.card);
+        s += 50 + oppPrize * 60;
+      }
+    }
+
+    // Bench-attacker readiness: count Pokémon that could attack next turn
+    // (already have ≥ cost-1 energy + at least one valid attack). A bench
+    // full of half-powered Pokémon scores too high without this.
+    let readyBench = 0;
+    for (const p of me.bench) {
+      if (p.attachedEnergy.length === 0) continue;
+      const attacks = p.card.attacks;
+      if (!attacks || attacks.length === 0) continue;
+      const provided = energyPoolForCost(p, state);
+      const hasCheapAttack = attacks.some((a) =>
+        canPayCost(provided, effectiveAttackCost(state, p, a.cost)),
+      );
+      if (hasCheapAttack) readyBench++;
+    }
+    s += readyBench * 15;
+  }
 
   return s;
 }

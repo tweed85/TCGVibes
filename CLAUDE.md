@@ -35,7 +35,11 @@ src/
                         abilitiesActiveOn / abilitiesActiveOnInstance
     pendingPick.ts    Interactive deck-search picker
     stadiumActivated.ts
-    ai.ts             Greedy step loop + 1-ply lookahead
+    ai.ts             v1 greedy + 1-ply lookahead, v2 MCTS hook,
+                        scorePosition (threat-aware), shallow-clone
+    aiArchetype.ts    Archetype detection + per-archetype score bonuses
+                        + T1-T3 turn-aware playbooks
+    mcts.ts           Determinized UCT, action-level tree, depth=0 leaf
     rng.ts            Seeded mulberry32 with getState/setState
   data/
     cards.ts          Lazy dynamic import()
@@ -184,26 +188,108 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
 
 ## AI
 
+The engine ships two AI strategy versions, gated per-player by
+`PlayerState.aiVersion`. Default `"v1"` keeps the original behavior;
+`"v2"` enables the strengthened heuristics described below. MCTS is a
+separate opt-in via `PlayerState.mctsBudgetMs > 0`.
+
+**v1 (always-on baseline):**
 - **Greedy step loop**: bench Basics → search Items → free abilities
   → evolve → bench → Supporter → Stadium → attach → switch → attack.
-- **1-ply lookahead minimax**: clone state (`cloneStateForSearch`,
-  rng/log stripped), apply candidate, opp greedy turn, our greedy
-  follow-up, score via `scorePosition` (prizes ×250, HP ÷6, energy
-  ×8, bench depth, terminal ±1M).
+- **1-ply lookahead minimax** for attack choice: clone state (now via
+  shallow-clone, ~10× faster than the prior JSON-clone), apply
+  candidate, opp greedy turn, our greedy follow-up, score via
+  `scorePosition`.
 - **Damage estimator** includes passive bonuses/reductions, Stadium /
   Tool / turn-scoped modifiers — same order as real `executeAttackHit`.
-- **Promote selection** opp-aware: penalize OHKO-able candidates
-  (extra for ex/Mega), reward counter-OHKO.
+- **Promote selection** opp-aware: penalize OHKO-able candidates,
+  reward counter-OHKO.
 - **Switch heuristics**: `tryDefensiveRetreat`, `tryOffensiveSwitch`.
+
+**v2 (heuristic upgrades, fast — no extra search cost):**
+- **Archetype awareness** ([src/engine/aiArchetype.ts](src/engine/aiArchetype.ts)):
+  detects the deck archetype from signature cards (Festival Lead,
+  Arboliva ex, Alakazam, Mega Lucario ex) and applies modest score
+  bonuses on the archetype's defining Trainers, Energy-attach targets,
+  bench Basics, and abilities.
+- **Turn-aware playbooks**: T1-T3 bonuses tighten priority for each
+  archetype (e.g., Arboliva T1 always Teal Dance + Forest of Vitality;
+  Mega Lucario T2 wants Premium Power Pro + Rare Candy).
+- **Threat-aware position eval**: `scorePosition` penalizes positions
+  where our Active is in OHKO range from opp's projected next attack
+  (scaled by prize value at risk), mirrors the bonus when opp is in
+  our OHKO range, and counts "ready bench attackers" (Pokémon with
+  ≥cost-1 energy and a payable attack).
+- **Endgame solver**: when prizes ≤ 2 on either side, MCTS budget
+  scales 4× so the closing window gets exhaustive search.
+- **Smart gust targeting**: `bestGustTarget` adds a "ramp engine"
+  bonus (Bibarel, Dudunsparce, Fan Rotom, Teal Mask Ogerpon ex,
+  Munkidori, Fezandipiti ex) so KOs on opp's tempo engines outrank
+  KOs on inert benched Basics.
+- **Non-linear endgame prize weighting**: prizes 4→6 worth more than
+  prizes 0→2 (champions push harder for the close).
+
+**MCTS (opt-in via `mctsBudgetMs`):**
+- **Determinized UCT** ([src/engine/mcts.ts](src/engine/mcts.ts)):
+  action-level tree, lazy expansion with progressive widening
+  (top-K=8), per-iteration RNG re-seed so coin flips average across
+  rollouts.
+- **Action space**: atomic engine actions (`attack`, `attachEnergy`,
+  `evolve`, `playBasic`, `playTrainer`, `retreat`, `activateAbility`,
+  `endTurn`).
+- **Leaf eval (default)**: depth=0 — evaluate `scorePosition` directly
+  at the leaf, no greedy playout. ~100-200 iterations per 200ms
+  budget. The greedy-rollout variant exists but at this codebase's
+  per-iteration cost only delivers ~1-2 iterations, defeating
+  exploration.
+- **Time-budgeted**: `runMcts` checks the wall clock each iteration.
+  Falls back to greedy when budget is exhausted before any complete
+  iteration or `enumerateActions` returns empty.
+- **Re-entrancy guard** (`lookaheadActive`): rollouts and the search's
+  internal action applications skip the v2 MCTS branch so MCTS doesn't
+  recurse into itself.
+
+**Benchmarking** ([src/engine/__tests__/aiBenchmark.test.ts](src/engine/__tests__/aiBenchmark.test.ts)):
+gated by `AI_BENCH=quick|full` env var so `npm run test` doesn't pay
+the cost. Quick mode runs 5 games per deck-pair (16 pairs = 80 games);
+full mode runs 50 per pair (800 games). Three benchmarks: v1-vs-v1
+sanity (~50%), v2-vs-v1 (heuristics-only), v2+MCTS-vs-v1 (full mode
+only — ~65 min runtime per benchmark on N=50).
+
+**Measured results** (full N=50, 800 games each, 2026-04-28):
+
+| Configuration | Win rate (p1 side) |
+|---|---:|
+| v1 vs v1 baseline | 53.0% (going-first edge ✓) |
+| v2 heuristics vs v1 | 52.8% (≈ neutral — Phase 9 self-tuning needed) |
+| **v2 + MCTS vs v1** | **65.5%** (+12.5pp over baseline) |
+
+Largest per-pair shifts (vs v1 baseline) where MCTS pays off most:
+- `alakazam vs festival-leads`: 22% → 57% (+35pp)
+- `arboliva vs arboliva` (mirror): 49% → 76% (+27pp)
+- `alakazam vs alakazam` (mirror): 59% → 84% (+25pp)
+- `alakazam vs arboliva`: 28% → 49% (+21pp)
+
+Pattern: MCTS dominates in **mirror matchups** and **Alakazam-driven**
+games where decisions compound over many turns. Lucario matchups are
+near-flat — Lucario's plan is prescriptive enough that greedy already
+plays it well.
+
+**Scenario tests** ([src/engine/__tests__/aiScenarios.test.ts](src/engine/__tests__/aiScenarios.test.ts)):
+12 handcrafted board states with expected decisions (OHKO preference,
+T1 attack ban, status-blocked attacker, energy unlock, bench-cap
+respect, etc.). Some require v2 — tagged in test names.
 
 ## Test suite
 
-- **Vitest — 247 tests across 19 files.**
+- **Vitest — 262 tests across 21 files** (+ 3 AI_BENCH-gated).
   - `src/engine/__tests__/`: abilityDetection, dawnChain, energy,
     gameFlow, integration, ongoingEffects, presetDeckSmoke,
     trainerDetection, weakness, undoRng, undoIntegration,
     phantomDiveHuman, attackPreflight, unspentTurnSlots, mvpPickers
-    (Colress / Perrin / Salvatore / Heavy Baton interactive paths).
+    (Colress / Perrin / Salvatore / Heavy Baton interactive paths),
+    **aiScenarios** (12 handcrafted decision scenarios), **mcts**
+    (MCTS smoke), **aiBenchmark** (gated AI-vs-AI win-rate harness).
   - `src/data/__tests__/`: decklistParser, effectPatterns.
   - `src/ui/__tests__/`: CardView (energy-pip glyph rendering),
     aiPause (modal-pause useEffect under fake timers).
@@ -297,6 +383,29 @@ Not yet addressed. Severity per the multi-agent QA pass.
 - Non-terminal + terminal `pendingPromote` phase mixing.
 - Passive attack/damage abilities firing in real `executeAttackHit`
   (helpers unit-tested; integration path not).
+
+**Deferred AI work (Phases 2c, 2e, 7-12 of the AI overhaul plan):**
+- **2c. Multi-action reordering** — replace fixed greedy step order
+  with a score-then-pick loop (let supporter-search-then-evolve emerge
+  when the search would unlock the evolve piece).
+- **2e. Ability scoring tuning** — defaults at 50-65 across ~70 ability
+  kinds; should be tuned per-impact via Phase 9 self-tuning.
+- **7. Opp modeling** — route opp's MCTS-rollout moves through their
+  detected archetype playbook instead of greedy.
+- **8. Opening book from real tournament data** — hard-code first-3-turn
+  sequences scraped from Limitless winning decklists; AI follows the
+  book until divergence.
+- **9. Self-tuning weights** — overnight AI-vs-AI loop that
+  perturbation-searches the 20+ heuristic constants in `scorePosition`,
+  archetype bonuses, etc.
+- **10. Massive scenario suite** — expand from 12 → 200 handcrafted
+  decision tests covering every canonical TCG decision point.
+- **11. Game-log review pass** — manually read 100 AI-vs-AI logs,
+  encode found mistakes as new heuristic rules / scenarios.
+- **12. Self-play RL pipeline** — the only path to genuine
+  tournament-level play. AlphaZero-style policy + value network,
+  millions of self-play games, ~3 months + GPU. Out of scope here;
+  documented as the future ceiling.
 
 ## Decks available
 
