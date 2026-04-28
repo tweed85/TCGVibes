@@ -11,6 +11,7 @@ npm install
 npm run dev        # http://localhost:5173
 npm run typecheck  # tsc -b --noEmit
 npm run test       # vitest
+npm run e2e        # playwright (boots dev server, headless Chromium)
 npm run build
 ```
 
@@ -35,7 +36,7 @@ src/
     pendingPick.ts    Interactive deck-search picker
     stadiumActivated.ts
     ai.ts             Greedy step loop + 1-ply lookahead
-    rng.ts            Seeded mulberry32
+    rng.ts            Seeded mulberry32 with getState/setState
   data/
     cards.ts          Lazy dynamic import()
     cardMapper.ts     API → engine types
@@ -48,6 +49,8 @@ src/
   App.tsx
   styles.css
   test-setup.ts       Loads dataset + jest-dom matchers
+e2e/smoke.spec.ts     Playwright boot + undo click-through
+playwright.config.ts
 vite.config.ts        manualChunks split, vite-plugin-pwa
 ```
 
@@ -56,44 +59,64 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
 - **Card schema mirrors the Pokémon TCG API**; `cardMapper.ts` is the only
   translation layer.
 - **Effects are data-driven.** Attack text regex-matched on first use,
-  cached as `AttackEffect[]`, dispatched by `kind`. Same pattern for
-  trainer + ability effects. Unmatched text preserved for display.
-- **RNG on `GameState`** — all flips/shuffles via `state.rng` for seeded
-  reproducibility.
+  cached as `AttackEffect[]`, dispatched by `kind`. Same for trainer +
+  ability effects. Unmatched text preserved for display.
+- **RNG on `GameState`**, exposed via `next` / `int` / `getState` /
+  `setState` (mulberry32 cursor is snapshottable for undo).
 - **Lazy dataset load** via dynamic `import()` keeps the 1.5MB JSON out
   of the boot bundle.
 - **Wild Growth–aware cost checks** route through `energyPoolForCost`.
 - **Memoized React renders** — `CardView` uses a custom comparator
-  excluding `onClick`; click handlers read `stateRef.current` to avoid
-  stale closures over preserved memo state.
-- **Interactive picker pattern** — `PendingInPlayTarget` carries an
-  action discriminated union; `resolveInPlayTarget` re-arms the picker
-  between clicks until `remaining` hits 0.
+  excluding `onClick`; click handlers read `stateRef.current` so memo
+  closures see fresh state.
+- **Interactive picker pattern** — `PendingInPlayTarget` carries a
+  discriminated-union action; `resolveInPlayTarget` re-arms between
+  clicks until `remaining` hits 0. `formatPickerLabel` in App appends
+  "— N left" so multi-click effects (Phantom Dive, Aura Jab) show
+  progress.
 - **Pause states.** Terminal promotes (attack/checkup KO) set
   `pendingPromote` + `phase = "promoteActive"` and queue
   `onPromoteResolved` (`endTurn` / `passTurn` / `secondAttack`).
   Non-terminal promotes (Run Away Draw, Cursed Blast) keep
-  `phase = "main"` so the player keeps the turn.
+  `phase = "main"`.
 - **Promote queue.** `pendingPromoteQueue: PlayerId[]` handles
-  simultaneous KOs (Houndoom Dark Pulse / `bothActiveKnockedOut`).
-  All pause sites route through `setPendingPromote` so the queue stays
-  consistent; `promoteBenchToActive` drains FIFO before running
-  `onPromoteResolved`.
+  simultaneous KOs (`bothActiveKnockedOut`). All pause sites route
+  through `setPendingPromote`; `promoteBenchToActive` drains FIFO
+  before running `onPromoteResolved`.
 - **Centralized evolve cleanup.** `applyEvolveSideEffects(state, p)`
-  is the single source for: clear statuses (Confused persists under
-  Dizzying Valley), reset `abilityUsedThisTurn`, set `evolvedThisTurn`,
-  clear `scheduledKoOnTurn` / `shieldedUntilTurn` /
-  `cantAttackUntilTurn` / `noWeaknessUntilTurn`. Used by
-  `actions.ts:evolve` and both Rare Candy paths.
-- **Triggered abilities honor instance suppressors.**
-  `fireTriggered{OnEvolve,OnBench,OnMoveToActive,OnMoveToBench}` use
-  `abilitiesActiveOnInstance` (not the card-only
-  `abilitiesActiveOn`), so Sticky Bind / Initialization / Midnight
-  Fluttering suppress triggered abilities, not just activated ones.
+  in `rules.ts` clears statuses (Confused persists under Dizzying
+  Valley), resets `abilityUsedThisTurn`, sets `evolvedThisTurn`, and
+  clears scheduled flags (`scheduledKoOnTurn`, `shieldedUntilTurn`,
+  `cantAttackUntilTurn`, `noWeaknessUntilTurn`). Used by the regular
+  evolve action and both Rare Candy paths.
+- **Triggered abilities honor instance suppressors.** Triggered-on-
+  evolve / -on-bench / -on-move-to-active / -on-move-to-bench all
+  use `abilitiesActiveOnInstance`, so Sticky Bind / Initialization /
+  Midnight Fluttering suppress them.
 - **AI estimator matches real damage.** `estimateDamage` applies
   `passiveAttackBonus` + `passiveDamageReduction` in the same order as
-  `executeAttackHit`, so the lookahead sees the same numbers the
-  attack pipeline produces.
+  `executeAttackHit`.
+- **Single attack-legality gate.** `attackPreflight(state, player,
+  attackIndex)` in `actions.ts` runs every pre-click rejection (T1
+  ban, asleep, paralyzed, `cantAttackUntilTurn`, per-attack lock,
+  Power Saver, Born to Slack, energy cost). `attack()` calls it
+  first, and the UI calls it per-attack to drive the disabled +
+  tooltip on the attack button — UI/engine can't disagree about
+  legality.
+- **End Turn pre-confirm.** `unspentTurnSlots(state, player)` in
+  `rules.ts` returns warnings for any per-turn slot the player still
+  has cards for in hand (Energy attach, Supporter). The App shows a
+  small confirm modal before ending the turn when the list is
+  non-empty; otherwise End Turn proceeds without an extra click.
+- **Undo: per-action snapshot stack.** `undoStackRef` in App.tsx pushes
+  `{state JSON, rngState, label}` BEFORE each player action (play /
+  attach / evolve / retreat / playTrainer / activate ability). On undo,
+  pop and restore both state AND `rng.setState(rngState)` — without the
+  rng rewind, retried shuffles/flips consumed different entropy and
+  undo behaved like a randomizer (the original user-reported bug).
+  Stack resets at turn boundary; cleared on successful attack since
+  post-attack side effects are intractable to reverse. Multiple undos
+  walk back through the turn one action at a time.
 
 ## Rules implemented
 
@@ -127,9 +150,10 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
 - **Attacks**: ~70 effect kinds — coin-flip variants, per-energy /
   per-bench / per-counter scaling, status, heal, snipe, multi-target,
   draw, locks, retreat manipulation. Bespoke: `distributeDamage`
-  (Phantom Dive / Oil Salvo, interactive), `placeCountersPerHandCard`
-  (Powerful Hand, W/R bypass), copy-attack pipelines
-  (`useAttackFromOppDeckTop`, `useBenchedAllyNamedAttack`,
+  (Phantom Dive / Oil Salvo, interactive — picker label says "click an
+  opp X to place N damage" + "— N left" progress),
+  `placeCountersPerHandCard` (Powerful Hand, W/R bypass), copy-attack
+  pipelines (`useAttackFromOppDeckTop`, `useBenchedAllyNamedAttack`,
   `discardTopOfOwnDeckUseSupporterEffect`),
   `discardDefenderEndOfOppNextTurn` (Corrosive Sludge),
   `bothActiveKnockedOut`, `attachNFromDiscardToBench` (Aura Jab,
@@ -141,16 +165,22 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
   Blast, interactive). Triggered: Jewel Seeker, Psychic Draw,
   Heave-Ho Catcher, Cast-Off Shell, Multiplying Cocoon, Emergency
   Evolution.
-- **Trainers**: 100+ effects. Hilda + Dawn chained pickers, Unfair
-  Stamp ACE SPEC, all Standard staples (Nest/Poké/Master/Ultra Ball,
-  Buddy-Buddy Poffin, Tera Orb, Rare Candy, Boss's Orders, Pokémon
-  Catcher, heals, hammers, etc.), turn-scoped buffs.
+- **Trainers**: 100+ effects. Hilda + Dawn chained pickers,
+  **Colress's Tenacity** (Stadium → basic Energy chain),
+  **Salvatore** (interactive Evolution → applied via `toEvolve`),
+  **Perrin** (interactive hand-reveal → search same count via
+  `useRevealedCount` postAction), Unfair Stamp ACE SPEC, all Standard
+  staples (Nest/Poké/Master/Ultra Ball, Buddy-Buddy Poffin, Tera Orb,
+  Rare Candy, Boss's Orders, Pokémon Catcher, heals, hammers, etc.),
+  turn-scoped buffs. AI keeps the auto-resolve path on each so AI
+  turns don't open hidden pickers.
 - **Stadiums**: most passives wired (Festival Grounds, Forest of
   Vitality, Dizzying Valley, etc.). Activated framework exists; per-
   Stadium UI buttons partial.
 - **Tools**: ~18 — HP boosters, retreat helpers, damage boosters,
   berries with auto-discard, KO-triggered (Survival Brace, Lillie's
-  Pearl, Amulet of Hope, Heavy Baton).
+  Pearl, Amulet of Hope, **Heavy Baton** — interactive Bench-target
+  picker that fires after the holder's owner promotes).
 
 ## AI
 
@@ -168,26 +198,35 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
 
 ## Test suite
 
-Vitest — **212 tests across 13 files**:
-- `src/engine/__tests__/`: abilityDetection, dawnChain, energy,
-  gameFlow, integration, ongoingEffects, presetDeckSmoke,
-  trainerDetection, weakness.
-- `src/data/__tests__/`: decklistParser, effectPatterns.
-- `src/ui/__tests__/`: CardView (energy-pip glyph rendering), aiPause
-  (modal-pause useEffect under fake timers).
+- **Vitest — 247 tests across 19 files.**
+  - `src/engine/__tests__/`: abilityDetection, dawnChain, energy,
+    gameFlow, integration, ongoingEffects, presetDeckSmoke,
+    trainerDetection, weakness, undoRng, undoIntegration,
+    phantomDiveHuman, attackPreflight, unspentTurnSlots, mvpPickers
+    (Colress / Perrin / Salvatore / Heavy Baton interactive paths).
+  - `src/data/__tests__/`: decklistParser, effectPatterns.
+  - `src/ui/__tests__/`: CardView (energy-pip glyph rendering),
+    aiPause (modal-pause useEffect under fake timers).
+- **Playwright — 2 e2e tests in `e2e/smoke.spec.ts`.** Boots a real
+  headless Chromium against the dev server: app loads → coin flip →
+  setup → main phase → Undo button starts disabled → play action →
+  Undo enables → click Undo → Undo disables. Catches runtime errors
+  the unit suite can't see.
 
 Coverage includes cost matching, passive bonuses, full-game setup +
 Checkup, every wired AttackEffect / Ability / Trainer detected, AI-vs-AI
 smoke for every preset cartesian pair, and end-to-end scenarios for
-trickier flows: Phantom Dive split, Aura Jab 3-pick, Hilda chain,
-Unfair Stamp KO gate, Wild Growth doubling, T1 evolve gate,
-`bothActiveKnockedOut` promote queue, Sticky Bind suppression,
+trickier flows: Phantom Dive split (AI + human paths), Aura Jab 3-pick,
+Hilda chain, Unfair Stamp KO gate, Wild Growth doubling, T1 evolve
+gate, `bothActiveKnockedOut` promote queue, Sticky Bind suppression,
 Dizzying Valley confused-on-evolve, parser >4 truncation,
-`validateDeckForPlay` rejection paths.
+`validateDeckForPlay` rejection paths, **rng cursor round-trip +
+deterministic shuffle replay after undo**.
 
 DOM tests opt into jsdom via `// @vitest-environment jsdom` per file
 (RTL + jest-dom matchers loaded by `test-setup.ts`); pure-engine tests
-stay in node for speed. `npm run test` / `npm run test:watch`.
+stay in node for speed. `npm run test` / `npm run test:watch` /
+`npm run e2e`.
 
 ## Mobile / iOS / offline
 
@@ -202,45 +241,45 @@ stay in node for speed. `npm run test` / `npm run test:watch`.
 
 ## Open pressure-test findings
 
-These came out of a multi-agent QA pass and are not yet addressed.
+Not yet addressed. Severity per the multi-agent QA pass.
 
-**MVP scope cuts (intentional):**
-- Ultra Ball auto-picks first 2 cards to discard (no chooser).
-- Per-Stadium activated-effect UI buttons not wired (framework only).
-- Fossils not modeled as 60-HP Basics.
-- A few multi-step Supporters auto-pick (Perrin, Cassiopeia,
-  Salvatore, Colress's Tenacity).
-- `snipeOne` auto-targets most-damaged (newer `distributeDamage` IS
-  interactive).
-- No prize-pick UI (top prize always).
-- Heavy Baton auto-target primitive.
+**MVP scope cuts (intentional / verified-not-applicable):**
+- Fossils not modeled as 60-HP Basics. Real but **the legal pool has zero
+  Pokémon that evolve from Fossils**, so wiring the play-as-Basic
+  mechanic gives the player nothing useful to evolve into. Deferred
+  until the pool gets a fossil-line Pokémon.
+- No prize-pick UI (top prize always taken). Niche relevance — the only
+  legal-pool card that interacts with specific prizes is Cresselia
+  ("Crescent Purge" +80 if you flip a face-down Prize face-up). Face-up
+  prize tracking would be the right fix; Cresselia's bonus is
+  intentionally not modeled (logged but no damage applied).
 
 **High:**
-- `state.log: LogEntry[]` grows unbounded across turns; in 50+ turn
-  games it bloats the canonical state. Cap to last ~30 entries.
-- UX — irreversible actions fire on first click with no confirm:
-  Boss's Orders / Counter Catcher target picker, Retreat, End Turn
-  (no "unspent energy" reminder), attack declaration on coin-flip
-  attacks. Misclick on Boss's Orders can lose the game.
-- UX — first-turn / status-blocked attack rejection is post-click.
-  T1, asleep, paralyzed, `cantAttackUntilTurn` should disable the
-  attack button + tooltip the reason instead of erroring after click.
+- `state.log: LogEntry[]` grows unbounded across turns. Real but
+  smaller-impact than originally framed: the AI clone strips the log,
+  and ~50 turns × ~10 entries × ~100 bytes ≈ 50KB. Cap to last ~30
+  entries if you want to be tidy; not urgent.
+- UX — pre-attack confirm on coin-flip-heavy attacks. Debatable: real
+  TCG doesn't allow attack-undo either; current behavior is
+  "successful attack locks the undo stack." Not obviously wrong.
+  (Boss's Orders / Counter Catcher / Retreat misclicks are already
+  recoverable via the per-action Undo stack — superseded by the Undo
+  fix.)
 
 **Low:**
 - Discard pile `onClick` without keyboard handler (Enter/Space) —
   not keyboard-navigable.
 - Mobile bench horizontal scroll has no visual overflow hint.
-- No in-game rules glossary / help button (terms like "Pokémon
-  Checkup" assumed familiar).
+- No in-game rules glossary / help button.
 - `AiActionBanner` can flash-and-vanish on fast AI steps.
 
 **Test gaps (fix landed but not directly tested):**
 - AI lookahead path through `pendingPromoteQueue` (`drainPending`
-  iterates correctly in theory, no integration test).
+  iterates correctly by inspection; no integration test).
 - Mid-queue game-over (queued player has no bench when dequeued).
 - Non-terminal + terminal `pendingPromote` phase mixing.
-- Passive attack/damage abilities firing in actual `executeAttackHit`
-  (helper functions unit-tested; integration path not).
+- Passive attack/damage abilities firing in real `executeAttackHit`
+  (helpers unit-tested; integration path not).
 
 ## Decks available
 

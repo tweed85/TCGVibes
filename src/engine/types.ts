@@ -1207,12 +1207,15 @@ export interface PendingHandReveal {
   label: string;
   min: number;
   max: number;
-  filter: "item" | "tool" | "itemOrTool" | "supporter" | "any";
+  filter: "item" | "tool" | "itemOrTool" | "supporter" | "pokemon" | "any";
   action: "discard" | "toBottomOfDeck";
   // Optional follow-up run by the resolver after the pick completes.
+  // `useRevealedCount` (Perrin): when set, the post-search caps at the
+  // number of cards the player actually revealed instead of the fixed max
+  // (Perrin: "search for the SAME number of Pokémon").
   postAction?:
     | { kind: "drawUntilHand"; targetSize: number } // Naveen
-    | { kind: "searchDeckAnyPokemon"; max: number; label: string }; // Ultra Ball
+    | { kind: "searchDeckAnyPokemon"; max: number; label: string; useRevealedCount?: boolean };
 }
 
 // Click-an-in-play-Pokémon prompt. `scope` restricts which side/slot is
@@ -1263,7 +1266,10 @@ export interface PendingInPlayTarget {
     // click pulls one matching basic Energy out of discard and attaches
     // to the clicked Bench Pokémon. `remaining` decrements; when 0 OR
     // discard runs dry, the picker closes.
-    | { kind: "attachEnergyFromDiscardPicker"; remaining: number; energyType: EnergyType; attackName: string };
+    | { kind: "attachEnergyFromDiscardPicker"; remaining: number; energyType: EnergyType; attackName: string }
+    // Heavy Baton: the energies were stashed mid-KO; the player picks one of
+    // their Bench Pokémon to receive them all at once.
+    | { kind: "heavyBatonPick" };
 }
 
 export interface PendingPick {
@@ -1286,6 +1292,10 @@ export interface PendingPick {
   // If true, picked Pokémon go straight onto the Bench instead of the hand
   // (Nest Ball, Buddy-Buddy Poffin, Hop's Bag, Lumiose City).
   toBench?: boolean;
+  // If true, picked Pokémon are applied as an evolution onto a matching ally
+  // (Salvatore: search for an Evolution, put it onto the Pokémon it evolves
+  // from). Falls back to depositing in hand if no eligible ally is found.
+  toEvolve?: boolean;
   // If set, picked Energy cards are attached to the in-play Pokémon with this
   // instanceId (used by attack-driven searches with destination "attachSelf").
   attachToInstanceId?: string;
@@ -1303,7 +1313,8 @@ export interface PendingPick {
 export type DeckSearchChainStep =
   | { kind: "dawn-stage1" } // Dawn: after picking the Basic, pick a Stage 1
   | { kind: "dawn-stage2" } // Dawn: after picking the Stage 1, pick a Stage 2
-  | { kind: "hilda-energy" }; // Hilda: after the Evolution, pick a basic Energy
+  | { kind: "hilda-energy" } // Hilda: after the Evolution, pick a basic Energy
+  | { kind: "colress-energy" }; // Colress's Tenacity: after Stadium, pick basic Energy
 
 // Short "hey, heads up" modal shown between chained deck searches when the
 // current stage has no qualifying cards. Lets the player acknowledge the
@@ -1355,6 +1366,13 @@ export interface GameState {
   // first (real-TCG rule: non-active-player promotes first), then the active
   // player drains the queue. Empty array when no queue.
   pendingPromoteQueue: PlayerId[];
+  // Heavy Baton: when the holder is KO'd, the energies don't auto-discard
+  // and don't auto-attach. They stash here until the owner has promoted a
+  // new Active and can interactively pick a Bench Pokémon to receive the
+  // energies. Auto-resolves for AI and for humans with only one bench.
+  pendingHeavyBaton:
+    | { ownerId: PlayerId; energies: EnergyCard[]; max: number }
+    | null;
   // What to do once the promote resolves.
   //  - "endTurn": KO happened during attack, run endTurn next
   //  - "passTurn": KO happened during checkup, skip cleanup and pass to opponent

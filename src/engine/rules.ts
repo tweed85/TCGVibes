@@ -139,6 +139,7 @@ export function setupGame(
     stadium: null,
     pendingPromote: null,
     pendingPromoteQueue: [],
+    pendingHeavyBaton: null,
     onPromoteResolved: null,
     pendingSecondAttack: null,
     pendingPick: null,
@@ -726,22 +727,39 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
       }
     } else if (act.kind === "moveEnergyToBench") {
       // Heavy Baton — move Energy from the KO'd Pokémon to a Benched ally.
-      // Auto-target: prefer the Benched Pokémon that already has the most
-      // attached Energy (continuation-of-game heuristic: reinforce the
-      // heaviest hitter). Ties broken by lowest instanceId so runs are
-      // deterministic.
+      // Path A (auto): AI controllers and humans with ≤1 bench have no
+      // meaningful choice — auto-target the highest-energy bench Pokémon
+      // (continuation-of-game heuristic: reinforce the prepared hitter).
+      // Path B (interactive): a human with 2+ bench picks the recipient.
+      // Energies stash on `pendingHeavyBaton`; the picker fires after the
+      // owner promotes a new Active (mid-KO can't open a picker because
+      // pendingPromote takes the phase). The energies are pulled out of
+      // `ko.attachedEnergy` so the standard discard-attached-cards step
+      // doesn't sweep them away.
       if (owner.bench.length > 0 && ko.attachedEnergy.length > 0) {
-        const target = owner.bench
-          .slice()
-          .sort((a, b) => b.attachedEnergy.length - a.attachedEnergy.length)[0];
-        let moved = 0;
-        while (moved < act.max && ko.attachedEnergy.length > 0) {
-          const [e] = ko.attachedEnergy.splice(0, 1);
-          target.attachedEnergy.push(e);
-          moved++;
-        }
-        if (moved > 0) {
-          logEvent(state, ownerId, `Heavy Baton moves ${moved} Energy to ${target.card.name}.`);
+        const moveCount = Math.min(act.max, ko.attachedEnergy.length);
+        const interactive = !owner.isAI && owner.bench.length > 1;
+        if (interactive) {
+          const moved = ko.attachedEnergy.splice(0, moveCount);
+          state.pendingHeavyBaton = {
+            ownerId,
+            energies: moved,
+            max: moveCount,
+          };
+          logEvent(state, ownerId, `Heavy Baton: pick a Bench Pokémon to receive ${moved.length} Energy.`);
+        } else {
+          const target = owner.bench
+            .slice()
+            .sort((a, b) => b.attachedEnergy.length - a.attachedEnergy.length)[0];
+          let moved = 0;
+          while (moved < moveCount && ko.attachedEnergy.length > 0) {
+            const [e] = ko.attachedEnergy.splice(0, 1);
+            target.attachedEnergy.push(e);
+            moved++;
+          }
+          if (moved > 0) {
+            logEvent(state, ownerId, `Heavy Baton moves ${moved} Energy to ${target.card.name}.`);
+          }
         }
       }
     }
@@ -994,6 +1012,34 @@ export function resolveBenchKOs(state: GameState): boolean {
 }
 
 // Win-by-deckout: if active player can't draw at start of turn, they lose.
+// Per-turn slots the active player still has available — surfaced by the UI
+// to confirm before End Turn so a careless click doesn't waste an Energy
+// attach or Supporter that the player obviously had on hand. Conservative:
+// only flags slots where the player STILL HAS a relevant card in hand and
+// hasn't used the slot. Returns [] when nothing's wasted, so the common
+// case doesn't get an extra confirmation click.
+export function unspentTurnSlots(
+  state: GameState,
+  player: PlayerId,
+): string[] {
+  if (state.activePlayer !== player) return [];
+  if (state.phase !== "main") return [];
+  const pl = state.players[player];
+  const out: string[] = [];
+  if (!pl.energyAttachedThisTurn && pl.hand.some((c) => c.supertype === "Energy")) {
+    out.push("Energy attach (you haven't attached this turn).");
+  }
+  // First-player T1 ban — Supporters illegal that turn anyway, so don't warn.
+  const t1Banned = state.firstTurnNoAttack && state.activePlayer === state.firstPlayer;
+  const hasSupporterInHand = pl.hand.some(
+    (c) => c.supertype === "Trainer" && (c.subtypes ?? []).includes("Supporter"),
+  );
+  if (!pl.supporterPlayedThisTurn && hasSupporterInHand && !t1Banned) {
+    out.push("Supporter slot (you haven't played a Supporter this turn).");
+  }
+  return out;
+}
+
 export function startTurnDraw(state: GameState): void {
   const p = state.players[state.activePlayer];
   const drawn = drawCards(p, 1);

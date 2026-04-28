@@ -107,6 +107,7 @@ function mkState(overrides: Partial<GameState> = {}): GameState {
     stadium: null,
     pendingPromote: null,
     pendingPromoteQueue: [],
+    pendingHeavyBaton: null,
     onPromoteResolved: null,
     pendingSecondAttack: null,
     pendingPick: null,

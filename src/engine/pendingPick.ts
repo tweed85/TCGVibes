@@ -6,8 +6,8 @@
 // is pending, the game is paused (phase = "pick"); other player actions are
 // blocked until the pick resolves.
 
-import { endTurn as endTurnRule, logEvent, makePokemonInPlay } from "./rules";
-import { fireTriggeredOnBench } from "./abilities";
+import { applyEvolveSideEffects, endTurn as endTurnRule, logEvent, makePokemonInPlay } from "./rules";
+import { fireTriggeredOnBench, fireTriggeredOnEvolve } from "./abilities";
 import type {
   Card,
   GameState,
@@ -51,7 +51,7 @@ export function setDeckSearchPick(
   pred: (c: Card) => boolean,
   max: number,
   label: string,
-  options: { toBench?: boolean; postResolveChain?: import("./types").DeckSearchChainStep; min?: number } = {},
+  options: { toBench?: boolean; toEvolve?: boolean; postResolveChain?: import("./types").DeckSearchChainStep; min?: number } = {},
 ): boolean {
   const pl = state.players[player];
   const safeDeck = excludePrizes(pl, pl.deck);
@@ -87,6 +87,7 @@ export function setDeckSearchPick(
     unpicked: "shuffleIntoDeck",
     source: "deck",
     toBench: options.toBench,
+    toEvolve: options.toEvolve,
     postResolveChain: options.postResolveChain,
   };
   state.phase = "pick";
@@ -152,6 +153,15 @@ function applyChainStep(
         c.supertype === "Energy" && (c.subtypes ?? []).includes("Basic");
       if (!setDeckSearchPick(state, player, pred, 1, "Hilda (2 of 2): pick a basic Energy")) {
         logEvent(state, player, "Hilda: no basic Energy in deck.");
+      }
+      break;
+    }
+    case "colress-energy": {
+      // Colress's Tenacity step 2: after the Stadium, pick a basic Energy.
+      const pred = (c: Card) =>
+        c.supertype === "Energy" && (c.subtypes ?? []).includes("Basic");
+      if (!setDeckSearchPick(state, player, pred, 1, "Colress's Tenacity (2 of 2): pick a basic Energy")) {
+        logEvent(state, player, "Colress's Tenacity: no basic Energy in deck.");
       }
       break;
     }
@@ -338,6 +348,40 @@ export function resolvePendingPick(
     logEvent(state, player, `picks ${picked.map((c) => c.name).join(", ")}.`);
   } else {
     logEvent(state, player, "picks nothing.");
+  }
+
+  // Salvatore-style: picked Evolution Pokémon go straight onto a matching
+  // ally instead of into hand. Run this BEFORE the bench branch so a
+  // search-result that evolves a Pokémon doesn't accidentally also flow
+  // through the bench placement.
+  if (pick.toEvolve && picked.length > 0) {
+    for (const c of picked) {
+      if (c.supertype !== "Pokémon") continue;
+      const evoCard = c as import("./types").PokemonCard;
+      if (!evoCard.evolvesFrom) continue;
+      const hi = pl.hand.lastIndexOf(c);
+      if (hi < 0) continue;
+      // Find an eligible ally — must match name AND not have been played
+      // this turn. Active first, then bench by index (deterministic when
+      // multiple allies match).
+      const candidates = [pl.active, ...pl.bench].filter(
+        (p): p is import("./types").PokemonInPlay => !!p,
+      );
+      const ally = candidates.find(
+        (p) => p.card.name === evoCard.evolvesFrom && !p.playedThisTurn,
+      );
+      if (!ally) {
+        // Picked card stays in hand — defensive fallback if no eligible
+        // ally exists (rare since the predicate filters for this).
+        continue;
+      }
+      pl.hand.splice(hi, 1);
+      ally.evolvedFrom.push(ally.card);
+      ally.card = evoCard;
+      applyEvolveSideEffects(state, ally);
+      logEvent(state, player, `evolves ${ally.card.name}.`);
+      fireTriggeredOnEvolve(state, player, ally);
+    }
   }
 
   // Pokémon from the pick go to hand by default. A few effects instead bench

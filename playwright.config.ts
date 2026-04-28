@@ -19,6 +19,9 @@ export default defineConfig({
     command: "npm run dev",
     url: "http://localhost:5173",
     reuseExistingServer: true,
-    timeout: 60000,
+    // Vite cold-start + dataset chunk parse can push first response past the
+    // 60s default in CI. Bump to 2 minutes so the first test in a fresh
+    // worker doesn't race the server-up signal.
+    timeout: 120000,
   },
 });

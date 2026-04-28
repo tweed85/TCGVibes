@@ -588,6 +588,33 @@ export function promoteBenchToActive(
     return ok;
   }
 
+  // Heavy Baton (mid-KO interactive picker): if the just-promoted player
+  // had stashed energies waiting for a Bench target, fire the picker now.
+  // This runs BEFORE the onPromoteResolved continuation so the player has
+  // to place the energies before the turn flow resumes.
+  if (
+    (state.phase as string) !== "gameOver" &&
+    state.pendingHeavyBaton &&
+    state.pendingHeavyBaton.ownerId === player
+  ) {
+    const owner = state.players[player];
+    if (owner.bench.length > 0) {
+      state.pendingInPlayTarget = {
+        player,
+        label: `Heavy Baton: pick a Bench Pokémon to receive ${state.pendingHeavyBaton.energies.length} Energy`,
+        scope: "own",
+        slot: "bench",
+        filter: "anyPokemon",
+        action: { kind: "heavyBatonPick" },
+      };
+      // Don't run the continuation yet — the picker resolution does that.
+      return ok;
+    }
+    // No bench (rare race): drop the energies to discard.
+    owner.discard.push(...state.pendingHeavyBaton.energies);
+    state.pendingHeavyBaton = null;
+  }
+
   const cont = state.onPromoteResolved;
   state.onPromoteResolved = null;
   if (cont === "endTurn") endTurnRule(state);
@@ -915,7 +942,13 @@ function finishHit(
   if (phaseAfter !== "gameOver") endTurnRule(state);
 }
 
-export function attack(
+// Read-only check: returns ok if `attack(state, player, attackIndex)` would
+// commit, otherwise the same `fail` reason the engine would emit. Drives the
+// UI's pre-click attack-button disable + tooltip so the player sees WHY an
+// attack isn't legal before they click instead of getting a post-click
+// rejection toast. attack() itself routes through this so the UI and engine
+// can never disagree about legality.
+export function attackPreflight(
   state: GameState,
   player: PlayerId,
   attackIndex: number,
@@ -936,26 +969,21 @@ export function attack(
   if (atk.cantAttackUntilTurn !== undefined && state.turn <= atk.cantAttackUntilTurn) {
     return fail("This Pokémon can't attack this turn.");
   }
-  // Power Saver / similar — attack restriction with predicate.
   for (const ab of atk.card.abilities ?? []) {
     if (ab.name === "Power Saver") {
-      // Need ≥4 Team Rocket's Pokémon in play.
       const allies = [pl.active, ...pl.bench].filter((p): p is typeof pl.active & {} => !!p);
       const trCount = allies.filter((p) => p.card.name.startsWith("Team Rocket's ")).length;
       if (trCount < 4) {
-        return fail(`Power Saver: requires 4 or more Team Rocket's Pokémon in play.`);
+        return fail("Power Saver: requires 4 or more Team Rocket's Pokémon in play.");
       }
     }
   }
   const move = effectiveAttacks(atk)[attackIndex];
   if (!move) return fail("No such attack.");
-  // Per-attack lock (Riolu "Accelerating Stab" / Mega Brave etc.).
   const perAttackLock = (atk as typeof atk & { cantUseAttacksUntilTurn?: Record<string, number> }).cantUseAttacksUntilTurn;
   if (perAttackLock && perAttackLock[move.name] !== undefined && state.turn <= perAttackLock[move.name]) {
     return fail(`This Pokémon can't use ${move.name} this turn.`);
   }
-  // Born to Slack (Slaking) — "If your opponent has no Pokémon ex or Pokémon V
-  // in play, this Pokémon can't attack."
   if ((atk.card.abilities ?? []).some((a) => a.name === "Born to Slack")) {
     const oppId: PlayerId = player === "p1" ? "p2" : "p1";
     const oppAllies = [state.players[oppId].active, ...state.players[oppId].bench]
@@ -971,6 +999,17 @@ export function attack(
   const effectiveCost = effectiveAttackCost(state, atk, move.cost, move.name);
   if (!canPayCost(provided, effectiveCost))
     return fail("Not enough Energy for that attack.");
+  return ok;
+}
+
+export function attack(
+  state: GameState,
+  player: PlayerId,
+  attackIndex: number,
+): ActionResult {
+  const pre = attackPreflight(state, player, attackIndex);
+  if (!pre.ok) return pre;
+  const atk = state.players[player].active!;
 
   // Confusion: flip on attack; on tails, attack fails and 30 damage to self.
   if (hasStatus(atk, "confused")) {

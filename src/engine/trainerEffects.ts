@@ -10,7 +10,7 @@
 // "if Community Center is in play") are mostly approximated or skipped; the
 // core draw/search/heal behaviors are correct.
 
-import { applyEvolveSideEffects, enforceSpecialEnergyAttachRules, isPlayersFirstTurn, logEvent, makePokemonInPlay, newInstanceId, setPendingPromote } from "./rules";
+import { applyEvolveSideEffects, endTurn as endTurnRule, enforceSpecialEnergyAttachRules, isPlayersFirstTurn, logEvent, makePokemonInPlay, newInstanceId, passTurn, setPendingPromote } from "./rules";
 import { clearAllStatuses } from "./rules";
 import { benchDamageBlocked, benchDamageBlockedByFlowerCurtain } from "./ongoingEffects";
 import {
@@ -36,6 +36,7 @@ import type {
   TrainerCard,
 } from "./types";
 import type { TrainerTarget } from "./actions";
+import { resumeSecondAttack } from "./actions";
 
 // Auto-detected effect ids.
 export type TrainerEffectId =
@@ -1742,12 +1743,39 @@ export function applyTrainerEffect(
     }
 
     case "searchStadiumAndEnergy": {
-      const stadium = searchDeck(state, player, isStadium, 1);
-      const energy = searchDeck(state, player, isAnyEnergy, 1);
-      const picks = [...stadium, ...energy].map((c) => c.name).join(", ");
-      logEvent(state, player, picks
-        ? `searches deck and adds ${picks}.`
-        : "finds no Stadium/Energy.");
+      // AI: keep the auto-search for speed (greedy first match per category).
+      // Human: open a chained interactive pick — Stadium first, then Basic
+      // Energy via `colress-energy` chain step. Mirrors Hilda's pattern.
+      if (pl.isAI) {
+        const stadium = searchDeck(state, player, isStadium, 1);
+        const energy = searchDeck(state, player, isAnyEnergy, 1);
+        const picks = [...stadium, ...energy].map((c) => c.name).join(", ");
+        logEvent(state, player, picks
+          ? `searches deck and adds ${picks}.`
+          : "finds no Stadium/Energy.");
+        return;
+      }
+      const isBasicEnergyCard = (c: Card) =>
+        c.supertype === "Energy" && (c.subtypes ?? []).includes("Basic");
+      const hasStadium = pl.deck.some(isStadium);
+      const hasBasicEnergy = pl.deck.some(isBasicEnergyCard);
+      if (!hasStadium && !hasBasicEnergy) {
+        logEvent(state, player, "Colress's Tenacity: deck has no Stadium or Energy.");
+        return;
+      }
+      if (!hasStadium) {
+        // Skip the Stadium step; go straight to the Energy pick.
+        if (!setDeckSearchPick(state, player, isBasicEnergyCard, 1, "Colress's Tenacity (2 of 2): pick a basic Energy")) {
+          logEvent(state, player, "Colress's Tenacity: no basic Energy in deck.");
+        }
+        return;
+      }
+      if (!setDeckSearchPick(
+        state, player, isStadium, 1, "Colress's Tenacity (1 of 2): pick a Stadium",
+        { postResolveChain: { kind: "colress-energy" } },
+      )) {
+        logEvent(state, player, "Colress's Tenacity: no Stadium in deck.");
+      }
       return;
     }
 
@@ -2670,35 +2698,45 @@ export function applyTrainerEffect(
       return;
     }
     case "salvatoreEvolveSearch": {
-      // Auto-pick: find any Evolution Pokémon in deck whose evolvesFrom matches
-      // any of your Pokémon. Apply to first match.
+      // "Search your deck for a Pokémon that evolves from one of your Pokémon,
+      // and put it onto that Pokémon to evolve it." Predicate: Evolution
+      // Pokémon (Stage 1 / Stage 2) whose evolvesFrom matches an in-play
+      // ally that's eligible to evolve right now (not played-this-turn).
       const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
-      const candidatePairs: Array<{ deckIdx: number; ally: PokemonInPlay; evo: PokemonCard }> = [];
-      pl.deck.forEach((c, i) => {
-        if (c.supertype !== "Pokémon") return;
-        if (!(c.abilities ?? []).length || (c.abilities ?? []).length === 0) {
-          // requires no abilities
-          if ((c.abilities ?? []).length > 0) return;
+      const eligibleNames = new Set(
+        allies.filter((a) => !a.playedThisTurn).map((a) => a.card.name),
+      );
+      const isEligibleEvo = (c: Card) =>
+        c.supertype === "Pokémon" &&
+        !!(c as PokemonCard).evolvesFrom &&
+        eligibleNames.has((c as PokemonCard).evolvesFrom!);
+
+      // AI: keep auto-pick (first eligible) for speed.
+      if (pl.isAI) {
+        const idx = pl.deck.findIndex(isEligibleEvo);
+        if (idx < 0) {
+          logEvent(state, player, "Salvatore: no eligible evolution.");
+          shuffleDeck(state, player);
+          return;
         }
-        for (const a of allies) {
-          if (c.evolvesFrom === a.card.name && !a.playedThisTurn) {
-            candidatePairs.push({ deckIdx: i, ally: a, evo: c as PokemonCard });
-            break;
-          }
-        }
-      });
-      if (candidatePairs.length === 0) {
-        logEvent(state, player, "Salvatore: no eligible evolution.");
+        const [evo] = pl.deck.splice(idx, 1) as [PokemonCard];
+        const ally = allies.find((a) => a.card.name === evo.evolvesFrom && !a.playedThisTurn)!;
+        ally.evolvedFrom.push(ally.card);
+        ally.card = evo;
+        applyEvolveSideEffects(state, ally);
         shuffleDeck(state, player);
+        logEvent(state, player, `Salvatore: evolves ${ally.card.name}.`);
         return;
       }
-      const pick = candidatePairs[0];
-      const [evo] = pl.deck.splice(pick.deckIdx, 1) as [PokemonCard];
-      pick.ally.evolvedFrom.push(pick.ally.card);
-      pick.ally.card = evo;
-      pick.ally.evolvedThisTurn = true;
-      shuffleDeck(state, player);
-      logEvent(state, player, `Salvatore: evolves ${pick.ally.card.name}.`);
+
+      // Human: open an interactive deck search; the picker's `toEvolve`
+      // mode applies the picked card to a matching ally on resolve.
+      if (!setDeckSearchPick(
+        state, player, isEligibleEvo, 1, "Salvatore: pick an Evolution to apply",
+        { toEvolve: true },
+      )) {
+        logEvent(state, player, "Salvatore: no eligible evolution.");
+      }
       return;
     }
     case "surferSwitchDraw5": {
@@ -3163,22 +3201,51 @@ export function applyTrainerEffect(
     }
     case "perrinSearch": {
       // Reveal up to 2 Pokémon from hand → put into deck → search same number.
-      const reveal: Card[] = [];
-      for (let i = pl.hand.length - 1; i >= 0 && reveal.length < 2; i--) {
-        if (pl.hand[i].supertype === "Pokémon") {
-          reveal.push(pl.hand.splice(i, 1)[0]);
-        }
-      }
-      pl.deck.push(...reveal);
-      shuffleDeck(state, player);
-      const isPoke = (c: Card) => c.supertype === "Pokémon";
-      if (reveal.length === 0) {
+      // Real card text: "Reveal up to 2 Pokémon from your hand. Shuffle them
+      // into your deck. Then, search your deck for the same number of
+      // Pokémon and put them into your hand." Player picks WHICH Pokémon to
+      // reveal — the engine used to auto-pick the last 2 in hand-order.
+      const pokemonInHand = pl.hand.filter((c) => c.supertype === "Pokémon");
+      if (pokemonInHand.length === 0) {
         logEvent(state, player, "Perrin: no Pokémon in hand to reveal.");
         return;
       }
-      if (!setDeckSearchPick(state, player, isPoke, reveal.length, `Perrin: pick up to ${reveal.length} Pokémon`)) {
-        logEvent(state, player, "Perrin: no Pokémon in deck.");
+      // AI: keep auto-resolve (last-2 heuristic — recycles non-needed copies).
+      if (pl.isAI) {
+        const reveal: Card[] = [];
+        for (let i = pl.hand.length - 1; i >= 0 && reveal.length < 2; i--) {
+          if (pl.hand[i].supertype === "Pokémon") {
+            reveal.push(pl.hand.splice(i, 1)[0]);
+          }
+        }
+        pl.deck.push(...reveal);
+        shuffleDeck(state, player);
+        const isPoke = (c: Card) => c.supertype === "Pokémon";
+        if (!setDeckSearchPick(state, player, isPoke, reveal.length, `Perrin: pick up to ${reveal.length} Pokémon`)) {
+          logEvent(state, player, "Perrin: no Pokémon in deck.");
+        }
+        return;
       }
+      // Human: open interactive hand-reveal. The resolver chains into the
+      // deck-search via postAction. NOTE: `toBottomOfDeck` puts the revealed
+      // cards on the bottom of the deck; `setDeckSearchPick` shuffles the
+      // deck on resolution, so the end state matches "shuffled into deck."
+      const max = Math.min(2, pokemonInHand.length);
+      state.pendingHandReveal = {
+        player,
+        target: player,
+        label: `Perrin: pick up to ${max} Pokémon to shuffle back into deck`,
+        min: 0,
+        max,
+        filter: "pokemon",
+        action: "toBottomOfDeck",
+        postAction: {
+          kind: "searchDeckAnyPokemon",
+          max,
+          label: `Perrin: pick up to ${max} Pokémon`,
+          useRevealedCount: true,
+        },
+      };
       return;
     }
     case "raifortPeek5Discard": {
@@ -3648,6 +3715,42 @@ export function resolveInPlayTarget(
       knockOutFromAbilityCounters(state, targetOwner, target);
       return { ok: true };
     }
+    case "heavyBatonPick": {
+      // Stashed energies from the KO'd holder land on the clicked Bench
+      // Pokémon all at once. Picker is single-click — close immediately.
+      const stash = state.pendingHeavyBaton;
+      if (!stash) {
+        state.pendingInPlayTarget = null;
+        return { ok: false, reason: "No Heavy Baton energies pending." };
+      }
+      target.attachedEnergy.push(...stash.energies);
+      logEvent(
+        state,
+        clicker,
+        `Heavy Baton: ${stash.energies.length} Energy → ${target.card.name}.`,
+      );
+      state.pendingHeavyBaton = null;
+      state.pendingInPlayTarget = null;
+      // Resume the queued post-promote continuation now that the picker
+      // resolved. Mirrors the tail of promoteBenchToActive — endTurn /
+      // passTurn live in rules.ts; secondAttack is in actions.ts and
+      // resolved via lazy require to avoid the trainerEffects↔actions
+      // module cycle that a top-level import would create.
+      const cont = state.onPromoteResolved;
+      state.onPromoteResolved = null;
+      if (cont === "endTurn") {
+        endTurnRule(state);
+      } else if (cont === "passTurn") {
+        passTurn(state);
+      } else if (cont === "secondAttack") {
+        // ESM cycle: `actions` already imports `applyTrainerEffect` from
+        // this file at module load. Importing `resumeSecondAttack` back
+        // works because the binding is resolved at call time, not at
+        // load time.
+        resumeSecondAttack(state);
+      }
+      return { ok: true };
+    }
     case "attachEnergyFromDiscardPicker": {
       // Aura Jab et al. — pull a matching basic Energy out of discard, attach
       // to the clicked Bench Pokémon, decrement remaining. Close picker
@@ -3731,8 +3834,9 @@ export function cancelInPlayTarget(state: GameState): void {
 
 // -------- Hand-reveal resolver -------------------------------------------
 
-function handCardMatches(c: Card, filter: "item" | "tool" | "itemOrTool" | "supporter" | "any"): boolean {
+function handCardMatches(c: Card, filter: "item" | "tool" | "itemOrTool" | "supporter" | "pokemon" | "any"): boolean {
   if (filter === "any") return true;
+  if (filter === "pokemon") return c.supertype === "Pokémon";
   if (c.supertype !== "Trainer") return false;
   const subs = c.subtypes ?? [];
   switch (filter) {
@@ -3791,8 +3895,17 @@ export function resolveHandReveal(
     const toDraw = Math.max(0, postAction.targetSize - clickerPl.hand.length);
     if (toDraw > 0) drawUpTo(state, clicker, toDraw);
   } else if (postAction?.kind === "searchDeckAnyPokemon") {
-    if (!setDeckSearchPick(state, clicker, isPokemonCard, postAction.max, postAction.label)) {
-      logEvent(state, clicker, "finds no Pokémon.");
+    // Perrin: "search for the SAME number of Pokémon" — cap by actual reveal
+    // count, not the upfront max. Other callers (Ultra Ball etc.) use the
+    // fixed max because they always search the full count regardless of
+    // what was revealed.
+    const searchMax = postAction.useRevealedCount
+      ? Math.min(postAction.max, picked.length)
+      : postAction.max;
+    if (searchMax > 0) {
+      if (!setDeckSearchPick(state, clicker, isPokemonCard, searchMax, postAction.label)) {
+        logEvent(state, clicker, "finds no Pokémon.");
+      }
     }
   }
   return { ok: true };

@@ -2,6 +2,7 @@ import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState } from "reac
 import {
   attachEnergy,
   attack,
+  attackPreflight,
   endTurn,
   evolve,
   playBasicToBench,
@@ -32,6 +33,7 @@ import {
   isPokemon,
   resolveCoinGuess,
   setupGame,
+  unspentTurnSlots,
 } from "./engine/rules";
 import { effectiveAttacks, effectiveMaxHp, energyPoolForCost, estimateAttackDamage } from "./engine/ongoingEffects";
 import type { ActionResult } from "./engine/actions";
@@ -829,10 +831,22 @@ export default function App() {
     handle(retreat(state, viewingPlayer, benchIdx), "Retreated.");
   };
 
+  const [endTurnConfirm, setEndTurnConfirm] = useState<string[] | null>(null);
+
   const onEndTurn = () => {
     if (!myTurn) return;
+    const warns = unspentTurnSlots(state, viewingPlayer);
+    if (warns.length > 0) {
+      setEndTurnConfirm(warns);
+      return;
+    }
     handle(endTurn(state, viewingPlayer), "Turn ended.");
   };
+  const confirmEndTurn = () => {
+    setEndTurnConfirm(null);
+    handle(endTurn(state, viewingPlayer), "Turn ended.");
+  };
+  const cancelEndTurn = () => setEndTurnConfirm(null);
 
   const onReset = () => {
     rngRef.current = makeRng(Date.now());
@@ -874,15 +888,23 @@ export default function App() {
     // Use the ability-aware pool so abilities like Meganium's Wild Growth
     // (each Basic Grass = 2 Grass) are honored when computing payability.
     const provided = energyPoolForCost(me.active, state);
-    return effectiveAttacks(me.active).map((a, i) => ({
-      index: i,
-      name: a.name,
-      damage: a.damage,
-      damageText: a.damageText,
-      cost: a.cost,
-      payable: canPayCost(provided, a.cost),
-      estimated: estimateAttackDamage(state, viewingPlayer, me.active!, a),
-    }));
+    return effectiveAttacks(me.active).map((a, i) => {
+      // Mirror the engine's full pre-attack legality check so the button
+      // disables + tooltips the reason. attackPreflight is the same gate
+      // attack() runs internally — single source of truth, can't drift.
+      const pre = attackPreflight(state, viewingPlayer, i);
+      const blockedReason = pre.ok ? null : pre.reason;
+      return {
+        index: i,
+        name: a.name,
+        damage: a.damage,
+        damageText: a.damageText,
+        cost: a.cost,
+        payable: canPayCost(provided, a.cost),
+        blockedReason,
+        estimated: estimateAttackDamage(state, viewingPlayer, me.active!, a),
+      };
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me.active, me.active?.card, state.log.length, state.turn, viewingPlayer]);
 
@@ -1232,6 +1254,14 @@ export default function App() {
             onContinue={() => setMulliganNoticeDismissed(true)}
           />
         )}
+
+      {endTurnConfirm && (
+        <EndTurnConfirmModal
+          warnings={endTurnConfirm}
+          onConfirm={confirmEndTurn}
+          onCancel={cancelEndTurn}
+        />
+      )}
 
       {!preGameOpen &&
         state.phase === "coinFlip" &&
@@ -1862,7 +1892,7 @@ interface ActionBarProps {
   terminalPromote: boolean;
   statusMsg: string;
   me: GameState["players"]["p1"];
-  attacks: { index: number; name: string; damage: number; damageText?: string; cost: string[]; payable: boolean; estimated: number }[];
+  attacks: { index: number; name: string; damage: number; damageText?: string; cost: string[]; payable: boolean; blockedReason: string | null; estimated: number }[];
   activatable: { p: PokemonInPlay; a: Ability; i: number; location: string }[];
   stadiumButton?: React.ReactNode;
   canUndo?: boolean;
@@ -1958,13 +1988,22 @@ function ActionBarInner({
               const preview = a.payable && myTurn && a.estimated > 0
                 ? ` → ${a.estimated}`
                 : "";
+              // Disable + tooltip the reason for any pre-click block (T1
+              // ban, asleep, paralyzed, locked, Power Saver gate, etc.) so
+              // the player sees WHY before clicking. `payable` covers
+              // energy cost; `blockedReason` covers everything else the
+              // engine's `attackPreflight` would reject.
+              const disabledForReason = !myTurn || !a.payable || promoteOpen || !!a.blockedReason;
+              const tooltip = a.blockedReason
+                ? `${a.blockedReason}\n\nCost: ${a.cost.join(" / ") || "—"}\nBase: ${baseText}`
+                : `Cost: ${a.cost.join(" / ") || "—"}\nBase: ${baseText}\nExpected vs current defender: ${a.estimated}`;
               return (
                 <button
                   key={a.index}
                   className="attack-btn"
-                  disabled={!myTurn || !a.payable || promoteOpen}
+                  disabled={disabledForReason}
                   onClick={() => onAttack(a.index)}
-                  title={`Cost: ${a.cost.join(" / ") || "—"}\nBase: ${baseText}\nExpected vs current defender: ${a.estimated}`}
+                  title={tooltip}
                 >
                   <span className="atk-name">{a.name}</span>
                   <span className="atk-damage">{baseText}{preview}</span>
@@ -2041,6 +2080,7 @@ const ActionBar = memo(ActionBarInner, (prev, next) => {
     const a = prev.attacks[i], b = next.attacks[i];
     if (a.name !== b.name) return false;
     if (a.payable !== b.payable) return false;
+    if (a.blockedReason !== b.blockedReason) return false;
     if (a.estimated !== b.estimated) return false;
     if (a.damage !== b.damage) return false;
   }
@@ -2337,6 +2377,41 @@ function CoinResultBanner({
         <p className="modal-hint">
           You called <b>{guess}</b>. CPU won the toss — they'll choose who goes first.
         </p>
+      </div>
+    </div>
+  );
+}
+
+function EndTurnConfirmModal({
+  warnings,
+  onConfirm,
+  onCancel,
+}: {
+  warnings: string[];
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>End turn?</h2>
+        </div>
+        <div className="mulligan-body">
+          <p>You haven't used:</p>
+          <ul>
+            {warnings.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+          <p className="muted">
+            These slots reset on the opponent's turn — they don't carry over.
+          </p>
+        </div>
+        <div className="modal-actions">
+          <button onClick={onCancel}>Cancel</button>
+          <button className="primary" onClick={onConfirm}>End turn anyway</button>
+        </div>
       </div>
     </div>
   );
