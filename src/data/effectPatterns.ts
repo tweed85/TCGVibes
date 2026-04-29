@@ -1065,8 +1065,14 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
   // ---- Damage scaling per filtered friendly/opponent in play --------------
   // "This attack does N damage for each of your Pokémon in play [that has the
   // Round attack / that has X in its name / Type Pokémon]."
-  // Skipped if perFriendlyBench etc. already matched.
-  detectPerPokemonFilter(text, effects);
+  // Skipped if perFriendlyBench etc. already matched. Multiplicative form
+  // ("N× damage for each ...") zeros the base damage so the parsed N from
+  // damage="N×" doesn't add to the per-X scaler — without this, Spidops's
+  // Rocket Rush at 6 TR Pokémon dealt 30 + 30×6 = 210 instead of 180.
+  {
+    const r = detectPerPokemonFilter(text, effects);
+    if (r.multiplicativeMatched) baseDamageOverride = 0;
+  }
 
   // ---- Discard Stadium ----------------------------------------------------
   if (/discard a stadium in play/i.test(text)) {
@@ -3763,17 +3769,39 @@ function parsePokemonFilter(clauseRaw: string): PokemonFilter | undefined {
     const m = c.match(/^([a-z'’ ]+?)'s\s+pok[eé]mon$/i);
     if (m) return { kind: "namePart", namePart: `${m[1]}'s` };
   }
+  // Bare "<NameWithApostrophe>'s" — used when the caller has already
+  // stripped the trailing "pokemon" word (e.g., the per-pokemon-filter
+  // regex captures only the qualifier before "pokemon"). Spidops's
+  // "...for each of your Team Rocket's Pokémon in play" passes
+  // "Team Rocket's" alone here.
+  {
+    const m = c.match(/^([a-z'’ ]+?)'s$/i);
+    if (m) return { kind: "namePart", namePart: `${m[1]}'s` };
+  }
   return undefined;
 }
 
-function detectPerPokemonFilter(text: string, effects: AttackEffect[]): void {
-  // Multiplicative: damage="N×", "for each of your <X> Pokémon in play"
-  // Additive: damage="N+", "N more damage for each of your <X> Pokémon in play"
+// Returns `true` if a multiplicative "N× damage for each <X> Pokémon in
+// play" effect was matched — caller must zero the base damage override
+// because "N×" implies the base is purely multiplicative on the per-X
+// count (no flat damage without the multiplier). The additive variant
+// ("N more damage for each ...", damage="N+") preserves base damage and
+// returns false. Mirrors the per-bench / per-energy / per-counter
+// handlers at lines 90-126 which already write `baseDamageOverride = 0`
+// for the multiplicative case.
+function detectPerPokemonFilter(
+  text: string,
+  effects: AttackEffect[],
+): { multiplicativeMatched: boolean } {
   const reMult = /(\d+) damage for each of your (?:([^.]+?)\s+)?pok[eé]mon in play(?:\s+([^.]*?))?(?:\.|$)/i;
   const reAdd = /(\d+) more damage for each of your (?:([^.]+?)\s+)?pok[eé]mon in play/i;
   const reOppMult = /(\d+) damage for each of your opponent'?s (?:([^.]+?)\s+)?pok[eé]mon in play/i;
 
-  for (const [re, side] of [[reMult, "friendly"], [reAdd, "friendly"], [reOppMult, "opponent"]] as const) {
+  for (const [re, side, isMultiplicative] of [
+    [reMult, "friendly", true],
+    [reAdd, "friendly", false],
+    [reOppMult, "opponent", true],
+  ] as const) {
     const m = text.match(re);
     if (!m) continue;
     if (
@@ -3797,8 +3825,9 @@ function detectPerPokemonFilter(text: string, effects: AttackEffect[]): void {
       filter,
       includeActive: true,
     });
-    break;
+    return { multiplicativeMatched: isMultiplicative };
   }
+  return { multiplicativeMatched: false };
 }
 
 function detectRandomHandDiscard(text: string, effects: AttackEffect[]): void {

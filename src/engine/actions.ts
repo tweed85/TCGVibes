@@ -73,6 +73,15 @@ function requireMain(state: GameState, player: PlayerId): ActionResult {
   return ok;
 }
 
+// Returns true if this Supporter has an explicit "may use this card during
+// your first turn" rules text — a per-card exception to the standard T1
+// supporter ban for the going-first player. Currently only Team Rocket's
+// Proton qualifies; future cards with the same exception go in this list.
+function supporterAllowsFirstTurn(card: import("./types").TrainerCard): boolean {
+  if (card.name === "Team Rocket's Proton") return true;
+  return false;
+}
+
 export function playBasicToBench(
   state: GameState,
   player: PlayerId,
@@ -372,7 +381,11 @@ export function playTrainer(
     // Rulebook: the player who goes first can't play a Supporter on their
     // first turn. `firstTurnNoAttack` is true only during the starting
     // player's first turn — regardless of whether that's p1 or p2.
-    if (state.firstTurnNoAttack)
+    // Exception: certain Supporters are explicitly playable on T1 (e.g.,
+    // Team Rocket's Proton: "If you go first, you may use this card during
+    // your first turn."). Mirror the Debut Performance attack-ban exception
+    // pattern at the attack site.
+    if (state.firstTurnNoAttack && !supporterAllowsFirstTurn(t))
       return fail("First player can't play a Supporter on the first turn.");
   }
 

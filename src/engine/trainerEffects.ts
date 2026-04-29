@@ -43,6 +43,7 @@ export type TrainerEffectId =
   // Items (search / ball / heal / gust)
   | "searchBasicPokemon1" // Nest Ball
   | "searchBasicPokemon2Poffin" // Buddy-Buddy Poffin (70 HP or less cap)
+  | "protonSearchBasicTR" // Team Rocket's Proton — up to 3 Basic TR Pokémon
   | "searchUpTo2Basic" // Brock's Scouting (no HP cap)
   | "searchAnyPokemon" // Ultra Ball (with discard 2)
   | "searchAnyPokemonFree" // Master Ball (no cost)
@@ -109,7 +110,8 @@ export type TrainerEffectId =
   | "shuffleHandDrawDrasna" // Drasna — flip 8/3
   | "discardHandDraw5" // Carmine
   | "drawUntil6Discard" // Iris's Fighting Spirit (cost: discard 1)
-  | "drawUntil5" // Team Rocket's Ariana (no pre-discard)
+  | "drawUntil5" // generic draw-cards-until-5 patterns
+  | "arianaDrawUntilTR" // Team Rocket's Ariana — 5, or 8 if all in-play are TR
   | "naveenPreDiscardDraw5" // Naveen — discard any, then draw to 5
   | "drawCoinFlip42" // Picnicker
   | "draytonTop7" // Drayton — look at top 7, grab a Pokémon + Trainer
@@ -330,9 +332,12 @@ export function detectTrainerEffect(t: ApiTrainer): TrainerEffectId | undefined 
 
   // Naveen — discard any, then draw to 5 (interactive).
   if (t.name === "Naveen") return "naveenPreDiscardDraw5";
-  // Other draw-until-5 patterns (Team Rocket's Ariana, etc.) — no pre-discard.
-  if (t.name === "Team Rocket's Ariana" ||
-      /draw cards until you have 5 cards in your hand/i.test(text))
+  // Team Rocket's Ariana — draws to 5, or to 8 if all in-play are TR.
+  // Routed through its own effect id so the conditional all-TR check
+  // doesn't infect generic drawUntil5 callers.
+  if (t.name === "Team Rocket's Ariana") return "arianaDrawUntilTR";
+  // Other draw-until-5 patterns (no pre-discard, no conditional bonus).
+  if (/draw cards until you have 5 cards in your hand/i.test(text))
     return "drawUntil5";
 
   // Picnicker — coin flip: heads 4, tails 2.
@@ -444,8 +449,11 @@ export function detectTrainerEffect(t: ApiTrainer): TrainerEffectId | undefined 
   if (t.name === "Dawn") return "dawnSearchBasicStage1Stage2";
   if (t.name === "Hassel") return "hasselTop8Take3";
 
-  // Team Rocket's Proton on first turn — simplify
-  if (t.name === "Team Rocket's Proton") return "searchBasicPokemon2Poffin"; // approx — 2 Basics
+  // Team Rocket's Proton: search deck for up to 3 Basic Team Rocket's
+  // Pokémon, reveal them, and put them into your hand. Has its own effect
+  // id to honor (a) the up-to-3 cap and (b) the TR-only filter; the prior
+  // mapping to `searchBasicPokemon2Poffin` was an acknowledged stub.
+  if (t.name === "Team Rocket's Proton") return "protonSearchBasicTR";
 
   // ---------------- Remaining items -------------------------------------
   if (t.name === "Mega Signal") return "searchMegaEx";
@@ -1092,6 +1100,20 @@ export function applyTrainerEffect(
         logEvent(state, player, "finds no Basic Pokémon (70 HP or less).");
       }
       return;
+
+    case "protonSearchBasicTR": {
+      // Card: "Search your deck for up to 3 Basic Team Rocket's Pokémon,
+      // reveal them, and put them into your hand. Then, shuffle your deck."
+      // Predicate: Basic Pokémon whose name starts with "Team Rocket's".
+      const isBasicTr = (c: Card): boolean =>
+        c.supertype === "Pokémon" &&
+        (c.subtypes ?? []).includes("Basic") &&
+        c.name.toLowerCase().startsWith("team rocket's");
+      if (!setDeckSearchPick(state, player, isBasicTr, 3, "Team Rocket's Proton: pick up to 3 Basic Team Rocket's Pokémon")) {
+        logEvent(state, player, "Team Rocket's Proton: no Basic Team Rocket's Pokémon in deck.");
+      }
+      return;
+    }
     case "searchUpTo2Basic":
       if (!setDeckSearchPick(state, player, isBasicPokemonCard, 2, "Brock's Scouting: pick up to 2 Basic Pokémon")) {
         logEvent(state, player, "finds no Basic Pokémon.");
@@ -1587,6 +1609,20 @@ export function applyTrainerEffect(
 
     case "drawUntil5": {
       drawUpTo(state, player, Math.max(0, 5 - pl.hand.length));
+      return;
+    }
+
+    case "arianaDrawUntilTR": {
+      // Card text: "Draw cards until you have 5 cards in your hand. If
+      // all of your Pokémon in play are Team Rocket's Pokémon, draw cards
+      // until you have 8 cards in your hand instead."
+      const inPlay = [pl.active, ...pl.bench]
+        .filter((p): p is PokemonInPlay => !!p);
+      const allTR =
+        inPlay.length > 0 &&
+        inPlay.every((p) => p.card.name.toLowerCase().startsWith("team rocket's"));
+      const target = allTR ? 8 : 5;
+      drawUpTo(state, player, Math.max(0, target - pl.hand.length));
       return;
     }
 
