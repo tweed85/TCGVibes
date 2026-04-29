@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "description": "First-3-turn sequences extracted from real tournament play. Indexed by {deck_archetype, going_first}. Multiple-source matches strengthen confidence — entries with sample_count: 1 are observation, not yet canonical.",
+  "entries": [
+    {
+      "deck_archetype": "rocket-mewtwo",
+      "going_first": true,
+      "sample_count": 1,
+      "sources": ["prague-2026-r9-rocket-mewtwo-vs-dragapult-blaziken.json#games[0].turns[0]"],
+      "turn_1": {
+        "primary_supporter": "Team Rocket's Proton",
+        "supporter_target": "search up to 3 Basic Team Rocket Pokémon to HAND (not bench)",
+        "items": [
+          { "card": "Ultra Ball", "purpose": "tutor key Pokémon to hand; ideal pitch is a basic energy if any in hand" },
+          { "card": "Team Rocket's Transceiver", "purpose": "search a TR supporter (ideally Team Rocket's Ariana for T2)" }
+        ],
+        "bench": ["Team Rocket's Tarountula"],
+        "energy_attach": { "to": "active basic", "energy": "Team Rocket's Energy (special, counts as 2 energy)" },
+        "ends_turn_with": "1 active TR basic, 1+ benched TR basic, ~1 supporter banked in hand for T2 (Ariana), at least 1 special TR Energy attached"
+      },
+      "turn_2": {
+        "primary_supporter": "Team Rocket's Ariana",
+        "supporter_value": "draws to 8 if all in-play are TR Pokémon (5-card draw if not)",
+        "ideal_secondary": "evolve a Tarountula→Spidops if possible, then Spidops Charging Up to attach a basic energy from discard, then Rocket Rush attack scaling with TR Pokémon in play (typical 90-150 dmg early)"
+      },
+      "turn_3": {
+        "primary_supporter": "Team Rocket's Giovanni or Team Rocket's Archer",
+        "purpose": "Giovanni gust + draw 2; or Archer 5-card refill",
+        "follow_up": "Mewtwo ex Psydrive line: 1 charged Spidops bench + Mewtwo manual energy + special TR Energy = 160-220 damage range"
+      },
+      "notes": "T1 Proton-to-HAND (not bench) is critical — preserves Ariana scaling next turn. The biggest archetype anti-pattern: shipping TR Pokémon to bench via search instead of hand."
+    },
+    {
+      "deck_archetype": "dragapult-blaziken-munkidori",
+      "going_first": false,
+      "sample_count": 1,
+      "sources": ["prague-2026-r9-rocket-mewtwo-vs-dragapult-blaziken.json#games[0].turns[1]"],
+      "turn_1_or_2_setup": {
+        "primary_supporter": "Lillie's Determination",
+        "supporter_value": "shuffle hand to deck and draw 8 — best when paired with Meowth ex 'turn-into-Lillie's' line",
+        "items": [
+          { "card": "Buddy-Buddy Poffin", "purpose": "tutor 2 basics — typically Torchic + Dreepy" },
+          { "card": "Ultra Ball", "purpose": "discard pitch fuels later Blaziken Charging Up + Crispin tutors" }
+        ],
+        "bench": ["Torchic", "Dreepy x2-3", "Budew (lead-active candidate)"],
+        "energy_attach": { "to": "Torchic or Dragapult line", "energy": "Psychic or Fire (often via Crispin tutor)" },
+        "active_choice": "Budew → Itchy Pollen for item lock (NOT Phantom Dive turn) — slow archetype, stall while building Stage 2"
+      },
+      "turn_3_target": {
+        "ideal_state": "1 Drakloak evolved, 1+ Torchic-Combusken line developing, 1 charged Dragapult prep, Munkidori benched for Adrena-Brain math",
+        "first_real_attack": "Phantom Dive turn 4 (or turn 5 if no Rare Candy) — pre-empts opp by gusting their unpowered key threat with Boss's Orders"
+      },
+      "going_first_variant": {
+        "scenario": "vs Team Rocket archetype",
+        "rationale": "Choose to go FIRST despite slower setup, to deny opp's T1 Proton search — eat the T1 Phantom Dive ban in exchange",
+        "trade": "lose the T1 Lillie/Poffin tempo but gain massive disruption to opp's archetype-defining T1"
+      }
+    }
+  ],
+  "candidate_lines_to_validate": [
+    {
+      "deck_archetype": "rocket-mewtwo",
+      "line": "T3 Giovanni gust → push opp big-attacker to bench → Mewtwo Psydrive on whatever's promoted",
+      "needs_more_samples": true
+    },
+    {
+      "deck_archetype": "dragapult-blaziken-munkidori",
+      "line": "T2 spread Crispin energies across 2 Drakloaks rather than committing to 1 — defuses Boss's/Giovanni gust",
+      "needs_more_samples": true
+    }
+  ]
+}

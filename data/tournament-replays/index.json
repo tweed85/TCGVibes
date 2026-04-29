@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "description": "Manifest of analyzed tournament replays. Feeds the AI overhaul Phase 8 opening book and ad-hoc archetype lookups (e.g. 'what's the canonical T2 line for X?').",
+  "replays": [
+    {
+      "file": "prague-2026-r9-rocket-mewtwo-vs-dragapult-blaziken.json",
+      "event": "Prague Regional Championships 2026",
+      "round": "Day 2 Phase 2 Round 1 (overall Round 9)",
+      "players": ["Mateesh (Team Rocket Mewtwo)", "Alexandre (Dragapult-Blaziken)"],
+      "decks": ["rocket-mewtwo", "dragapult-blaziken-munkidori"],
+      "format": "Standard",
+      "regulation_marks_seen": ["H", "I", "J"],
+      "source_url": "https://www.youtube.com/watch?v=WHRs5xDW-kI",
+      "recorded_at": "2026-04-29",
+      "match_outcome": "1-1 with Game 3 truncated by transcript; Game 3 momentum favored Alexandre at end of caption window",
+      "notes": "First replay logged. Player full names not confirmed in Limitless top-255 standings — handles match caster pronunciation. Decklists are representative archetypal lists from the same tournament (Cipolla 8th, Tallone 106th)."
+    }
+  ]
+}

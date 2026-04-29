@@ -17,6 +17,8 @@ export type Archetype =
   | "arboliva"
   | "alakazam"
   | "lucario-ex"
+  | "rocket-mewtwo"
+  | "dragapult-blaziken"
   | "generic";
 
 // Distinctive cards that flag a deck as an archetype. The first match wins;
@@ -33,6 +35,25 @@ const SIGNATURES: Record<Exclude<Archetype, "generic">, string[]> = {
   "alakazam": ["Alakazam ex", "Alakazam", "Battle Cage", "Dudunsparce"],
   // Mega Lucario ex Aura Jab → Mega Brave under Premium Power Pro.
   "lucario-ex": ["Mega Lucario ex", "Premium Power Pro", "Riolu"],
+  // Team Rocket's Mewtwo / Spidops — TR-Pokemon scaling deck. Sourced from
+  // Prague Regional 2026 R9 replay. Signature is the TR Mewtwo ex finisher
+  // + the Tarountula→Spidops energy-discard ramp.
+  "rocket-mewtwo": [
+    "Team Rocket's Mewtwo ex",
+    "Team Rocket's Spidops",
+    "Team Rocket's Tarountula",
+    "Team Rocket's Energy",
+  ],
+  // Dragapult ex / Blaziken ex / Munkidori — stall + Stage 2 setup deck.
+  // Slow archetype: leads with Budew Itchy Pollen item-lock while the
+  // Drakloak line evolves. Signature is the unique Dragapult ex Phantom
+  // Dive finisher + the Blaziken ex energy-acceleration line.
+  "dragapult-blaziken": [
+    "Dragapult ex",
+    "Drakloak",
+    "Blaziken ex",
+    "Munkidori",
+  ],
 };
 
 // Archetype detection. Scans every zone (deck, hand, discard, prizes,
@@ -126,6 +147,33 @@ export function archetypeTrainerBonus(
       if (card.name === "Maximum Belt") return 12;
       if (card.name === "Fighting Gong") return 10;
       return 0;
+    case "rocket-mewtwo":
+      // Proton is the T1 enabler (T1-supporter exception, searches 3 TR
+      // Basics to hand — preserves Ariana scaling next turn).
+      if (card.name === "Team Rocket's Proton") return 28;
+      // Ariana is the T2 draw engine (8 cards if all in-play are TR).
+      if (card.name === "Team Rocket's Ariana") return 24;
+      // Transceiver tutors a TR supporter — typically Ariana for T2.
+      if (card.name === "Team Rocket's Transceiver") return 18;
+      // Giovanni gust + draw 2 is the T3 board-control supporter.
+      if (card.name === "Team Rocket's Giovanni") return 16;
+      // Maximum Belt is the ACE SPEC finisher tutoring damage onto Psydrive.
+      if (card.name === "Maximum Belt") return 14;
+      if (card.name === "Team Rocket's Archer") return 10;
+      if (card.name === "Team Rocket's Factory") return 8;
+      return 0;
+    case "dragapult-blaziken":
+      // Crispin tutors Fire-and-Psychic-energy pair — the deck's primary
+      // energy-acceleration trainer.
+      if (card.name === "Crispin") return 22;
+      // Lillie's Determination + Poffin power the slow setup turns.
+      if (card.name === "Lillie's Determination") return 18;
+      if (card.name === "Buddy-Buddy Poffin") return 16;
+      // Rare Candy skips the Drakloak step — critical for T2/T3 Phantom Dive.
+      if (card.name === "Rare Candy") return 16;
+      if (card.name === "Boss's Orders") return 14;
+      if (card.name === "Counter Catcher") return 12;
+      return 0;
     default:
       return 0;
   }
@@ -159,6 +207,22 @@ export function archetypeAttachBonus(
       if (name === "Lucario ex") return 15;
       if (name === "Hariyama") return 10;
       return 0;
+    case "rocket-mewtwo":
+      // Mewtwo ex is the Psydrive finisher — primary attach target once
+      // a Spidops is ramping.
+      if (name === "Team Rocket's Mewtwo ex") return 25;
+      // Spidops needs an energy to attack while Mewtwo charges.
+      if (name === "Team Rocket's Spidops") return 18;
+      if (name === "Team Rocket's Articuno") return 12;
+      return 0;
+    case "dragapult-blaziken":
+      // Dragapult ex (the Phantom Dive finisher) is the planned attacker.
+      if (name === "Dragapult ex") return 25;
+      // Blaziken ex's Charging Up accelerates Fire energy from discard.
+      if (name === "Blaziken ex") return 18;
+      // Drakloak still needs energy in case Rare Candy doesn't show up.
+      if (name === "Drakloak") return 10;
+      return 0;
     default:
       return 0;
   }
@@ -186,6 +250,24 @@ export function archetypeBenchBonus(
       if (name === "Riolu" || name === "Makuhita") return 15;
       if (name === "Solrock" || name === "Lunatone") return 10;
       return 0;
+    case "rocket-mewtwo":
+      // Tarountula is the bench priority — the ramp engine evolves into
+      // Spidops. Mimikyu / Articuno / Lillie's Clefairy ex are the techs.
+      if (name === "Team Rocket's Tarountula") return 18;
+      if (name === "Team Rocket's Mewtwo ex") return 12;
+      if (name === "Team Rocket's Mimikyu") return 10;
+      if (name === "Team Rocket's Articuno") return 10;
+      if (name === "Lillie's Clefairy ex") return 8;
+      return 0;
+    case "dragapult-blaziken":
+      // Multiple Dreepy on bench = redundant Drakloak lines = gust insurance.
+      // Torchic / Munkidori / Budew are key techs; Budew is the lead-active
+      // candidate (Itchy Pollen item-lock buys the slow setup).
+      if (name === "Dreepy") return 18;
+      if (name === "Torchic") return 14;
+      if (name === "Munkidori") return 12;
+      if (name === "Budew") return 10;
+      return 0;
     default:
       return 0;
   }
@@ -208,6 +290,14 @@ export function archetypeAbilityBonus(
       return 0;
     case "lucario-ex":
       if (abilityName === "Heave-Ho Catcher") return 18;
+      return 0;
+    case "rocket-mewtwo":
+      // Charging Up: Spidops attaches a basic energy from discard each turn.
+      if (abilityName === "Charging Up") return 20;
+      return 0;
+    case "dragapult-blaziken":
+      // Adrena-Brain (Munkidori) moves damage to the active for setup turns.
+      if (abilityName === "Adrena-Brain") return 18;
       return 0;
     default:
       return 0;
@@ -301,6 +391,59 @@ const PLAYBOOKS: Partial<Record<Archetype, PlaybookEntry>> = {
       3: { "Maximum Belt": 20 },
     },
     abilityBonus: { 1: {}, 2: {}, 3: { "Heave-Ho Catcher": 30 } },
+  },
+  // Sourced from prague-2026-r9 replay opening-book entry. T1 must search
+  // TR Basics to HAND not bench (preserves Ariana scaling). T2 banks the
+  // 8-card draw; T3 transitions to Giovanni gust + Mewtwo Psydrive.
+  "rocket-mewtwo": {
+    cardBonus: {
+      1: {
+        "Team Rocket's Proton": 60,
+        "Team Rocket's Transceiver": 30,
+        "Ultra Ball": 18,
+      },
+      2: {
+        "Team Rocket's Ariana": 55,
+        "Team Rocket's Transceiver": 22,
+      },
+      3: {
+        "Team Rocket's Giovanni": 40,
+        "Team Rocket's Archer": 25,
+        "Maximum Belt": 25,
+      },
+    },
+    abilityBonus: {
+      1: {},
+      2: { "Charging Up": 30 },
+      3: { "Charging Up": 25 },
+    },
+  },
+  // Slow archetype: setup over T1-T3 with Lillie + Poffin while Budew
+  // item-locks. First real attack is T4 Phantom Dive (or T3 with Rare
+  // Candy). Stage-2 setup playbook diverges from existing archetypes.
+  "dragapult-blaziken": {
+    cardBonus: {
+      1: {
+        "Buddy-Buddy Poffin": 35,
+        "Lillie's Determination": 30,
+        "Ultra Ball": 18,
+      },
+      2: {
+        "Crispin": 45,
+        "Rare Candy": 35,
+        "Buddy-Buddy Poffin": 22,
+      },
+      3: {
+        "Boss's Orders": 25,
+        "Counter Catcher": 20,
+        "Crispin": 28,
+      },
+    },
+    abilityBonus: {
+      1: {},
+      2: { "Adrena-Brain": 18 },
+      3: { "Adrena-Brain": 22 },
+    },
   },
 };
 

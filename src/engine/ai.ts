@@ -91,11 +91,40 @@ const isRuleBox = (c: PokemonCard): boolean =>
 
 // --- Coin flip / setup -----------------------------------------------------
 
-// Going second is a meta edge (can attack on T1, opponent can't Supporter T1).
+// Going second is the default meta edge (can attack on T1, opponent can't
+// play a Supporter on T1). But against decks that *have* a T1-supporter
+// exception (Team Rocket's Proton, Carmine), winning the flip and going
+// FIRST denies that core enabler — worth eating our own T1 attack ban.
+// Sourced from Prague R9 G3: champion chose first specifically to deny
+// opp's T1 Proton search.
+const T1_SUPPORTER_DENIAL_TARGETS = [
+  "Team Rocket's Proton",
+  "Team Rocket's Tarountula",
+  "Team Rocket's Spidops",
+  "Team Rocket's Mewtwo ex",
+  "Carmine",
+];
+
+function shouldGoFirstForT1Denial(state: GameState, me: PlayerId): boolean {
+  // v2 only — v1 keeps the "always go second" baseline.
+  if (!v2Active(state, me)) return false;
+  const opp = state.players[opponentOf(me)];
+  // We can see opp's decklist (deck + hand + prizes + discard + in-play)
+  // — same visibility as detectArchetype. The cards aren't drawn yet so
+  // hand is hand-of-7 only, but the archetype is overwhelmingly determined
+  // by the 60-card deck.
+  const all: Card[] = [...opp.deck, ...opp.hand, ...opp.discard, ...opp.prizes];
+  if (opp.active) all.push(opp.active.card);
+  for (const p of opp.bench) all.push(p.card);
+  const names = new Set(all.map((c) => c.name));
+  return T1_SUPPORTER_DENIAL_TARGETS.some((n) => names.has(n));
+}
+
 export function resolveAiCoinChoice(state: GameState): boolean {
   if (state.phase !== "coinFlip" || !state.coinFlip || state.coinFlip.step !== "chooseFirst") return false;
   if (state.coinFlip.winner !== "p2") return false;
-  chooseFirstPlayer(state, "p2", false);
+  const goFirst = shouldGoFirstForT1Denial(state, "p2");
+  chooseFirstPlayer(state, "p2", goFirst);
   return true;
 }
 
@@ -818,9 +847,28 @@ function rampEngineBonus(target: PokemonInPlay): number {
   if (name === "Fan Rotom") return 40; // Fan Call deck thin
   if (name === "Fezandipiti ex") return 50; // Flip the Script
   if (name === "Munkidori") return 40; // Adrena-Brain
+  if (name === "Team Rocket's Spidops") return 50; // Charging Up energy-from-discard
+  if (name === "Blaziken ex") return 50; // Charging Up Fire-from-discard
   // Stage-2 setup pieces still on bench (means opp is mid-evolve).
   const subtypes = target.card.subtypes ?? [];
   if (subtypes.includes("Stage 2") && target.attachedEnergy.length === 0) return 30;
+  // Un-powered high-ceiling punchers: rule-box attackers that haven't paid
+  // their energy yet. KO'ing them now is far cheaper than letting them
+  // come down on a charged Spidops/Blaziken/Drakloak. Identified during
+  // the Prague R9 replay walkthrough — the gust priority list previously
+  // only rewarded ramp engines, missing the "kill the puncher before it
+  // boots" line.
+  if (target.attachedEnergy.length === 0) {
+    if (name === "Team Rocket's Mewtwo ex") return 55;
+    if (name === "Dragapult ex") return 55;
+    if (name === "Mega Lucario ex") return 50;
+    if (name === "Arboliva ex") return 45;
+    if (name === "Alakazam ex") return 45;
+    // Generic fallback: any rule-box with 0 energy on bench is a worth-targeting
+    // puncher. Lower magnitude so it doesn't outrank the named ramp engines,
+    // but enough to prefer it over a powered minor attacker.
+    if (isRuleBox(target.card)) return 30;
+  }
   return 0;
 }
 
@@ -2274,6 +2322,7 @@ function scorePosition(state: GameState, player: PlayerId): number {
     // (already have ≥ cost-1 energy + at least one valid attack). A bench
     // full of half-powered Pokémon scores too high without this.
     let readyBench = 0;
+    let nearlyReadyBench = 0;
     for (const p of me.bench) {
       if (p.attachedEnergy.length === 0) continue;
       const attacks = p.card.attacks;
@@ -2282,9 +2331,30 @@ function scorePosition(state: GameState, player: PlayerId): number {
       const hasCheapAttack = attacks.some((a) =>
         canPayCost(provided, effectiveAttackCost(state, p, a.cost)),
       );
-      if (hasCheapAttack) readyBench++;
+      if (hasCheapAttack) {
+        readyBench++;
+        continue;
+      }
+      // One energy short of paying any attack — still gust insurance after
+      // the next attach.
+      const minShort = Math.min(
+        ...attacks.map((a) => {
+          const cost = effectiveAttackCost(state, p, a.cost);
+          return Math.max(0, cost.length - provided.length);
+        }),
+      );
+      if (minShort === 1) nearlyReadyBench++;
     }
     s += readyBench * 15;
+    // Gust-insurance bonus: redundant ready bench attackers convert "opp
+    // gusts our finisher = -2 prizes and tempo" into "opp gusts → we still
+    // have a swap-and-attack line." The second ready attacker is worth
+    // significantly more than the first since it removes the single-point-
+    // of-failure. Sourced from Prague R9 G1 T4: champion spread Crispin
+    // energies across two Drakloaks specifically to defuse Boss's/Giovanni.
+    if (readyBench >= 2) s += 35;
+    if (readyBench >= 3) s += 15;
+    s += nearlyReadyBench * 5;
   }
 
   return s;
