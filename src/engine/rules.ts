@@ -737,14 +737,26 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
       // `ko.attachedEnergy` so the standard discard-attached-cards step
       // doesn't sweep them away.
       if (owner.bench.length > 0 && ko.attachedEnergy.length > 0) {
-        const moveCount = Math.min(act.max, ko.attachedEnergy.length);
+        // Card text: "move up to 3 Basic Energy cards." Filter to Basic Energy
+        // only — Special Energy cards do NOT move.
+        const basicEnergyIdxs: number[] = [];
+        for (let i = 0; i < ko.attachedEnergy.length; i++) {
+          if (ko.attachedEnergy[i].subtypes.includes("Basic")) basicEnergyIdxs.push(i);
+        }
+        const moveCount = Math.min(act.max, basicEnergyIdxs.length);
+        if (moveCount === 0) break;
         const interactive = !owner.isAI && owner.bench.length > 1;
         if (interactive) {
-          const moved = ko.attachedEnergy.splice(0, moveCount);
+          // Splice basics out (back-to-front so indexes stay valid).
+          const moved: import("./types").EnergyCard[] = [];
+          for (let i = basicEnergyIdxs.length - 1; i >= 0 && moved.length < moveCount; i--) {
+            const [e] = ko.attachedEnergy.splice(basicEnergyIdxs[i], 1);
+            moved.unshift(e);
+          }
           state.pendingHeavyBaton = {
             ownerId,
             energies: moved,
-            max: moveCount,
+            max: moved.length,
           };
           logEvent(state, ownerId, `Heavy Baton: pick a Bench Pokémon to receive ${moved.length} Energy.`);
         } else {
@@ -752,13 +764,13 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
             .slice()
             .sort((a, b) => b.attachedEnergy.length - a.attachedEnergy.length)[0];
           let moved = 0;
-          while (moved < moveCount && ko.attachedEnergy.length > 0) {
-            const [e] = ko.attachedEnergy.splice(0, 1);
+          for (let i = basicEnergyIdxs.length - 1; i >= 0 && moved < moveCount; i--) {
+            const [e] = ko.attachedEnergy.splice(basicEnergyIdxs[i], 1);
             target.attachedEnergy.push(e);
             moved++;
           }
           if (moved > 0) {
-            logEvent(state, ownerId, `Heavy Baton moves ${moved} Energy to ${target.card.name}.`);
+            logEvent(state, ownerId, `Heavy Baton moves ${moved} Basic Energy to ${target.card.name}.`);
           }
         }
       }

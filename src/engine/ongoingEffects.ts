@@ -1596,7 +1596,8 @@ export function toolOnDamageActions(
         break;
       case "Deluxe Bomb":
         if (defenderIsActive) {
-          out.push({ kind: "counterDamage", target: "attacker", damage: 60 });
+          // 12 damage counters = 120 damage.
+          out.push({ kind: "counterDamage", target: "attacker", damage: 120 });
         }
         break;
       case "Handheld Fan":
@@ -1744,8 +1745,9 @@ export function toolOnKoActions(
         break;
       case "Heavy Baton": {
         // Only triggers if the KO'd holder has an exact Retreat Cost of 4.
+        // Card text: "move up to 3 Basic Energy cards." Cap at 3.
         const cost = defender.card.retreatCost ?? [];
-        if (cost.length === 4) out.push({ kind: "moveEnergyToBench", max: 4 });
+        if (cost.length === 4) out.push({ kind: "moveEnergyToBench", max: 3 });
         break;
       }
     }

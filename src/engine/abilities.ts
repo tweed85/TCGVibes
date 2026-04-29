@@ -467,6 +467,12 @@ function checkCondition(
       if (!hasAbility) {
         return { ok: false, reason: `Requires an Active Pokémon with the ${cond.abilityName} Ability.` };
       }
+      // Also verify the named ability is currently ACTIVE — Path to the Peak
+      // / Sticky Bind / Initialization can suppress it, in which case the
+      // condition shouldn't be satisfied.
+      if (active && !abilitiesActiveOnInstance(state, active)) {
+        return { ok: false, reason: `${cond.abilityName} is currently suppressed.` };
+      }
       return { ok: true };
     }
     case "yourPokemonKoedLastOppTurn": {
@@ -1801,17 +1807,12 @@ const TRIGGERED_ON_EVOLVE: Record<string, TriggeredOnEvolveEffect> = {
     },
   },
   // Alakazam / Kadabra — "Psychic Draw". Alakazam draws 3, Kadabra draws 2.
-  // Gated to fire only when the evolved Pokémon lands on the Bench so the
-  // draw engine doesn't fire when evolving the Active spot. (House rule:
-  // keeps the AI from suiciding draw value on a vulnerable Active.)
+  // Per printed text, the trigger fires regardless of Active vs Bench
+  // placement (the card has no such restriction).
   "Psychic Draw": {
     label: "Psychic Draw: draw cards",
     run: (state, player, self) => {
       const pl = state.players[player];
-      if (pl.active?.instanceId === self.instanceId) {
-        logEvent(state, player, `Psychic Draw skipped — ${self.card.name} is in the Active Spot.`);
-        return;
-      }
       const count = self.card.name === "Kadabra" ? 2 : 3;
       let drawn = 0;
       for (let i = 0; i < count; i++) {
@@ -2591,7 +2592,7 @@ export function fireTriggeredOnMoveToActive(
     const latios = allies.find(
       (p) => p.card.name === "Latios" && (p.card.abilities ?? []).some((a) => a.name === "Lustrous Assist"),
     );
-    if (latios && !latios.abilityUsedThisTurn && abilitiesActiveOn(state, latios.card)) {
+    if (latios && !latios.abilityUsedThisTurn && abilitiesActiveOnInstance(state, latios)) {
       // Move any amount of Energy from Benched Pokémon to Active. Auto: move
       // every energy on every benched ally onto the Active.
       let moved = 0;

@@ -734,14 +734,22 @@ export default function App() {
       return;
     }
     // Pending Switch item — user clicks their own bench to pick the promoter.
-    if (state.pendingSwitchTarget === viewingPlayer && side === "me") {
-      const benchIdx = me.bench.findIndex((b) => b.instanceId === p.instanceId);
-      if (benchIdx >= 0) {
-        const r = resolveSwitchTarget(state, viewingPlayer, benchIdx);
-        if (!r.ok) setStatusMsg(r.reason ?? "");
-        else setStatusMsg(`Switched in ${p.card.name}.`);
-        rerender();
+    if (state.pendingSwitchTarget === viewingPlayer) {
+      if (side !== "me") {
+        setStatusMsg("Click one of YOUR Benched Pokémon to switch in.");
+        return;
       }
+      const benchIdx = me.bench.findIndex((b) => b.instanceId === p.instanceId);
+      if (benchIdx < 0) {
+        // Clicked the Active — that's the Pokémon that's switching OUT.
+        // The picker wants the new Active, which lives on the bench.
+        setStatusMsg("Click a Benched Pokémon (not the Active) to switch in.");
+        return;
+      }
+      const r = resolveSwitchTarget(state, viewingPlayer, benchIdx);
+      if (!r.ok) setStatusMsg(r.reason ?? "");
+      else setStatusMsg(`Switched in ${p.card.name}.`);
+      rerender();
       return;
     }
     if (promoteOpen && side === "me") {
@@ -1114,6 +1122,13 @@ export default function App() {
       for (const p of me.bench) consider(p, false, false);
       if (opp.active) consider(opp.active, true, true);
       for (const p of opp.bench) consider(p, false, true);
+    }
+
+    // Pending Switch (Item) — highlight own bench so the user knows what's
+    // clickable. Without this hint, the prompt's "Click a Benched Pokémon"
+    // text is the only cue and easy to overlook.
+    if (state.pendingSwitchTarget === viewingPlayer) {
+      for (const p of me.bench) own.add(p.instanceId);
     }
 
     return { own, opp: opp_, benchHint };

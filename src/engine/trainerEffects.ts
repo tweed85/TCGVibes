@@ -2666,9 +2666,13 @@ export function applyTrainerEffect(
 
     case "primeCatcher": {
       // Gust an opp Benched to Active, then switch your Active with bench.
+      // Auto-picks the highest-HP opp bench (most impactful gust target).
+      // TODO: ACE SPEC — for humans with 2+ opp bench, open a picker for
+      //       the gust target. Multi-step (gust then own-switch) so it
+      //       requires a chained pendingInPlayTarget; left as auto for now.
       const opp = state.players[oppId];
-      const benchedTarget = opp.bench.find((p) => p);
-      if (opp.active && benchedTarget) {
+      if (opp.active && opp.bench.length > 0) {
+        const benchedTarget = opp.bench.slice().sort((a, b) => b.card.hp - a.card.hp)[0];
         const idx = opp.bench.indexOf(benchedTarget);
         const pulled = opp.bench.splice(idx, 1)[0];
         const oppOld = opp.active;

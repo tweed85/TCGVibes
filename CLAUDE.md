@@ -28,10 +28,11 @@ src/
                         isPlayersFirstTurn, setPendingPromote,
                         applyEvolveSideEffects
     actions.ts        play/evolve/attach/retreat/attack/playTrainer/promote,
-                        attackPreflight, supporterAllowsFirstTurn
+                        attackPreflight, T1_SUPPORTER_EXCEPTIONS
     effects.ts        Attack effect resolver
     trainerEffects.ts Trainer dispatch (incl. arianaDrawUntilTR,
-                        protonSearchBasicTR)
+                        protonSearchBasicTR, ltSurgeBargain,
+                        raifortPeek5Discard)
     abilities.ts      Ability detection + activation + triggered dispatch
     ongoingEffects.ts Passives, energy-pool, damage estimator,
                         abilitiesActiveOn / abilitiesActiveOnInstance
@@ -95,9 +96,9 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
   paralyzed, `cantAttackUntilTurn`, per-attack lock, Power Saver,
   Born to Slack, energy cost). UI calls it per-attack to drive the
   disabled + tooltip on the attack button.
-- **Supporter T1 gate** — `supporterAllowsFirstTurn(card)` allows
-  per-card exceptions (currently Team Rocket's Proton). Mirrors the
-  Debut Performance attack-ban exception.
+- **Supporter T1 gate** — `supporterAllowsFirstTurn(card)` reads
+  `T1_SUPPORTER_EXCEPTIONS` (Team Rocket's Proton, Carmine). Mirrors
+  the Debut Performance attack-ban exception.
 - **End Turn pre-confirm.** `unspentTurnSlots` returns warnings for
   Energy attach / Supporter slots the player still has cards for.
 - **Undo: per-action snapshot stack.** `undoStackRef` pushes
@@ -114,11 +115,12 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
 - 6 Prizes; ex/V/VSTAR/GX = 2, VMAX/V-UNION/Mega ex = 3.
 - 5-slot bench. 1 Energy / 1 Supporter / 1 retreat per turn.
 - First player can't attack or play a Supporter on T1 (per-card
-  exceptions: Debut Performance, Team Rocket's Proton).
+  exceptions: Debut Performance, Team Rocket's Proton, Carmine).
 - First-turn evolve gate applies to **both** players' first turn.
 - Weakness ×2, Resistance −N. All 5 Special Conditions with proper
   Checkup + attack-time confusion flip.
-- Status immunity — Festival Grounds, Insomnia, Antique Fossils.
+- Status immunity — Festival Grounds, Insomnia, Antique Fossils,
+  Ancient Booster Energy Capsule (Ancient Pokémon).
 - Retreat + evolution clear statuses (Confused persists on evolve under
   Dizzying Valley; same gate for Rare Candy).
 - Both-Active simultaneous KO — both players promote in sequence.
@@ -141,27 +143,46 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
   copy-attack pipelines, `discardDefenderEndOfOppNextTurn` (Corrosive
   Sludge), `bothActiveKnockedOut`, `attachNFromDiscardToBench`
   (Aura Jab, interactive), **`perPokemonFilter`** (Spidops Rocket
-  Rush — multiplicative "N×" form correctly zeros base damage).
+  Rush — multiplicative "N×" form correctly zeros base damage),
+  `benchSnipe` with `target: "allOpponents"` hits opp Active too
+  (W/R applied) plus bench (no W/R) — Frosmoth Chilling Wings, TR
+  Arbok Spinning Tail.
 - **Abilities**: ~70 activated + triggered-on-evolve / -on-bench /
   -on-move-to-active / -on-move-to-bench. Highlights: `attachEnergy
   FromHandThenDraw` (Teal Dance), `moveDamageOwnToOpp` (Adrena-Brain,
   interactive), `putCountersOnOppThenSelfKO` (Cursed Blast,
   interactive). Triggered: Jewel Seeker, Psychic Draw, Heave-Ho
-  Catcher, Cast-Off Shell, Multiplying Cocoon, Emergency Evolution.
+  Catcher, Cast-Off Shell, Multiplying Cocoon, Emergency Evolution,
+  **Brambleghast Prison Panic** (Confused, not Asleep).
 - **Trainers**: 100+ effects. Hilda + Dawn chained pickers,
   **Colress's Tenacity** (Stadium → Energy chain), **Salvatore**
   (interactive Evolution via `toEvolve`), **Perrin** (interactive
   hand-reveal → search same count via `useRevealedCount` postAction),
   **Team Rocket's Proton** (interactive search up to 3 Basic TR
   Pokémon; T1-bypassed), **Team Rocket's Ariana** (draw to 5, or 8
-  if all in-play are TR), Unfair Stamp ACE SPEC, all Standard
-  staples. AI keeps the auto-resolve path on each.
+  if all in-play are TR), **Brock's Scouting** (Evolution branch when
+  in-play has matching deck Evo, else 2-Basic search), **Lt. Surge's
+  Bargain** (opp consents only when at 1 prize and would win, else
+  user draws 4), **Raifort** (top-5 peek; pick any to discard, rest
+  back on top — uses new `pickedDestination: "discard"` +
+  `unpicked: "topOfDeck"` plumbing), **Potion / Super Potion**
+  (interactive bench picker for the heal target), Unfair Stamp ACE
+  SPEC, all Standard staples. AI keeps the auto-resolve path on each.
 - **Stadiums**: most passives wired. Activated framework exists;
   per-Stadium UI buttons partial.
-- **Tools**: ~18 — HP boosters, retreat helpers, damage boosters,
+- **Tools**: ~22 — HP boosters, retreat helpers, damage boosters,
   berries with auto-discard, KO-triggered (Survival Brace, Lillie's
   Pearl, Amulet of Hope, **Heavy Baton** — interactive Bench-target
-  picker that fires after the holder's owner promotes).
+  picker that fires after the holder's owner promotes). On-damage
+  hooks: Lucky Helmet, Punk Helmet, Deluxe Bomb, TR Hypnotizer,
+  **Handheld Fan** (moves Energy from attacker to attacker's bench).
+  Future-typed: **Future Booster Energy Capsule** (+20 damage, free
+  retreat). Ancient-typed: **Ancient Booster Energy Capsule** (+60
+  HP + status immunity + clears statuses on attach).
+  HP-threshold helpers: **Rescue Board** (-1 retreat, free at HP ≤ 30).
+  Self-discarding TM tools: **Technical Machine: Fluorite** (3-cost
+  attack on holder; discards at end of turn; any tool whose name
+  starts with "Technical Machine" auto-discards in `endTurn`).
 
 ## AI
 
@@ -215,14 +236,17 @@ enough that greedy already plays it well.
 
 ## Test suite
 
-- **Vitest — 272 tests across 22 files** (+ 3 AI_BENCH-gated).
+- **Vitest — 296 tests across 23 files** (+ 3 AI_BENCH-gated).
   - `src/engine/__tests__/`: abilityDetection, dawnChain, energy,
     gameFlow, integration, ongoingEffects, presetDeckSmoke,
     trainerDetection, weakness, undoRng, undoIntegration,
     phantomDiveHuman, attackPreflight, unspentTurnSlots, mvpPickers,
     aiScenarios, mcts, aiBenchmark (gated), **teamRocketCards**
     (Spidops base damage, Ariana conditional draw, Proton T1 bypass
-    + TR-Basic search).
+    + TR-Basic search), **auditFixes** (Carmine T1 / Prison Panic
+    Confused / allOpponents Active / Potion + Super Potion pickers
+    / Raifort / Lt. Surge's Bargain / Brock's branching / Future +
+    Ancient Boosters / Rescue Board HP-threshold / TM Fluorite).
   - `src/data/__tests__/`: decklistParser, effectPatterns.
   - `src/ui/__tests__/`: CardView (energy-pip glyphs), aiPause
     (modal-pause useEffect under fake timers).
