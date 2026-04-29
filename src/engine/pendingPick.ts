@@ -304,7 +304,11 @@ export function resolvePendingPick(
   }
 
   const pl = state.players[player];
-  pl.hand.push(...picked);
+  if (pick.pickedDestination === "discard") {
+    pl.discard.push(...picked);
+  } else {
+    pl.hand.push(...picked);
+  }
 
   // Energy-attach destinations (attack-driven deck searches): pull picked
   // Energy cards back out of the hand and route them onto Pokémon in play.
@@ -338,6 +342,9 @@ export function resolvePendingPick(
       break;
     case "bottomOfDeck":
       pl.deck.push(...unpicked);
+      break;
+    case "topOfDeck":
+      pl.deck.unshift(...unpicked);
       break;
     case "returnToDiscard":
       pl.discard.push(...unpicked);

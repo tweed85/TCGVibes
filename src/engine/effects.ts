@@ -936,6 +936,13 @@ export function resolveAttackEffects(
         break;
       }
       case "benchSnipe": {
+        // "allOpponents" target hits the opp's Active too (with W/R) per
+        // card text "X damage to each of your opponent's Pokémon". Add to
+        // pre-W/R damage so the standard pipeline applies W/R to the Active
+        // hit. Bench-only branches keep their existing behavior.
+        if (e.target === "allOpponents") {
+          damage += e.damage;
+        }
         postHooks.push(() => {
           // Battle Cage: prevents damage to Benched Pokémon from opp attacks.
           if (benchDamageBlocked(state)) {
@@ -1047,10 +1054,12 @@ export function resolveAttackEffects(
             if (e.subtype === "Evolution") return subs.includes("Stage 1") || subs.includes("Stage 2");
             return subs.includes(e.subtype);
           };
+          // amount = 999 sentinel means "heal all damage" (Fluorite).
+          const healAll = e.amount >= 999;
           let total = 0;
           for (const p of allies.filter(matchSub)) {
             const before = p.damage;
-            p.damage = Math.max(0, p.damage - e.amount);
+            p.damage = healAll ? 0 : Math.max(0, p.damage - e.amount);
             total += before - p.damage;
           }
           if (total > 0) logEvent(state, ctx.attackerOwner, `heals ${total} across ${e.subtype} Pokémon.`);

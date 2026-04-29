@@ -173,7 +173,7 @@ export type AttackEffect =
   | { kind: "healEqualToDamageDealt" }
   // "Heal N damage from each of your <subtype> Pokémon." (Leavanny "Healing
   // Wrapping" — only heals Basic Pokémon.)
-  | { kind: "healEachOwnSubtype"; amount: number; subtype: "Basic" | "Stage 1" | "Stage 2" | "Evolution" }
+  | { kind: "healEachOwnSubtype"; amount: number; subtype: "Basic" | "Stage 1" | "Stage 2" | "Evolution" | "Tera" }
   | { kind: "discardOwnEnergy"; count: number } // "Discard N Energy from this Pokémon."
   | { kind: "drawCards"; count: number }
   | { kind: "drawUntilHandSize"; targetSize: number; optional?: boolean } // "Draw cards until you have N in hand."
@@ -1206,6 +1206,7 @@ export interface CoinFlipState {
 export type PendingPickFallback =
   | "shuffleIntoDeck" // search / top-peek effects
   | "bottomOfDeck" // a few peek effects
+  | "topOfDeck" // peek-and-discard: kept cards go back on top in pool order
   | "returnToDiscard"; // discard-recovery effects
 
 // Reveal-opponent's-hand prompt. The initiator (`player`) picks which cards
@@ -1258,6 +1259,8 @@ export interface PendingInPlayTarget {
     | { kind: "energySwitchDest"; sourceInstanceId: string } // second step: user picks destination
     | { kind: "jacintheHeal" } // Jacinthe — heal 150 from a damaged Psychic
     | { kind: "pokeVitalAHeal" } // Poké Vital A — heal 150 from any damaged ally
+    | { kind: "potionHeal" } // Potion — heal 30 from any 1 of your Pokémon
+    | { kind: "superPotionHeal" } // Super Potion — heal 60 + discard 1 Energy
     | { kind: "wondrousPatchAttach" } // Wondrous Patch — attach Psychic from discard to a Benched Psychic
     // Ability: move N damage counters from `sourceInstanceId` (already
     // chosen — the most-damaged ally) to whichever opp Pokémon the player
@@ -1302,6 +1305,9 @@ export interface PendingPick {
   // If true, picked Pokémon go straight onto the Bench instead of the hand
   // (Nest Ball, Buddy-Buddy Poffin, Hop's Bag, Lumiose City).
   toBench?: boolean;
+  // Where picked cards go. Default "hand". "discard" routes picks straight to
+  // the discard pile (Raifort: "discard any number of them").
+  pickedDestination?: "hand" | "discard";
   // If true, picked Pokémon are applied as an evolution onto a matching ally
   // (Salvatore: search for an Evolution, put it onto the Pokémon it evolves
   // from). Falls back to depositing in hand if no eligible ally is found.

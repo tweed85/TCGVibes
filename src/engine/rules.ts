@@ -658,7 +658,7 @@ export function prizeValue(card: PokemonCard): number {
   return 1;
 }
 
-function takePrizes(state: GameState, taker: PlayerId, count: number): void {
+export function takePrizes(state: GameState, taker: PlayerId, count: number): void {
   const opp = state.players[taker];
   let taken = 0;
   for (let i = 0; i < count; i++) {
@@ -1082,6 +1082,18 @@ export function endTurn(state: GameState): void {
         const [e] = p.attachedEnergy.splice(i, 1);
         prev.discard.push(e);
         logEvent(state, prev.id, `Ignition Energy discards itself at end of turn.`);
+      }
+    }
+  }
+  // Technical Machine Tools (TM: Fluorite, etc.): "If this card is attached
+  // to 1 of your Pokémon, discard it at the end of your turn."
+  for (const p of [prev.active, ...prev.bench]) {
+    if (!p) continue;
+    for (let i = p.tools.length - 1; i >= 0; i--) {
+      if (p.tools[i].name.startsWith("Technical Machine")) {
+        const [tool] = p.tools.splice(i, 1);
+        prev.discard.push(tool);
+        logEvent(state, prev.id, `${tool.name} discards itself at end of turn.`);
       }
     }
   }

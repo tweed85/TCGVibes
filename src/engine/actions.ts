@@ -75,11 +75,14 @@ function requireMain(state: GameState, player: PlayerId): ActionResult {
 
 // Returns true if this Supporter has an explicit "may use this card during
 // your first turn" rules text — a per-card exception to the standard T1
-// supporter ban for the going-first player. Currently only Team Rocket's
-// Proton qualifies; future cards with the same exception go in this list.
+// supporter ban for the going-first player. Cards with this exception go
+// in this list.
+const T1_SUPPORTER_EXCEPTIONS = new Set<string>([
+  "Team Rocket's Proton",
+  "Carmine",
+]);
 function supporterAllowsFirstTurn(card: import("./types").TrainerCard): boolean {
-  if (card.name === "Team Rocket's Proton") return true;
-  return false;
+  return T1_SUPPORTER_EXCEPTIONS.has(card.name);
 }
 
 export function playBasicToBench(
@@ -446,6 +449,16 @@ export function playTrainer(
     pl.hand.splice(handIndex, 1);
     p.tools.push(t);
     logEvent(state, player, `attaches ${t.name} to ${p.card.name}.`);
+    // Ancient Booster Energy Capsule: "recovers from all Special Conditions"
+    // when attached to an Ancient Pokémon.
+    if (
+      t.name === "Ancient Booster Energy Capsule" &&
+      (p.card.subtypes ?? []).includes("Ancient") &&
+      p.statuses.length > 0
+    ) {
+      p.statuses = [];
+      logEvent(state, "system", `${p.card.name} recovers from all Special Conditions (Ancient Booster Energy Capsule).`);
+    }
     return ok;
   }
 
@@ -862,6 +875,21 @@ function executeAttackHit(
       } else if (act.kind === "applyStatusToAttacker") {
         if (!atk.statuses.includes(act.status)) atk.statuses.push(act.status);
         logEvent(state, "system", `${atk.card.name} is now ${act.status}.`);
+      } else if (act.kind === "moveEnergyAttackerToAttackerBench") {
+        // Handheld Fan: move 1 Energy from the attacker to one of the
+        // attacker's Bench Pokémon. Even if our holder is KO'd by the
+        // hit, this still fires (per card text "even if this Pokémon is
+        // Knocked Out"). Auto-pick: the attacker's first bench Pokémon.
+        const attackerSide = state.players[player];
+        if (atk.attachedEnergy.length > 0 && attackerSide.bench.length > 0) {
+          const en = atk.attachedEnergy.shift()!;
+          attackerSide.bench[0].attachedEnergy.push(en);
+          logEvent(
+            state,
+            "system",
+            `Handheld Fan: ${en.name} moves from ${atk.card.name} to ${attackerSide.bench[0].card.name}.`,
+          );
+        }
       }
     }
     for (const name of toDiscardAfter) {

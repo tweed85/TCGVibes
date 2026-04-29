@@ -321,8 +321,13 @@ function estimateDamage(
       case "perPrizeOppTaken":
         damage += e.perCount * (6 - state.players[opponentOf(attackerOwner)].prizes.length);
         break;
-      // benchSnipe / selfDamage / applyStatus / heal / discardOwnEnergy /
-      // drawCards don't affect the defender's raw damage tally.
+      case "benchSnipe":
+        // "allOpponents" target adds e.damage to the Active hit (with W/R
+        // applied below). Other targets only hit bench, no defender contribution.
+        if (e.target === "allOpponents") damage += e.damage;
+        break;
+      // selfDamage / applyStatus / heal / discardOwnEnergy / drawCards don't
+      // affect the defender's raw damage tally.
       default:
         break;
     }

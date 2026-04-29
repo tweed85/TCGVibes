@@ -1843,15 +1843,15 @@ const TRIGGERED_ON_EVOLVE: Record<string, TriggeredOnEvolveEffect> = {
       logEvent(state, player, `Heave-Ho Catcher gusts ${pulled.card.name} to Active.`);
     },
   },
-  // Brambleghast — make opp's Active Pokémon Asleep.
+  // Brambleghast — make opp's Active Pokémon Confused.
   "Prison Panic": {
-    label: "Prison Panic: opp's Active is now Asleep",
+    label: "Prison Panic: opp's Active is now Confused",
     run: (state, player) => {
       const oppId: PlayerId = player === "p1" ? "p2" : "p1";
       const opp = state.players[oppId];
       if (!opp.active) return;
-      if (!opp.active.statuses.includes("asleep")) opp.active.statuses.push("asleep");
-      logEvent(state, "system", `${opp.active.card.name} is now Asleep.`);
+      if (!opp.active.statuses.includes("confused")) opp.active.statuses.push("confused");
+      logEvent(state, "system", `${opp.active.card.name} is now Confused.`);
     },
   },
   // Grumpig — look at top 4, attach any Basic Energy found.

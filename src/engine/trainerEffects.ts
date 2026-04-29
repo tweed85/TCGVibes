@@ -10,7 +10,7 @@
 // "if Community Center is in play") are mostly approximated or skipped; the
 // core draw/search/heal behaviors are correct.
 
-import { applyEvolveSideEffects, endTurn as endTurnRule, enforceSpecialEnergyAttachRules, isPlayersFirstTurn, logEvent, makePokemonInPlay, newInstanceId, passTurn, setPendingPromote } from "./rules";
+import { applyEvolveSideEffects, endTurn as endTurnRule, enforceSpecialEnergyAttachRules, isPlayersFirstTurn, logEvent, makePokemonInPlay, newInstanceId, passTurn, setPendingPromote, takePrizes } from "./rules";
 import { clearAllStatuses } from "./rules";
 import { benchDamageBlocked, benchDamageBlockedByFlowerCurtain } from "./ongoingEffects";
 import {
@@ -101,6 +101,7 @@ export type TrainerEffectId =
   // Supporters — draw/hand-refresh
   | "draw3" // Cheren / Urbain / Friends in Paldea
   | "draw4" // Amarys
+  | "ltSurgeBargain" // Lt. Surge's Bargain — opp consents to mutual prize OR you draw 4
   | "draw2Plus2IfOppFew" // Emcee's Hype (2 + 2 if opp ≤ 3 prizes)
   | "draw2Plus2IfHandBig" // Billy & O'Nare (2 + 2 if hand ≥ 10)
   | "eachPlayerShuffleDraw4" // Judge
@@ -424,7 +425,7 @@ export function detectTrainerEffect(t: ApiTrainer): TrainerEffectId | undefined 
   if (t.name === "Iron Defender") return "debuffMinus30OppTurnMetal";
 
   // More supporters / items by name
-  if (t.name === "Lt. Surge's Bargain") return "draw4";
+  if (t.name === "Lt. Surge's Bargain") return "ltSurgeBargain";
   if (t.name === "Team Rocket's Petrel") return "searchTrainer";
   if (t.name === "Cyrano") return "search3Pokemonex";
   if (t.name === "Wally's Compassion") return "healMegaExAndEnergyToHand";
@@ -1114,11 +1115,39 @@ export function applyTrainerEffect(
       }
       return;
     }
-    case "searchUpTo2Basic":
+    case "searchUpTo2Basic": {
+      // Brock's Scouting — "Search your deck for up to 2 Basic Pokémon OR
+      // 1 Evolution Pokémon, reveal them, and put them into your hand."
+      // Auto-pick the Evolution branch when there's a deck Evolution that
+      // can immediately go onto an in-play ally; otherwise the 2-Basic
+      // branch (more flexible, two cards vs one).
+      const inPlayNames = new Set<string>();
+      for (const ally of [pl.active, ...pl.bench]) {
+        if (ally) inPlayNames.add(ally.card.name);
+      }
+      const playableEvolutionInDeck = pl.deck.some((c) =>
+        c.supertype === "Pokémon" &&
+        !!(c as PokemonCard).evolvesFrom &&
+        inPlayNames.has((c as PokemonCard).evolvesFrom!),
+      );
+      if (playableEvolutionInDeck) {
+        const isPlayableEvolution = (c: Card): c is PokemonCard =>
+          c.supertype === "Pokémon" &&
+          !!(c as PokemonCard).evolvesFrom &&
+          inPlayNames.has((c as PokemonCard).evolvesFrom!);
+        if (!setDeckSearchPick(state, player, isPlayableEvolution, 1, "Brock's Scouting: pick 1 Evolution Pokémon")) {
+          // Fallback to Basic search — should never happen due to outer guard.
+          if (!setDeckSearchPick(state, player, isBasicPokemonCard, 2, "Brock's Scouting: pick up to 2 Basic Pokémon")) {
+            logEvent(state, player, "finds no eligible Pokémon.");
+          }
+        }
+        return;
+      }
       if (!setDeckSearchPick(state, player, isBasicPokemonCard, 2, "Brock's Scouting: pick up to 2 Basic Pokémon")) {
         logEvent(state, player, "finds no Basic Pokémon.");
       }
       return;
+    }
     case "searchAnyPokemon": {
       // Ultra Ball — "discard 2 other cards from your hand" then search for
       // any Pokémon. For humans, open the hand picker; for AI, auto-pick the
@@ -1156,12 +1185,31 @@ export function applyTrainerEffect(
         logEvent(state, player, "finds no basic Energy.");
       }
       return;
-    case "heal30Active":
-      if (pl.active) {
-        pl.active.damage = Math.max(0, pl.active.damage - 30);
-        logEvent(state, player, `heals 30 from ${pl.active.card.name}.`);
+    case "heal30Active": {
+      // Potion — "Heal 30 damage from 1 of your Pokémon."
+      const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+      const damaged = allies.filter((p) => p.damage > 0);
+      if (damaged.length === 0) {
+        logEvent(state, player, "no damaged Pokémon.");
+        return;
       }
+      if (pl.isAI || damaged.length === 1) {
+        const target = damaged.slice().sort((a, b) => b.damage - a.damage)[0];
+        const before = target.damage;
+        target.damage = Math.max(0, target.damage - 30);
+        logEvent(state, player, `Potion heals ${before - target.damage} from ${target.card.name}.`);
+        return;
+      }
+      state.pendingInPlayTarget = {
+        player,
+        label: "Potion: pick a Pokémon to heal 30",
+        scope: "own",
+        slot: "anywhere",
+        filter: "anyPokemon",
+        action: { kind: "potionHeal" },
+      };
       return;
+    }
 
     case "searchAnyPokemonFree":
       if (!setDeckSearchPick(state, player, isPokemonCard, 1, "Master Ball: pick 1 Pokémon")) {
@@ -1474,18 +1522,37 @@ export function applyTrainerEffect(
       }
       return;
 
-    case "heal60DiscardEnergy":
-      if (pl.active) {
-        const before = pl.active.damage;
-        pl.active.damage = Math.max(0, pl.active.damage - 60);
-        const healed = before - pl.active.damage;
+    case "heal60DiscardEnergy": {
+      // Super Potion — "Heal 60 damage from 1 of your Pokémon. If you healed
+      // any damage in this way, discard an Energy from that Pokémon."
+      const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+      const candidates = allies.filter((p) => p.damage > 0 && p.attachedEnergy.length > 0);
+      if (candidates.length === 0) {
+        logEvent(state, player, "no eligible Pokémon (need damage + Energy).");
+        return;
+      }
+      if (pl.isAI || candidates.length === 1) {
+        const target = candidates.slice().sort((a, b) => b.damage - a.damage)[0];
+        const before = target.damage;
+        target.damage = Math.max(0, target.damage - 60);
+        const healed = before - target.damage;
         if (healed > 0) {
-          const e = pl.active.attachedEnergy.shift();
+          const e = target.attachedEnergy.shift();
           if (e) pl.discard.push(e);
         }
-        logEvent(state, player, `heals ${healed} from ${pl.active.card.name}.`);
+        logEvent(state, player, `Super Potion heals ${healed} from ${target.card.name}.`);
+        return;
       }
+      state.pendingInPlayTarget = {
+        player,
+        label: "Super Potion: pick a Pokémon to heal 60 (discards 1 Energy)",
+        scope: "own",
+        slot: "anywhere",
+        filter: "anyPokemon",
+        action: { kind: "superPotionHeal" },
+      };
       return;
+    }
 
     case "heal20AndCure":
       if (pl.active) {
@@ -1549,6 +1616,39 @@ export function applyTrainerEffect(
     case "draw4":
       drawUpTo(state, player, 4);
       return;
+
+    case "ltSurgeBargain": {
+      // "Ask your opponent if each player may take a Prize card. If yes,
+      // each player takes a Prize card. If no, you draw 4 cards."
+      // Opp consents only when it would let them win the game by taking
+      // their last Prize before the user does (opp at 1 prize, user >1).
+      // Otherwise opp declines — handing the user a free prize is almost
+      // always negative-EV. The simplification keeps the card playable
+      // without an opp-prompt UI.
+      const me = state.players[player];
+      const opp = state.players[oppId];
+      const oppConsents = opp.prizes.length === 1 && me.prizes.length > 1;
+      if (oppConsents) {
+        logEvent(state, oppId, `consents to Lt. Surge's Bargain.`);
+        takePrizes(state, player, 1);
+        takePrizes(state, oppId, 1);
+        // Win by prizes is checked next time the action loop runs; explicitly
+        // resolve here so the card's effect ends in a valid game state.
+        if (me.prizes.length === 0) {
+          state.winner = player;
+          state.phase = "gameOver";
+          logEvent(state, "system", `${me.name} wins by taking all Prizes.`);
+        } else if (opp.prizes.length === 0) {
+          state.winner = oppId;
+          state.phase = "gameOver";
+          logEvent(state, "system", `${opp.name} wins by taking all Prizes.`);
+        }
+      } else {
+        logEvent(state, oppId, `declines Lt. Surge's Bargain.`);
+        drawUpTo(state, player, 4);
+      }
+      return;
+    }
 
     case "drawUntilSeven": {
       // Simplified Iono/Marnie/Prof's Research: shuffle-or-discard hand, draw 7.
@@ -3285,9 +3385,29 @@ export function applyTrainerEffect(
       return;
     }
     case "raifortPeek5Discard": {
-      // Look at top 5; auto-discard nothing, return all.
-      const top = pl.deck.slice(0, 5);
-      logEvent(state, player, `Raifort: examines top ${top.length} card(s).`);
+      // Look at top 5; pick any number to discard; the rest stay on top.
+      const top = pl.deck.splice(0, Math.min(5, pl.deck.length));
+      if (top.length === 0) {
+        logEvent(state, player, "Raifort: deck is empty.");
+        return;
+      }
+      if (pl.isAI) {
+        // AI: keep everything on top (no discard) — conservative.
+        pl.deck.unshift(...top);
+        logEvent(state, player, `Raifort: examines top ${top.length} card(s).`);
+        return;
+      }
+      state.pendingPick = {
+        player,
+        label: `Raifort: pick any number of the top ${top.length} cards to discard`,
+        pool: top,
+        min: 0,
+        max: top.length,
+        unpicked: "topOfDeck",
+        pickedDestination: "discard",
+        source: "deckTop",
+      };
+      state.phase = "pick";
       return;
     }
     case "canariLightningSearch": {
@@ -3661,6 +3781,39 @@ export function resolveInPlayTarget(
         state,
         clicker,
         `Poké Vital A: heals ${before - target.damage} from ${target.card.name}.`,
+      );
+      state.pendingInPlayTarget = null;
+      return { ok: true };
+    }
+    case "potionHeal": {
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      if (target.damage === 0) return { ok: false, reason: "That Pokémon has no damage to heal." };
+      const before = target.damage;
+      target.damage = Math.max(0, target.damage - 30);
+      logEvent(
+        state,
+        clicker,
+        `Potion: heals ${before - target.damage} from ${target.card.name}.`,
+      );
+      state.pendingInPlayTarget = null;
+      return { ok: true };
+    }
+    case "superPotionHeal": {
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      if (target.damage === 0) return { ok: false, reason: "That Pokémon has no damage to heal." };
+      if (target.attachedEnergy.length === 0)
+        return { ok: false, reason: "Must have an Energy attached to discard." };
+      const before = target.damage;
+      target.damage = Math.max(0, target.damage - 60);
+      const healed = before - target.damage;
+      if (healed > 0) {
+        const e = target.attachedEnergy.shift();
+        if (e) clickerPl.discard.push(e);
+      }
+      logEvent(
+        state,
+        clicker,
+        `Super Potion: heals ${healed} from ${target.card.name}.`,
       );
       state.pendingInPlayTarget = null;
       return { ok: true };

@@ -239,6 +239,15 @@ export function canBeAfflictedBy(
   if (isStatusImmune(p, state)) return false;
   // Fossils — "This card can't be affected by any Special Conditions."
   if ((p.card.subtypes ?? []).includes("Fossil")) return false;
+  // Ancient Booster Energy Capsule: the Ancient Pokémon it's attached to
+  // can't be affected by Special Conditions.
+  if (
+    toolsActive(state) &&
+    hasSubtype(p.card, "Ancient") &&
+    p.tools.some((t) => t.name === "Ancient Booster Energy Capsule")
+  ) {
+    return false;
+  }
   if (!abilitiesActiveOn(state, p.card)) return true;
   const abilities = p.card.abilities ?? [];
   for (const ab of abilities) {
@@ -302,6 +311,21 @@ export function effectiveAttacks(p: PokemonInPlay): import("./types").Attack[] {
           effects: [{ kind: "discardOwnEnergy", count: 99 }],
         });
       }
+    }
+    if (tool.name === "Technical Machine: Fluorite") {
+      // Fluorite: any Pokémon holding the TM can use this attack. Discards
+      // all Energy from self + heals all damage from each of your Tera
+      // Pokémon. The Tool itself discards at end of turn (handled in endTurn).
+      toolAttacks.push({
+        name: "Fluorite",
+        cost: ["Grass", "Water", "Psychic"],
+        damage: 0,
+        text: "Discard all Energy from this Pokémon, and heal all damage from each of your Tera Pokémon.",
+        effects: [
+          { kind: "discardOwnEnergy", count: 99 },
+          { kind: "healEachOwnSubtype", amount: 999, subtype: "Tera" },
+        ],
+      });
     }
   }
   // Memory Dive (Aurorus, et al.): each of your evolved Pokémon can use any
@@ -597,10 +621,14 @@ export function applyAbilityKoSurvival(
 
 // --- Retreat cost ---------------------------------------------------------
 
-function toolRetreatReduction(tool: TrainerCard): number {
+function toolRetreatReduction(tool: TrainerCard, holder: PokemonInPlay): number {
   switch (tool.name) {
     case "Air Balloon": return 2;
-    case "Rescue Board": return 1;
+    case "Rescue Board": {
+      // "If that Pokémon's remaining HP is 30 or less, it has no Retreat Cost."
+      const remainingHp = holder.card.hp - holder.damage;
+      return remainingHp <= 30 ? 99 : 1;
+    }
     case "Future Booster Energy Capsule": return 99;
     default: return 0;
   }
@@ -658,7 +686,7 @@ export function effectiveRetreatCost(p: PokemonInPlay, state?: GameState): Energ
   surcharge += gravityGemstoneSurcharge(state, p.card);
   if (!state || toolsActive(state)) {
     for (const tool of p.tools) {
-      if (toolRetreatGate(tool, p.card)) reduce += toolRetreatReduction(tool);
+      if (toolRetreatGate(tool, p.card)) reduce += toolRetreatReduction(tool, p);
     }
   }
   // Self-on-card free-retreat ability: "If this Pokémon has no Energy
@@ -1262,6 +1290,9 @@ export function stadiumAttackBonus(
         case "Binding Mochi":
           if (attacker.statuses.includes("poisoned")) bonus += 40;
           break;
+        case "Future Booster Energy Capsule":
+          if (hasSubtype(attacker.card, "Future")) bonus += 20;
+          break;
       }
     }
   }
@@ -1538,7 +1569,8 @@ export function prizeReductionFromTools(defender: PokemonInPlay): number {
 export type ToolOnDamageAction =
   | { kind: "drawCards"; owner: "defender"; count: number } // Lucky Helmet
   | { kind: "counterDamage"; target: "attacker"; damage: number } // Punk Helmet, Deluxe Bomb
-  | { kind: "applyStatusToAttacker"; status: "asleep" | "burned" | "confused" | "paralyzed" | "poisoned" }; // TR Hypnotizer
+  | { kind: "applyStatusToAttacker"; status: "asleep" | "burned" | "confused" | "paralyzed" | "poisoned" } // TR Hypnotizer
+  | { kind: "moveEnergyAttackerToAttackerBench" }; // Handheld Fan
 
 export function toolOnDamageActions(
   state: GameState,
@@ -1565,6 +1597,11 @@ export function toolOnDamageActions(
       case "Deluxe Bomb":
         if (defenderIsActive) {
           out.push({ kind: "counterDamage", target: "attacker", damage: 60 });
+        }
+        break;
+      case "Handheld Fan":
+        if (defenderIsActive) {
+          out.push({ kind: "moveEnergyAttackerToAttackerBench" });
         }
         break;
     }
