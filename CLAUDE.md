@@ -21,6 +21,8 @@ Node 18+.
 
 ```
 data/pokemon/                       # Card dataset, lazy-loaded
+data/tournament-replays/            # Real-tournament replay logs
+                                    # (Phase 8 opening-book input)
 src/
   engine/                           # Pure rule logic, no React
     types.ts          Game-state + card types
@@ -200,15 +202,35 @@ Two AI versions, gated per-player by `PlayerState.aiVersion` (default
 
 **v2 heuristics (fast, no extra search):**
 - Archetype awareness (Festival Lead, Arboliva, Alakazam, Mega
-  Lucario): per-archetype bonuses on signature Trainers, Energy-attach
-  targets, bench Basics, abilities. Plus T1-T3 turn-aware playbooks
-  in [aiArchetype.ts](src/engine/aiArchetype.ts).
+  Lucario, **Rocket Mewtwo, Dragapult-Blaziken, Dragapult-Dudunsparce,
+  Crustle, Cynthia-Garchomp, Grimmsnarl-Froslass, Mega-Starmie-
+  Froslass**): per-archetype bonuses on signature Trainers, Energy-
+  attach targets, bench Basics, abilities. Plus T1-T3 turn-aware
+  playbooks in [aiArchetype.ts](src/engine/aiArchetype.ts). Rocket
+  Mewtwo + Dragapult-Blaziken sourced from the Prague Regional 2026
+  R9 replay; Dragapult-Dudunsparce + Crustle + Cynthia-Garchomp +
+  Grimmsnarl-Froslass + Mega-Starmie-Froslass sourced from the
+  Prague 2026 Day 2 replays (top16/top8/top4/finals). Dragapult-
+  Dudunsparce signature is `Dudunsparce ex` (sig[0]) so detection
+  prefers it over plain Dragapult-Blaziken when Dudunsparce ex is
+  present. Crustle's playbook intentionally inverts aggro: heavy
+  T2-T3 Hero's Cape + Pokémon Center Lady + Colress's Tenacity weight
+  with **no Ascension boost** ("wall first, attack last").
 - Threat-aware `scorePosition`: penalize positions where our Active
   is in opp OHKO range (scaled by prize at risk); reward symmetric
   bonus for opp; count "ready bench attackers" (≥cost-1 energy + a
-  payable attack).
+  payable attack). **Gust insurance**: redundant ready bench
+  attackers (≥2) get a non-linear bonus — converts gust threats into
+  swap-and-attack lines.
 - Smart gust targeting — `bestGustTarget` boosts ramp engines
-  (Bibarel, Dudunsparce, Fan Rotom, Teal Mask Ogerpon ex, etc.).
+  (Bibarel, Dudunsparce, Fan Rotom, Teal Mask Ogerpon ex, Spidops,
+  Blaziken ex) **and un-powered rule-box punchers on bench (TR
+  Mewtwo ex, Dragapult ex, Mega Lucario ex, etc.) — KO before they
+  boot**.
+- **AI coin-flip choice**: v2 chooses to go FIRST when opp's deck
+  contains a T1-supporter exception (Team Rocket's Proton, Carmine,
+  TR Mewtwo signatures) — denying that enabler is worth eating the
+  T1 attack ban. v1 keeps the always-go-second baseline.
 - Non-linear endgame prize weighting (4→6 worth more than 0→2).
 - Endgame solver: when prizes ≤ 2, MCTS budget scales 4×.
 
@@ -236,17 +258,23 @@ enough that greedy already plays it well.
 
 ## Test suite
 
-- **Vitest — 296 tests across 23 files** (+ 3 AI_BENCH-gated).
+- **Vitest — 337 tests across 26 files** (+ 3 AI_BENCH-gated).
   - `src/engine/__tests__/`: abilityDetection, dawnChain, energy,
     gameFlow, integration, ongoingEffects, presetDeckSmoke,
     trainerDetection, weakness, undoRng, undoIntegration,
     phantomDiveHuman, attackPreflight, unspentTurnSlots, mvpPickers,
     aiScenarios, mcts, aiBenchmark (gated), **teamRocketCards**
     (Spidops base damage, Ariana conditional draw, Proton T1 bypass
-    + TR-Basic search), **auditFixes** (Carmine T1 / Prison Panic
-    Confused / allOpponents Active / Potion + Super Potion pickers
-    / Raifort / Lt. Surge's Bargain / Brock's branching / Future +
-    Ancient Boosters / Rescue Board HP-threshold / TM Fluorite).
+    + TR-Basic search), **auditFixes** + **auditFixes2** (Carmine T1
+    / Prison Panic Confused / allOpponents Active / Potion + Super
+    Potion pickers / Raifort / Lt. Surge's Bargain / Brock's
+    branching / Future + Ancient Boosters / Rescue Board HP-threshold
+    / TM Fluorite), **pragueReplayUpdates** (Prague R9-derived
+    archetype detection + playbook bonuses + v2 coin-flip T1-denial
+    choice), **pragueDay2Replays** (Day 2 Top 16 → Finals: dragapult-
+    dudunsparce / crustle / cynthia-garchomp / grimmsnarl-froslass /
+    mega-starmie-froslass detection + T1-T3 playbooks; covers the
+    Dragapult disambiguation and Crustle's wall-first inversion).
   - `src/data/__tests__/`: decklistParser, effectPatterns.
   - `src/ui/__tests__/`: CardView (energy-pip glyphs), aiPause
     (modal-pause useEffect under fake timers).
@@ -320,10 +348,15 @@ Not yet addressed.
   tune per-impact via Phase 9 self-tuning.
 - **7. Opp modeling** — route opp's MCTS-rollout moves through their
   detected archetype playbook instead of greedy.
-- **8. Opening book from real tournament data** — hard-code first-3-turn
-  sequences from Limitless winning decklists.
+- **8. Opening book from real tournament data** — *partially seeded*:
+  Prague Regional 2026 R9 logged in `data/tournament-replays/`, with
+  rocket-mewtwo + dragapult-blaziken playbooks already wired into
+  [aiArchetype.ts](src/engine/aiArchetype.ts). Continue feeding via
+  the `tournament-game-analyst` agent.
 - **9. Self-tuning weights** — overnight AI-vs-AI loop that
-  perturbation-searches the 20+ heuristic constants.
+  perturbation-searches the 20+ heuristic constants. Game 3 T12
+  "intriguing pass" from Prague R9 is concrete training data for a
+  low `passOnLethalConservatismFactor`.
 - **10. Massive scenario suite** — expand from 12 → 200 handcrafted
   decision tests.
 - **11. Game-log review pass** — manually read 100 AI-vs-AI logs,

@@ -55,6 +55,157 @@
         "rationale": "Choose to go FIRST despite slower setup, to deny opp's T1 Proton search — eat the T1 Phantom Dive ban in exchange",
         "trade": "lose the T1 Lillie/Poffin tempo but gain massive disruption to opp's archetype-defining T1"
       }
+    },
+    {
+      "deck_archetype": "dragapult-dudunsparce",
+      "going_first": true,
+      "sample_count": 3,
+      "sources": [
+        "prague-2026-top16-dragapult-dudunsparce-vs-grimmsnarl-froslass.json#games[0].turns[0]",
+        "prague-2026-top4-dragapult-dudunsparce-vs-cynthia-garchomp.json#games[1]",
+        "prague-2026-finals-dragapult-dudunsparce-vs-crustle.json#games[0]"
+      ],
+      "turn_1": {
+        "primary_supporter": "(none — T1 supporter ban)",
+        "items": [
+          { "card": "Buddy-Buddy Poffin", "purpose": "tutor 2 basics: typically Dreepy + Munkidori" },
+          { "card": "Poké Pad", "purpose": "search any non-rule-box Pokémon — typically Drakloak (evolution prep) or Dudunsparce (engine)" }
+        ],
+        "bench": ["Dreepy", "Munkidori", "(optional) Dudunsparce — Run-Away Draw nonex draw engine"],
+        "energy_attach": { "to": "active Dreepy", "energy": "Psychic" },
+        "ends_turn_with": "active Dreepy (energy attached), 2-3 bench Pokémon, no supporter played, Drakloak in hand for T2 evolve"
+      },
+      "turn_2": {
+        "primary_supporter": "Lillie's Determination (shuffle + draw 8)",
+        "ideal_secondary": "evolve Dreepy → Drakloak (active or bench), use Recon Directive (top-2 look, take 1, bottom 1) to filter for Phantom Dive pieces (Rare Candy / Dragapult ex / Fire energy)",
+        "energy_attach": { "to": "Dreepy/Drakloak/Dragapult line", "energy": "Psychic or Fire" }
+      },
+      "turn_3": {
+        "primary_action": "Phantom Dive (200 + 60 spread) — Rare Candy → Dragapult ex on a charged Drakloak",
+        "alternative": "If matchup is Crustle (EX-immune wall), prioritize Dudunsparce ex line (Hero's Cape on Dudunsparce + 3-energy Destructive Drill ignores effects)",
+        "supporter": "Boss's Orders to gust opp's setup Pokémon (Roselia, Dwebble, Munkidori, Drakloak)"
+      },
+      "notes": "ACE SPEC choice — Hero's Cape preferred over Unfair Stamp. Hero's Cape on Dudunsparce (1-prize) is mathematically superior to Hero's Cape on Dragapult (2-prize) because it forces opp to invest 2 attacks (240+ dmg) for 1 prize. Erratic Machinations supporter for hand-discard reset (Mateusz famously discarded 16 cards in finals Game 2).",
+      "anti_pattern": "Don't lead Dragapult line if opp is Crustle — switch to Dudunsparce ex line for Destructive Drill bypass."
+    },
+    {
+      "deck_archetype": "crustle",
+      "going_first": false,
+      "sample_count": 3,
+      "sources": [
+        "prague-2026-top8-dragapult-vs-crustle.json#games[0]",
+        "prague-2026-top4-crustle-vs-mega-starmie.json#games[0]",
+        "prague-2026-finals-dragapult-dudunsparce-vs-crustle.json#games[0]"
+      ],
+      "turn_1": {
+        "primary_supporter": "Lillie's Determination OR Pokégear 3.0 (Pokégear searches a supporter — chain into Lillie's)",
+        "items": [
+          { "card": "Buddy-Buddy Poffin", "purpose": "tutor 2 Dwebble" }
+        ],
+        "bench": ["Dwebble x2", "(optional lead) Cornerstone Mask Ogerpon ex"],
+        "energy_attach": { "to": "active Dwebble or Cornerstone Mask Ogerpon ex", "energy": "Fighting" },
+        "active_choice": "Dwebble (tank Ascension setup) OR Cornerstone Mask Ogerpon ex (immune to ability damage)",
+        "key_decision": "PASS on Ascension (Dwebble's deck-search-and-evolve attack) when energy attach efficiency matters more — observed across all 3 sources",
+        "ends_turn_with": "2-3 Dwebble benched with energy banked"
+      },
+      "turn_2": {
+        "primary_supporter": "Hilda OR Brock's Scouting OR Pokémon Center Lady (toolbox supporters, all chain via Pokégear)",
+        "ideal_secondary": "evolve Dwebble → Crustle on a 2-energy Dwebble (manual + T1 attach + T2 attach)",
+        "tool_attach": "Hero's Cape on first Crustle (150 + 100 = 250 HP, immune to EX damage)"
+      },
+      "turn_3_or_later": {
+        "wall_phase": "Stack Growing Grass Energy (HP +20 per copy) and Spiky Energy (counter damage). Healing via Pokémon Center Lady, Colress's Tenacity (stadium chain). Final HP often 290-330.",
+        "attack_phase": "Superb Scissors (Crustle attack) only when opp is at 1-2 prizes — until then, just wall and use Boss's Orders to gust opp's setup Pokémon.",
+        "backup_attacker": "Mega Kangaskhan ex rapid-fire combo (coin-flip per energy attached, 100 per heads — 200/300 with 2-3 heads). Used as the 'Crustle can't reach' answer (e.g. vs anti-EX walls). 3-prize Pokémon — only commit when opp can't easily 1HKO."
+      },
+      "notes": "Crustle's plan is INVERTED from typical aggro: do nothing for 2-3 turns, build energy + heal, never attack until opp is at 1-2 prizes. AI archetype playbook should encode 'wall first, attack last' as a phase transition triggered by opp's prize count.",
+      "anti_pattern": "Don't waste energy on Cornerstone Mask Ogerpon ex's attack — it's a tank, not an attacker. Don't commit Mega Kangaskhan early — it's a 3-prize liability when opp can hit it."
+    },
+    {
+      "deck_archetype": "cynthia-garchomp",
+      "going_first": true,
+      "sample_count": 2,
+      "sources": [
+        "prague-2026-r13-mega-starmie-froslass-vs-cynthia-garchomp.json#games[2]",
+        "prague-2026-top4-dragapult-dudunsparce-vs-cynthia-garchomp.json#games[0]"
+      ],
+      "turn_1": {
+        "primary_supporter": "(none — T1 supporter ban)",
+        "items": [
+          { "card": "Buddy-Buddy Poffin x2 (often double-Poffin)", "purpose": "tutor 4 basics: Cynthia's Gible x2-3 + Cynthia's Roselia x1-2" }
+        ],
+        "bench": ["Cynthia's Gible x2-3", "Cynthia's Roselia x1-2"],
+        "energy_attach": { "to": "active Garchomp line", "energy": "Fighting" },
+        "ends_turn_with": "wide bench of stage-1-ready basics"
+      },
+      "turn_2": {
+        "primary_supporter": "Cynthia (or Cynthia's-prefix tutor)",
+        "ideal_secondary": "evolve Cynthia's Gible → Cynthia's Gabite (Cynthia's Gabite has tutor ability to find more Gabite + Roserade), evolve Cynthia's Roselia → Cynthia's Roserade (energy-acceleration ability)",
+        "tool_attach": "Cynthia's Power Weight (HP buffer)"
+      },
+      "turn_3": {
+        "primary_action": "Evolve Cynthia's Gabite → Cynthia's Garchomp, attack with Corkscrew Dive (attack + draw cards) OR Dragon Slice (high damage)",
+        "supporter": "Boss's Orders to gust setup Pokémon, OR another Cynthia for energy refill",
+        "ace_spec": "Unfair Stamp (Netti's choice, called out as 'variant-defining' over Neo Upper Energy)"
+      },
+      "notes": "Cynthia's Garchomp's signature engine is the Cynthia's Gabite tutor + Cynthia's Roserade energy ramp. Boss's Orders down to a 2-card hand is acceptable because Corkscrew Dive draws cards next turn — Engine's trainer evaluation should weight 'attacker-with-draw-effect' as a hand-recovery guarantee.",
+      "anti_pattern": "Don't skimp on Cynthia's Roselia — energy ramp is the deck's only path to powering Garchomp on schedule."
+    },
+    {
+      "deck_archetype": "grimmsnarl-froslass",
+      "going_first": true,
+      "sample_count": 1,
+      "sources": ["prague-2026-top16-dragapult-dudunsparce-vs-grimmsnarl-froslass.json#games[1].turns[0]"],
+      "turn_1": {
+        "primary_supporter": "(none — T1 supporter ban)",
+        "items": [
+          { "card": "Buddy-Buddy Poffin", "purpose": "tutor 2 Maman's basics" },
+          { "card": "Spike Muff Gym (stadium)", "purpose": "search any Maman Pokémon — item-lock immune via stadium category" },
+          { "card": "Poké Pad", "purpose": "tutor non-rule-box Pokémon — typically Munkidori" }
+        ],
+        "bench": ["Maman's Impidimp", "Munkidori"],
+        "stadium": "Spike Muff Gym",
+        "energy_attach": { "to": "Munkidori", "energy": "Darkness" },
+        "ends_turn_with": "Snorunt active, bench stocked, stadium up, Munkidori with 1 energy"
+      },
+      "turn_2": {
+        "primary_supporter": "Lillie's Determination (shuffle + draw 8) OR Tatsugiri Order Up (look at top 6, take 1 supporter — if Tatsugiri active)",
+        "ideal_secondary": "evolve Snorunt → Frostlass (Freezing Shroud passive: 10 dmg per turn to all ability Pokémon), evolve Maman's Impidimp → Maman's Morgrem",
+        "energy_attach": { "to": "Maman's Morgrem (will become Grimmsnarl)", "energy": "Darkness" }
+      },
+      "turn_3": {
+        "primary_action": "Evolve Maman's Morgrem → Maman's Grimmsnarl ex. Activate Punk Up ability (search 1 Dark Energy from deck, attach to Maman's Pokémon — energy acceleration!)",
+        "attack": "Shadow Bullet (180 active + 30 bench) for first prize. Munkidori Adrena-Brain to set up future bench KOs.",
+        "supporter": "Petrel (Order Up tutor target — tutored from Tatsugiri T1 line)"
+      },
+      "notes": "Maman's Tatsugiri Order Up + Petrel chain is the archetype's signature setup. Item-lock vulnerability is mitigated by Spike Muff Gym (stadium-search). Frostlass Freezing Shroud is bidirectional damage — hits own ability Pokémon too — so deck needs Munkidori healing or HP buffer tools.",
+      "anti_pattern": "Don't promote Budew when opp has no out (e.g. Dragapult mirror) — Itchy Pollen value drops to zero. Mateusz/Nicklas G1 turn 4 demonstrated this (Nicklas chose Tatsugiri Order Up over Itchy Pollen)."
+    },
+    {
+      "deck_archetype": "mega-starmie-froslass",
+      "going_first": true,
+      "sample_count": 1,
+      "sources": ["prague-2026-r13-mega-starmie-froslass-vs-cynthia-garchomp.json#games[0]"],
+      "turn_1": {
+        "primary_supporter": "(none — T1 supporter ban)",
+        "items": [
+          { "card": "Buddy-Buddy Poffin", "purpose": "Staryu + Snorunt or 2nd Staryu" },
+          { "card": "Risky Ruins (stadium)", "purpose": "places 2 dmg counters per turn on opp ability Pokémon — KEY accelerator" }
+        ],
+        "bench": ["Staryu x2", "Snorunt", "Munkidori"],
+        "energy_attach": { "to": "Staryu", "energy": "Legacy Energy or Psychic" },
+        "stadium": "Risky Ruins"
+      },
+      "turn_2": {
+        "primary_supporter": "Lillie's Determination",
+        "ideal_secondary": "evolve Staryu → Mega Starmie ex (with Crispin attach 2 different energies — typically 1 to attacker, 1 to bench); evolve Snorunt → Frostlass / Mega Frostlass",
+        "first_attack": "Mega Starmie ex Jetting Blow (120 active + 50 bench)"
+      },
+      "turn_3": {
+        "primary_action": "Repeat Jetting Blow OR pivot to Mega Frostlass for opp-hand-size scaling damage (50 × opp hand cards — devastating after opp Lillie/Iono)",
+        "supporter": "Boss's Orders to convert spread damage into KOs"
+      },
+      "notes": "Risky Ruins is the deck's signature accelerator — turns 50-dmg bench snipe into 70-dmg KO range against evolving basics. Mega Frostlass is the late-game hand-size punisher. Distinct from mega-starmie-dusknoir (which uses Cursed Blast for Crustle counter)."
     }
   ],
   "candidate_lines_to_validate": [
@@ -66,6 +217,33 @@
     {
       "deck_archetype": "dragapult-blaziken-munkidori",
       "line": "T2 spread Crispin energies across 2 Drakloaks rather than committing to 1 — defuses Boss's/Giovanni gust",
+      "needs_more_samples": true
+    },
+    {
+      "deck_archetype": "dragapult-dudunsparce",
+      "line": "Anti-Crustle pivot — when opp is detected as crustle, abandon Dragapult line on T2-T3 and route through Dudunsparce ex Destructive Drill instead. Hero's Cape on Dudunsparce.",
+      "needs_more_samples": false,
+      "confidence": "HIGH — won the Prague 2026 finals"
+    },
+    {
+      "deck_archetype": "crustle",
+      "line": "T2 PASS on Ascension when opp lacks T1 pressure — observed in 2 of 3 source matches. Energy efficiency > Crustle rush.",
+      "needs_more_samples": false,
+      "confidence": "HIGH"
+    },
+    {
+      "deck_archetype": "crustle",
+      "line": "Mega Kangaskhan ex rapid-fire as anti-EX-immune-wall counter (e.g. vs Mega Starmie). Coin-flip variance — high reward, high variance.",
+      "needs_more_samples": true
+    },
+    {
+      "deck_archetype": "mega-starmie-dusknoir",
+      "line": "Cursed Blast + Jetting Blow exact-OHKO combo on EX Pokémon — bypasses Mysterious Rocking via ability damage.",
+      "needs_more_samples": true
+    },
+    {
+      "deck_archetype": "cynthia-garchomp",
+      "line": "Corkscrew Dive attack-then-draw enables aggressive supporter pre-commitment (Boss's Orders down to 2-card hand)",
       "needs_more_samples": true
     }
   ]

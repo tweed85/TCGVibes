@@ -1,0 +1,182 @@
+{
+  "source_url": "https://www.youtube.com/watch?v=5ewTXCpaGpA",
+  "channel": "Play! Pokémon (official)",
+  "title": "TCG Day 2 | 2026 Pokémon Prague Regional Championships",
+  "event": "Prague Regional Championships 2026",
+  "round": "Top 8 (winner advances to Top 4)",
+  "format": "Standard",
+  "regulation_marks": ["H", "I", "J"],
+  "recorded_at": "2026-04-29",
+  "transcript_source": "yt-dlp auto-subs (en) — segment ~03:31:00 to 04:24:30",
+  "broadcast_casters": ["Ross Gilbert", "Joe Bernard"],
+  "video_segment": { "start": "03:31:00", "end": "04:24:30" },
+  "players": {
+    "p1": {
+      "handle": "Tord Reklev",
+      "country": "Norway",
+      "limitless_finish": "5th",
+      "deck_archetype": "dragapult",
+      "decklist_known": false,
+      "decklist_summary": "Dragapult ex / Drakloak / Dreepy core. Tech basics: Blood Moon Ursaluna, Latias ex, Fezandipiti ex, Meowth ex (rule-box bench engines). Munkidori (Adrena-Brain). Budew. Trainers: Lillie's Determination ×3+, Crispin, Boss's Orders, Buddy-Buddy Poffin, Ultra Ball, Rare Candy ×3 (caster: 'aggressive build, three copies of rare candy'). Stadium: Area Zero Underdepths (Tera Pokémon get +3 bench slots). ACE SPEC: Unfair Stamp. Heavy basic-EX bench archetype."
+    },
+    "p2": {
+      "handle": "Elmar Tresp",
+      "country": "Germany",
+      "limitless_finish": "2nd (Finalist)",
+      "deck_archetype": "crustle",
+      "decklist_known": false,
+      "decklist_summary": "Crustle core (Mysterious Rocking Inability — immune to damage from EX Pokémon; Superb Scissors attack). Dwebble. Mega Kangaskhan ex (rapid-fire attack — coin flip per energy attached, multi-prize backup attacker). Cornerstone Mask Ogerpon ex (immune-to-ability damage backup). Trainers: Pokégear 3.0, Lillie's Determination, Hilda, Pokémon Center Lady, Colress's Tenacity, Brock's Scouting, Team Rocket's Petrel, Boss's Orders, Buddy-Buddy Poffin, Ultra Ball, Night Stretcher. Energy: Spiky Energy (counter damage), Growing Grass Energy (HP boost), Legacy Energy, Missed Energy, basic Fighting/Darkness. ACE SPEC: Hero's Cape (+100 HP on already-immune Crustle = 250 HP)."
+    }
+  },
+  "coin_flip": { "winner": "p1", "chose": "first", "notes": "Tor was top seed of bracket — chose to go first (his tournament pattern)" },
+  "match_outcome": {
+    "winner": "p2 (Elmar)",
+    "set_score": "2-0",
+    "games_played": 2,
+    "advances_to": "Top 4 (vs João Pires / Mega Starmie ex)"
+  },
+  "games": [
+    {
+      "game_number": 1,
+      "winner": "p2",
+      "win_condition": "concession (Tor scooped from a hand of 'Dragon Ball, Dragon Ball, Dragon Ball, Boss, Boss, Boss' — no usable cards vs 9-energy Crustle)",
+      "duration_seconds_estimated": 1500,
+      "turns": [
+        {
+          "turn": 1,
+          "active": "p1",
+          "actions": [
+            { "kind": "playBasicToBench", "card": "Dreepy", "notes": "active Dreepy already on lead per setup" },
+            { "kind": "attachEnergy", "to": "Dreepy (active)", "energy": "Psychic" },
+            { "kind": "endTurn" }
+          ],
+          "notes": "Standard Dragapult T1 — single Dreepy lead with energy. No T1 supporter (legal exceptions don't apply)."
+        },
+        {
+          "turn": 2,
+          "active": "p2",
+          "actions": [
+            { "kind": "playTrainer", "card": "Buddy-Buddy Poffin", "notes": "fetched 2 Dwebble" },
+            { "kind": "playBasicToBench", "card": "Dwebble" },
+            { "kind": "playBasicToBench", "card": "Dwebble" },
+            { "kind": "attachEnergy", "to": "Dwebble (bench)", "energy": "Fighting" },
+            { "kind": "endTurn", "notes": "PASSED on Ascension (Dwebble's deck-search-and-evolve attack). Caster: 'intriguing choice, not going immediately into the Crustle, but Elma's come up against it many times and is under no immediate pressure from Tor.'" }
+          ],
+          "notes": "Strategic pass on Ascension — Elmar valued energy-attach efficiency over rushing Crustle online vs a no-Phantom-Dive opponent. KEY decision point."
+        },
+        {
+          "turn": 3,
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Lillie's Determination", "notes": "shuffle + draw 8" },
+            { "kind": "playTrainer", "card": "Pokégear 3.0", "uncertain": true, "notes": "tutored a supporter" },
+            { "kind": "evolve", "from": "Dreepy", "to": "Drakloak" },
+            { "kind": "activateAbility", "card": "Drakloak", "ability": "Recon Directive", "effect": "look at top 2, take 1 — found Boss's Orders" },
+            { "kind": "playBasicToBench", "card": "Munkidori" },
+            { "kind": "attachEnergy", "to": "Drakloak (active)", "energy": "Fire" },
+            { "kind": "attack", "card": "Drakloak", "attack": "Dragon Headbutt", "damage": 60, "target": "active Dwebble (70 HP)", "notes": "wait — caster says KO. Possibly Headbutt 60 + ? Either bumped, or attack actually does 70 vs Dwebble. Caster: 'just KO that Dwebble with that dragon headbutt.'", "uncertain": true }
+          ],
+          "notes": "Tor took an early prize on a Dwebble. Caster: 'Tor has already done better than I expected.'"
+        },
+        {
+          "turn": 4,
+          "active": "p2",
+          "actions": [
+            { "kind": "playTrainer", "card": "Hilda", "uncertain": true },
+            { "kind": "evolve", "from": "Dwebble", "to": "Crustle", "notes": "evolved 2-energy Dwebble — already had 2× Fighting attached" },
+            { "kind": "attachToolToActive", "card": "Hero's Cape", "to": "Crustle", "notes": "Crustle 150 HP + 100 = 250 HP, immune to EX damage" },
+            { "kind": "endTurn", "notes": "no attack — Crustle warming up. Caster: 'now this one Crustle against the world might just do it.'" }
+          ]
+        }
+      ],
+      "summary_recap": "Game 1 narrative (caster recap): Crustle walls, Superb Scissors picks off Dragapult's small Pokémon. Tor tried to buy time with EX attackers (Blood Moon Ursaluna, Latias ex). Elmar used Boss's Orders proactively to gust un-powered Drakloak and Munkidori, denying Tor's attacker prep. With one prize remaining for Elmar, Tor scooped on a hand of all dead cards (3× Dragon Ball, 3× Boss's Orders). Crustle ended with 9 ENERGY ATTACHED."
+    },
+    {
+      "game_number": 2,
+      "winner": "p2",
+      "win_condition": "Tor passed final turn after Elmar healed Crustle to >300 HP indefinitely. Caster: 'Tor picks up his cards and Elmar takes this two games to zero.'",
+      "duration_seconds_estimated": 1500,
+      "turns": [
+        {
+          "turn": 1,
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Buddy-Buddy Poffin", "notes": "fetched 2 Dreepy" },
+            { "kind": "playBasicToBench", "card": "Dreepy" },
+            { "kind": "playBasicToBench", "card": "Dreepy" },
+            { "kind": "attachEnergy", "to": "Dreepy (bench)", "energy": "Psychic" },
+            { "kind": "endTurn" }
+          ]
+        },
+        {
+          "turn": 2,
+          "active": "p2",
+          "notes": "Elmar's lead this game: Mega Kangaskhan ex (3-prize Pokémon) — caster called it 'the only means in which Elmar can draw cards' (Kanga's draw-on-attack ability)",
+          "actions": [
+            { "kind": "playTrainer", "card": "Buddy-Buddy Poffin", "notes": "fetched 2 Dwebble" },
+            { "kind": "playTrainer", "card": "Lillie's Determination", "notes": "shuffle + draw 6 (or 8 if 6 prizes still remaining)" },
+            { "kind": "playBasicToBench", "card": "Dwebble" },
+            { "kind": "attachEnergy", "to": "Dwebble (bench)", "energy": "Fighting (Spiky Energy)", "notes": "spiky energy: attacker takes 2 counters when hitting" },
+            { "kind": "endTurn" }
+          ]
+        },
+        {
+          "turn": "mid-game",
+          "notes": "Caster recap: Crustle stacked 4× Growing Grass Energy + Hero's Cape + 2× Spiky Energy = 310-330 HP. Mega Kangaskhan ex eventually KO'd by Tor for 3 prizes (4 prizes taken total) but Crustle 'never going anywhere'."
+        },
+        {
+          "turn": "late",
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Ultra Ball", "notes": "discard 2, fetched something" },
+            { "kind": "playTrainer", "card": "Ultra Ball" },
+            { "kind": "playTrainer", "card": "Ultra Ball", "notes": "Tor 'thinning hand' before Unfair Stamp" },
+            { "kind": "playTrainer", "card": "Unfair Stamp", "notes": "ACE SPEC — both players shuffle hands and draw 5. Caster: 'all those Ultra Balls were failed and it was just Tor fitting out his hand before the inevitable Unfair Stamp.'" },
+            { "kind": "endTurn", "notes": "Unfair Stamp 'didn't really do anything' — Elmar's stacked energy/healing hand survived" }
+          ],
+          "notes": "Tor's Unfair Stamp combo whiffed because Elmar's healing/energy resources were already on board, not in hand."
+        },
+        {
+          "turn": "final",
+          "active": "p1",
+          "actions": [
+            { "kind": "endTurn", "notes": "Tor passed. Concession-equivalent." }
+          ]
+        }
+      ],
+      "summary_recap": "Caster recap: 'Crustle too hard to KO, too rocky, too hard to get through. Dragon Bolt gives up and Elmar heads on into top four where he could be facing against another Crustle or he could be facing into Star Mei.'"
+    }
+  ],
+  "key_moments": [
+    {
+      "game": 1,
+      "turn": 2,
+      "description": "Elmar PASSED on Ascension (Dwebble's deck-search-and-evolve T1 attack) when energy attach was efficient and opponent had no Phantom Dive pressure. Saved energy efficiency vs rushing Crustle.",
+      "engine_lesson": "ai.ts greedy step-loop would always fire any zero-cost attack. v2 archetype playbook for crustle (NEW) should weight 'pass on Ascension when Dwebble is safe and energy efficiency matters more.' Add pass-conditional to the new playbook."
+    },
+    {
+      "game": 1,
+      "turn": "throughout",
+      "description": "Elmar used Boss's Orders proactively to gust un-powered DRAKLOAK and MUNKIDORI (utility/setup Pokémon) rather than for direct prize attack. Caster: 'I'm going to proactively hunt down your energy to stop any potential attacks.'",
+      "engine_lesson": "VALIDATES bestGustTarget in ai.ts — Munkidori is in the boost list. Drakloak (Recon Directive engine) should ALSO be in the un-powered rule-box puncher boost list — currently it's not, only Dragapult ex is. Add Drakloak (and other Stage-1 setup Pokémon: Charcadet, Combusken, Spidops) to the boost list."
+    },
+    {
+      "game": 2,
+      "turn": "mid-game",
+      "description": "Elmar refused to attack with Crustle for many turns despite having lethal options — kept building energy/healing on Crustle until it was untouchable. Mega Kangaskhan ex absorbed all of Tor's offense as a deliberate sacrifice.",
+      "engine_lesson": "scorePosition's prize-pressure non-linear weighting (4→6 worth more than 0→2) doesn't currently account for 'controlled prize trades' — Elmar gave 3 prizes intentionally. The crustle archetype playbook should encode 'wall first, attack only when KO-immortal' as a phase transition."
+    },
+    {
+      "game": 2,
+      "turn": "late",
+      "description": "Tor played 3× Ultra Ball into Unfair Stamp expecting hand reset on Elmar to break the wall. Elmar's hand size was already small (resources on board, not in hand) — Unfair Stamp returned 5 cards which was MORE than he had.",
+      "engine_lesson": "Unfair Stamp evaluation in ai.ts likely scores by 'opp hand size' as a flat heuristic. Should subtract by 'how many of opp's resources are on board already' (count attached energies, attached tools, played stadium). When opp has high board-state-to-hand-size ratio, Unfair Stamp value should drop."
+    }
+  ],
+  "engine_notes": [
+    "Crustle is a NEW archetype not in aiArchetype.ts. Suggested archetype string: `crustle`. Signature cards: Crustle (Mysterious Rocking Inability — EX immunity), Mega Kangaskhan ex (multi-coin-flip rapid-fire attack), Cornerstone Mask Ogerpon ex (ability immunity), Spiky Energy, Growing Grass Energy, Hero's Cape ACE SPEC, Pokégear 3.0, Hilda, Pokémon Center Lady, Colress's Tenacity, Brock's Scouting, Petrel. Playbook: T1 attach to Dwebble + Pokégear, T2 evolve Crustle, T3+ stack Growing Grass + Spiky + heal — wall first, attack only with Superb Scissors when one prize away.",
+    "Dragapult vs Crustle is structurally lost without specific tech (Dudunsparce ex Tenacious Tail / Mega Starmie Nebula Beam / Curse Blast). Add a matchup-evaluation entry: when opp is detected as crustle and no non-EX 'tax' attacker is in deck, scorePosition should heavily penalize.",
+    "Elmar's Pokégear 3.0 + Hilda + Pokémon Center Lady + Colress's Tenacity + Petrel toolbox is the 'multi-supporter in a single deck' pattern — implies the engine's archetype detection should look for this Trainer cluster as a crustle signature even when Crustle Pokémon isn't visible yet.",
+    "Tor's 'aggressive Dragapult' (3 Rare Candy) variant differs from Mateusz's 'Dudunsparce-engine Dragapult' variant from Top 16. Both are valid. Engine should split dragapult into 2-3 sub-archetypes: dragapult-aggressive (3 Rare Candy, basic-EX bench), dragapult-dudunsparce (2-2-1 Dudunsparce engine), dragapult-blaziken (Blaziken ex / Combusken / Charcadet). Currently aiArchetype.ts has only 'dragapult-blaziken'."
+  ]
+}

@@ -178,3 +178,33 @@ The `engine_notes` and `key_moments` fields are the high-signal output the AI wo
 The engine has two AI versions (v1 greedy, v2 archetype-aware heuristics, with optional MCTS) documented in `CLAUDE.md`. Phase 8 of the AI overhaul is "opening book from real tournament data — hard-code first-3-turn sequences from Limitless winning decklists." Your output is the raw input for that phase.
 
 When a user asks "what's the canonical T2 line for [archetype]?", check `data/tournament-replays/opening-book.json` first — if multiple matches show the same first-3-turn pattern, that's the canonical line. Cite the source replays in your answer.
+
+## Archetypes already wired into the engine
+
+[src/engine/aiArchetype.ts](src/engine/aiArchetype.ts) currently knows about these archetypes — when logging replays, **prefer these exact strings** as `deck_archetype` so the opening-book entries line up with the in-engine playbooks:
+
+| Archetype string | Signature cards |
+|---|---|
+| `festival-leads` | Festival Grounds, Dipplin, Thwackey |
+| `arboliva` | Arboliva ex, Teal Mask Ogerpon ex, Forest of Vitality |
+| `alakazam` | Alakazam ex, Battle Cage, Dudunsparce |
+| `lucario-ex` | Mega Lucario ex, Premium Power Pro, Riolu |
+| `rocket-mewtwo` | Team Rocket's Mewtwo ex, Spidops, Tarountula, TR Energy |
+| `dragapult-blaziken` | Dragapult ex, Drakloak, Blaziken ex, Munkidori |
+
+If a match features an archetype not in the table, use a fresh kebab-case label and call it out in the report — it's a candidate for adding to `aiArchetype.ts`.
+
+## Reference replay
+
+[data/tournament-replays/prague-2026-r9-rocket-mewtwo-vs-dragapult-blaziken.json](../../data/tournament-replays/prague-2026-r9-rocket-mewtwo-vs-dragapult-blaziken.json) is the canonical example of the schema + level of detail expected. Match it.
+
+## Engine-level findings already encoded
+
+The Prague R9 replay produced these AI updates (so future replays don't need to re-encode them):
+
+- **Coin-flip choice** — v2 AI now goes FIRST when opp has T1-supporter exceptions (Proton, Carmine).
+- **Gust priority** — un-powered rule-box punchers (Mewtwo ex, Dragapult ex, Mega Lucario ex, Arboliva ex, Alakazam ex) are now boosted.
+- **Gust insurance** — `scorePosition` rewards redundant ready bench attackers (≥2).
+- **Rocket Mewtwo + Dragapult-Blaziken playbooks** — T1-T3 bonuses wired up.
+
+Future replays should focus on **new** insights — don't re-flag these as findings.

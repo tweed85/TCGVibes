@@ -1,0 +1,154 @@
+{
+  "source_url": "https://www.youtube.com/watch?v=5ewTXCpaGpA",
+  "channel": "Play! Pokémon (official)",
+  "title": "TCG Day 2 | 2026 Pokémon Prague Regional Championships",
+  "event": "Prague Regional Championships 2026",
+  "round": "Top 4 (winner advances to Finals)",
+  "format": "Standard",
+  "regulation_marks": ["H", "I", "J"],
+  "recorded_at": "2026-04-29",
+  "transcript_source": "yt-dlp auto-subs (en) — segment ~05:41:30 to 06:53:00",
+  "broadcast_casters": ["Ross Gilbert", "Joe Bernard"],
+  "video_segment": { "start": "05:41:30", "end": "06:53:00" },
+  "players": {
+    "p1": {
+      "handle": "Mateusz Łaszkiewicz",
+      "country": "Poland",
+      "limitless_finish": "1st (eventual champion)",
+      "deck_archetype": "dragapult-dudunsparce",
+      "decklist_known": false,
+      "decklist_summary": "See prague-2026-top16-dragapult-dudunsparce-vs-grimmsnarl-froslass.json#players.p1 — same list."
+    },
+    "p2": {
+      "handle": "Neddy Kosek (broadcast: 'Netti' / 'Nedi')",
+      "country": "Czech Republic",
+      "limitless_finish": "3rd",
+      "deck_archetype": "cynthia-garchomp",
+      "decklist_known": false,
+      "decklist_summary": "Cynthia's Garchomp (signature attacker, Cynthia's-tagged for archetype-locked support), Cynthia's Gabite, Cynthia's Gible (Cynthia's-prefix evolution line), Cynthia's Roserade × multiple (energy-acceleration ability), Cynthia's Roselia, Spirit Tomb (deal damage to Pokémon with damage counters), Cynthia's Power Weight (HP buffer tool). ACE SPEC: Unfair Stamp (Netti's choice over Neo Upper Energy — caster called this out as variant-defining choice). Trainers: Buddy-Buddy Poffin, Lillie's Determination, Boss's Orders, Ultra Ball, Cynthia's-prefix supporters (Cynthia engagement)."
+    }
+  },
+  "coin_flip": { "winner": "p2 (Game 1)", "chose": "first", "uncertain": true, "notes": "Netti went first Game 1; Mateusz won the flip Game 2 ('but in game two Mattesh got to go first, things were a lot different'); Game 3 first-player not explicitly called" },
+  "match_outcome": {
+    "winner": "p1 (Mateusz)",
+    "set_score": "2-1",
+    "games_played": 3,
+    "advances_to": "Finals (vs Elmar Tresp / Crustle)"
+  },
+  "games": [
+    {
+      "game_number": 1,
+      "winner": "p2",
+      "win_condition": "prizes — Netti's Garchomp KO'd Mateusz's Dragapult chain after a Boss's Orders gust on the only powered Dreepy",
+      "duration_seconds_estimated": 1500,
+      "key_recap": "Caster recap: 'In game one, Netti taking control of those early prize cards. A really powerful Boss's Orders, taking out the only energy, the only Dreepy in play for Mateusz. And it was this slow buildup. Itchy Pollen was working for Mateusz, buying him that window of opportunity. But eventually there was the retreat into the Garchomp. By that stage there was so many Roserade in play all powered up with Cynthia's Power Weights. They were just so difficult for Mateusz to tackle. When Netti was announcing these massive KOs on Dragapults, Mateusz knew to move to game two.'",
+      "turns": [
+        {
+          "turn": "early-key",
+          "active": "p2",
+          "actions": [
+            { "kind": "playTrainer", "card": "Boss's Orders", "notes": "gusted Mateusz's only powered Dreepy to active — denied Phantom Dive prep" }
+          ],
+          "engine_lesson": "Validates aggressive bench-disruption play. Already correctly modeled in ai.ts."
+        },
+        {
+          "turn": "mid",
+          "notes": "Mateusz used Itchy Pollen (Budew) for item-lock to slow Netti's setup — bought a window. Netti still completed Roserade + Cynthia's Power Weight stack."
+        }
+      ]
+    },
+    {
+      "game_number": 2,
+      "winner": "p1",
+      "win_condition": "prizes — Phantom Dive sweeping the Roserade bench engine",
+      "duration_seconds_estimated": 1300,
+      "key_recap": "Caster recap: 'In game two, Mateusz got to go first. Things were a lot different. We got the Dragapult rolling nice and quickly. Then we're starting to take out these Pokémon. But it was Roserade that was a priority for Mateusz here. Take out the Roserade to really limit the damage output of that Garchomp and also not have to worry too much about going through these big Garchomps. Spiritomb did come up but we managed to get rid of that as well while also taking out a Roserade and just avoiding the Power Weight as much as we can.'",
+      "turns": [
+        {
+          "turn": 1,
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Buddy-Buddy Poffin", "uncertain": true },
+            { "kind": "playBasicToBench", "card": "Dreepy", "uncertain": true },
+            { "kind": "attachEnergy", "to": "Dreepy", "energy": "Psychic" },
+            { "kind": "endTurn" }
+          ]
+        },
+        {
+          "turn": "mid-decisive",
+          "active": "p1",
+          "actions": [
+            { "kind": "attack", "card": "Dragapult ex", "attack": "Phantom Dive", "damage": 200, "effect": "+ 60 spread (6 counters across opp bench)", "target": "Cynthia's Roselia/Roserade bench", "notes": "Mateusz prioritized Roserade KOs over Garchomp KOs — denying energy-acceleration engine" }
+          ],
+          "engine_lesson": "VALIDATES Phantom Dive bench-target prioritization on accelerator engines (Roserade's role here is identical to Bibarel/Spidops/Blaziken in other archetypes). bestGustTarget should boost Cynthia's Roserade — add to the un-powered ramp engine list in ai.ts."
+        }
+      ]
+    },
+    {
+      "game_number": 3,
+      "winner": "p1",
+      "win_condition": "concession — Spiritomb stuck on bench with no switch in hand to promote, no remaining attackers for Netti",
+      "duration_seconds_estimated": 1500,
+      "key_recap": "Caster recap: 'A really good opener for Mateusz. Netti had a pretty decent start, but I really love — I really have to recognize this as probably the play that won the game ultimately — protecting that early prize card really changed as we progressed through the game. We finally saw that Hero's Cape come down for the first time of the entire match 55 minutes in. But then it could not get KO'd. There was just not enough damage on the board. Then we saw the heavily damaged Cynthia's Garchomp get brought back up with a double Munkidori Adrena-Brain. That really was the end of the game because Netti was left with no real attackers anymore.'",
+      "turns": [
+        {
+          "turn": "decisive-endgame",
+          "active": "p1",
+          "actions": [
+            { "kind": "activateAbility", "card": "Munkidori #1", "ability": "Adrena-Brain", "effect": "moves 3 damage counters from own to opp's Garchomp" },
+            { "kind": "activateAbility", "card": "Munkidori #2", "ability": "Adrena-Brain", "effect": "moves 3 more damage counters — pushed Cynthia's Garchomp into KO range" },
+            { "kind": "attack", "card": "Dragapult ex", "attack": "Phantom Dive", "damage": 200, "notes": "KO'd a heavily damaged Cynthia's Garchomp" }
+          ],
+          "notes": "Double Munkidori Adrena-Brain combo finished a Garchomp that Phantom Dive alone couldn't reach. Caster called this 'the end of the game.'"
+        },
+        {
+          "turn": "key-protection",
+          "active": "p1",
+          "description": "Mateusz protected an early-prize Pokémon (likely Dudunsparce on Hero's Cape) — this 'protecting that early prize card' was called the game-winning play.",
+          "engine_lesson": "Hero's Cape on a non-EX (1-prize) attacker creates a hyper-efficient prize trade — opp must commit a 2-shot at a 1-prize target. Engine doesn't currently weight ACE SPEC tools on non-rule-box Pokémon higher than on EX Pokémon. It should: `Hero's Cape on non-EX > Hero's Cape on EX` because the prize-trade math heavily favors the former."
+        },
+        {
+          "turn": "concession",
+          "active": "p2",
+          "actions": [
+            { "kind": "playBasicToBench", "card": "Spiritomb", "notes": "Netti's last attacker — dark type, immune to Risky Ruins damage" },
+            { "kind": "endTurn", "notes": "no switch in hand to promote Spiritomb to active. Caster: 'only one switch in the deck — not something you would expect to happen too often.'" },
+            { "kind": "concede", "notes": "caster: 'That is a concession. Mateusz takes it two games to one.'" }
+          ]
+        }
+      ]
+    }
+  ],
+  "key_moments": [
+    {
+      "game": 2,
+      "turn": "mid",
+      "description": "Mateusz prioritized Phantom Dive bench targets on Cynthia's Roserade (energy-acceleration engine) over Cynthia's Garchomp (the actual attacker). Recognized that without Roserade, Garchomp can't be powered fast enough.",
+      "engine_lesson": "ADD Cynthia's Roserade to bestGustTarget boost list in ai.ts. Currently Roserade is not flagged as a high-priority ramp engine. Same pattern as Bibarel / Dudunsparce / Fan Rotom / Teal Mask Ogerpon ex / Spidops / Blaziken ex."
+    },
+    {
+      "game": 3,
+      "turn": "decisive",
+      "description": "Mateusz used DOUBLE Munkidori Adrena-Brain (move 3 counters per use) to set up a Phantom Dive lethal on Cynthia's Garchomp. The damage move was 6 counters — enough to convert sub-lethal into lethal.",
+      "engine_lesson": "VALIDATES moveDamageOwnToOpp (Adrena-Brain) effect handler. Confirm v2 ai.ts evaluates 'multi-Munkidori chained activation' — when 2× Munkidori both have damage on them, score should reflect cumulative move potential. Currently the AI may evaluate each ability in isolation."
+    },
+    {
+      "game": 3,
+      "turn": "key",
+      "description": "Mateusz played Hero's Cape on a non-EX Dudunsparce ('protecting that early prize card was probably the play that won the game'). 1-prize Pokémon + 100 HP buff = forces opp to 2-shot a 1-prize target = unfavorable prize trade for opp.",
+      "engine_lesson": "Hero's Cape evaluation in ai.ts should be ASYMMETRIC: target a 1-prize Pokémon if available, NOT a 2-prize EX. The engine should encode `prize_efficiency = damage_required / prize_value` and weight Hero's Cape attachments to maximize that ratio."
+    },
+    {
+      "game": 3,
+      "turn": "concession",
+      "description": "Netti conceded with Spiritomb in bench but no switch in hand (only 1 Switch in deck). Spiritomb's role was anti-mirror — useless when stuck on bench against a damage-spreading opponent.",
+      "engine_lesson": "Existing: when only 1 critical retrieval card (Switch / Night Stretcher / etc.) and it's prized or in deck, AI should evaluate 'effective dead-card probability' before committing resources to a bench-only attacker. Note for Phase 9 self-tuning: low-redundancy switch cards should reduce AI confidence in attacker-bench-then-promote sequences."
+    }
+  ],
+  "engine_notes": [
+    "Cynthia's Garchomp is a NEW archetype not in aiArchetype.ts. Signature cards: Cynthia's Garchomp (Stage 2 attacker), Cynthia's Roserade (energy ramp ability), Cynthia's Power Weight (tool — HP buffer), Spirit Tomb (counter-damage attacker), Cynthia's-prefix tutor supporters. Suggested archetype string: `cynthia-garchomp`. Playbook: T1 fan out Cynthia's Gible + Roselia, T2 evolve Roserade for accel, T3 Garchomp + Power Weight, T4+ Boss's Orders gust setup denial.",
+    "Hero's Cape is now confirmed in TWO Mateusz top-cut games as game-deciding when applied to a NON-EX attacker (Dudunsparce here, Dragapult also benefits but the prize-trade math is weaker). Add Hero's Cape to ai.ts ACE SPEC evaluation as 'preferred when deck has 1-prize attackers'.",
+    "VALIDATES the engine's Adrena-Brain (moveDamageOwnToOpp) and Phantom Dive (distributeDamage) chained interaction. The damage estimator should evaluate post-Adrena-Brain Phantom Dive lethal — currently this multi-step evaluation may not be in the 1-ply lookahead.",
+    "Itchy Pollen (Budew) item-lock is shown bidirectionally in this set — Mateusz used it Game 1 to slow Netti's setup. Already validated in prior Prague R9 replay."
+  ]
+}

@@ -14,6 +14,97 @@
       "recorded_at": "2026-04-29",
       "match_outcome": "1-1 with Game 3 truncated by transcript; Game 3 momentum favored Alexandre at end of caption window",
       "notes": "First replay logged. Player full names not confirmed in Limitless top-255 standings — handles match caster pronunciation. Decklists are representative archetypal lists from the same tournament (Cipolla 8th, Tallone 106th)."
+    },
+    {
+      "file": "prague-2026-r13-mega-starmie-froslass-vs-cynthia-garchomp.json",
+      "event": "Prague Regional Championships 2026",
+      "round": "Swiss Round 13 (final round, win-and-in for Top 16)",
+      "players": ["Lorenzo (Mega Starmie / Mega Frostlass)", "Neddy Kosek (Cynthia's Garchomp)"],
+      "decks": ["mega-starmie-froslass", "cynthia-garchomp"],
+      "format": "Standard",
+      "regulation_marks_seen": ["H", "I", "J"],
+      "source_url": "https://www.youtube.com/watch?v=5ewTXCpaGpA",
+      "video_segment": "00:54:00–01:46:00",
+      "recorded_at": "2026-04-29",
+      "match_outcome": "Netti wins 2-1 (G1 Lorenzo, G2 Lorenzo concession at 5min, G3 Netti via Unfair Stamp + Boss + Switch combo)",
+      "notes": "First documented case in our replay corpus of a player INTENTIONALLY conceding Game 2 for time-management reasons. Two NEW archetypes introduced: mega-starmie-froslass (distinct from mega-starmie-dusknoir) and cynthia-garchomp."
+    },
+    {
+      "file": "prague-2026-top16-dragapult-dudunsparce-vs-grimmsnarl-froslass.json",
+      "event": "Prague Regional Championships 2026",
+      "round": "Asymmetrical Top Cut Top 16",
+      "players": ["Mateusz Łaszkiewicz (Dragapult/Dudunsparce)", "Nicklas Rosu (Maman's Grimmsnarl/Frostlass)"],
+      "decks": ["dragapult-dudunsparce", "grimmsnarl-froslass"],
+      "format": "Standard",
+      "regulation_marks_seen": ["H", "I", "J"],
+      "source_url": "https://www.youtube.com/watch?v=5ewTXCpaGpA",
+      "video_segment": "02:25:30–03:05:01",
+      "recorded_at": "2026-04-29",
+      "match_outcome": "Mateusz wins 2-0",
+      "notes": "Player full names from Limitless top 16 standings. Mateusz is the eventual tournament champion. NEW archetype: grimmsnarl-froslass (Maman's-prefix support engine + Frostlass Freezing Shroud + Spike Muff Gym)."
+    },
+    {
+      "file": "prague-2026-top8-dragapult-vs-crustle.json",
+      "event": "Prague Regional Championships 2026",
+      "round": "Top 8 (Quarterfinals)",
+      "players": ["Tord Reklev (Dragapult, basic-EX bench variant)", "Elmar Tresp (Crustle)"],
+      "decks": ["dragapult", "crustle"],
+      "format": "Standard",
+      "regulation_marks_seen": ["H", "I", "J"],
+      "source_url": "https://www.youtube.com/watch?v=5ewTXCpaGpA",
+      "video_segment": "03:31:00–04:24:30",
+      "recorded_at": "2026-04-29",
+      "match_outcome": "Elmar wins 2-0",
+      "notes": "NEW archetype: crustle (Mysterious Rocking Inability EX-immunity + Mega Kangaskhan ex backup + Cornerstone Mask Ogerpon ex). 'Aggressive Dragapult' (3 Rare Candy, basic-EX bench) variant differs from Mateusz's Dudunsparce-engine variant — engine should split into multiple dragapult sub-archetypes."
+    },
+    {
+      "file": "prague-2026-top4-crustle-vs-mega-starmie.json",
+      "event": "Prague Regional Championships 2026",
+      "round": "Top 4 (Semifinals)",
+      "players": ["Elmar Tresp (Crustle)", "João Pires (Mega Starmie ex / Dusknoir)"],
+      "decks": ["crustle", "mega-starmie-dusknoir"],
+      "format": "Standard",
+      "regulation_marks_seen": ["H", "I", "J"],
+      "source_url": "https://www.youtube.com/watch?v=5ewTXCpaGpA",
+      "video_segment": "04:39:30–05:30:00",
+      "recorded_at": "2026-04-29",
+      "match_outcome": "Elmar wins 2-1 (G1 Mega Kanga rapid-fire 200, G2 Elmar 'missed math', G3 Mega Kanga 3-heads again)",
+      "notes": "NEW archetype: mega-starmie-dusknoir (distinct from mega-starmie-froslass — uses Cursed Blast for Crustle-counter rather than Mega Frostlass damage scaling). Cursed Blast + Jetting Blow exact-OHKO combo demonstrated."
+    },
+    {
+      "file": "prague-2026-top4-dragapult-dudunsparce-vs-cynthia-garchomp.json",
+      "event": "Prague Regional Championships 2026",
+      "round": "Top 4 (Semifinals)",
+      "players": ["Mateusz Łaszkiewicz (Dragapult/Dudunsparce)", "Neddy Kosek (Cynthia's Garchomp)"],
+      "decks": ["dragapult-dudunsparce", "cynthia-garchomp"],
+      "format": "Standard",
+      "regulation_marks_seen": ["H", "I", "J"],
+      "source_url": "https://www.youtube.com/watch?v=5ewTXCpaGpA",
+      "video_segment": "05:41:30–06:53:00",
+      "recorded_at": "2026-04-29",
+      "match_outcome": "Mateusz wins 2-1 (G1 Netti via Boss + Roserade ramp, G2 Mateusz prioritized Roserade KOs, G3 double-Munkidori Adrena-Brain finish)",
+      "notes": "Hero's Cape on non-EX Dudunsparce is called game-winning by casters. Validates 'protecting 1-prize attackers' as a high-value heuristic."
+    },
+    {
+      "file": "prague-2026-finals-dragapult-dudunsparce-vs-crustle.json",
+      "event": "Prague Regional Championships 2026",
+      "round": "Finals (Grand Final)",
+      "players": ["Mateusz Łaszkiewicz (Dragapult/Dudunsparce, CHAMPION)", "Elmar Tresp (Crustle)"],
+      "decks": ["dragapult-dudunsparce", "crustle"],
+      "format": "Standard",
+      "regulation_marks_seen": ["H", "I", "J"],
+      "source_url": "https://www.youtube.com/watch?v=5ewTXCpaGpA",
+      "video_segment": "07:01:00–07:50:30",
+      "recorded_at": "2026-04-29",
+      "match_outcome": "Mateusz wins 2-0 (G1 Destructive Drill bypassed Mysterious Rocking, G2 Mind Bend Confusion lock with no Switch in Elmar's hand)",
+      "notes": "Mateusz is the 2026 Prague Regional Champion. Game-1 highlight: 3 of 4 Poké Pads PRIZED — Mateusz adapted via Brock's Scouting. Game-2 highlight: 16-CARD Erratic Machinations discard. Final blow: Munkidori Mind Bend over Dragon Headbutt (Confusion lock vs no Switch). Verify Erratic Machinations + Asher Roller's Mischief + Missed-Energy-Confusion-interaction in engine."
     }
-  ]
+  ],
+  "tournament_summary_prague_2026": {
+    "champion": "Mateusz Łaszkiewicz (Dragapult/Dudunsparce, Hero's Cape ACE SPEC)",
+    "finalist": "Elmar Tresp (Crustle, Mega Kangaskhan ex backup, Hero's Cape ACE SPEC)",
+    "top_8_archetype_breakdown": "Dragapult ×3, Crustle ×3, Mega Starmie ×1, Cynthia's Garchomp ×1, Raging Bolt ×1, Ogerpon/Meganium ×1 (10 total accounting for top-cut bracket spots)",
+    "key_format_takeaway": "Crustle is the key disruption deck — if your deck has no anti-EX-immunity tech (Cursed Blast / Tenacious Tail / Destructive Drill / non-EX attackers / Curse Blast), Crustle is structurally near-unwinnable.",
+    "ace_spec_meta": "Hero's Cape ascendant — both finalists ran it. Unfair Stamp also viable. Mega Kangaskhan ex's 'rapid-fire combo' (coin-flip per energy) showed extreme variance impact."
+  }
 }

@@ -19,6 +19,11 @@ export type Archetype =
   | "lucario-ex"
   | "rocket-mewtwo"
   | "dragapult-blaziken"
+  | "dragapult-dudunsparce"
+  | "crustle"
+  | "cynthia-garchomp"
+  | "grimmsnarl-froslass"
+  | "mega-starmie-froslass"
   | "generic";
 
 // Distinctive cards that flag a deck as an archetype. The first match wins;
@@ -53,6 +58,60 @@ const SIGNATURES: Record<Exclude<Archetype, "generic">, string[]> = {
     "Drakloak",
     "Blaziken ex",
     "Munkidori",
+  ],
+  // Mateusz Łaszkiewicz's Prague Regional 2026 CHAMPION list. Dragapult ex
+  // primary attacker with Dudunsparce ex as the anti-Crustle Destructive
+  // Drill bypass (3-energy, 150 dmg, ignores all opp effects). Hero's Cape
+  // ACE SPEC on the 1-prize Dudunsparce — forces opp into 2-attack KOs.
+  // Dudunsparce ex is signature[0] (unique attacker) so detection prefers
+  // this over plain dragapult-blaziken when both Dragapult ex + Dudunsparce
+  // ex are present.
+  "dragapult-dudunsparce": [
+    "Dudunsparce ex",
+    "Dragapult ex",
+    "Drakloak",
+    "Hero's Cape",
+  ],
+  // Elmar Tresp's Prague Regional 2026 finalist deck. Mysterious Rocking
+  // Inability walls all EX attackers; Crustle stacks Growing Grass / Spiky
+  // Energy + heals via Pokémon Center Lady / Colress's Tenacity. Mega
+  // Kangaskhan ex is the rapid-fire backup attacker. Plan inverted from
+  // typical aggro: WALL until opp is at 1-2 prizes, then attack.
+  "crustle": [
+    "Crustle",
+    "Dwebble",
+    "Cornerstone Mask Ogerpon ex",
+    "Mysterious Rocking",
+  ],
+  // Neddy Kosek's "Cynthia's Garchomp" — Top 4 Prague 2026. Cynthia's-prefix
+  // engine: Cynthia's Gabite tutors more line members, Cynthia's Roserade
+  // accelerates energy. Garchomp Corkscrew Dive (attack + draw) enables
+  // aggressive Boss's Orders pre-commitment.
+  "cynthia-garchomp": [
+    "Cynthia's Garchomp",
+    "Cynthia's Gabite",
+    "Cynthia's Gible",
+    "Cynthia's Roserade",
+  ],
+  // Nicklas Rosu's "Maman's Grimmsnarl ex" — Top 16 Prague 2026. Maman's-
+  // prefix engine + Spike Muff Gym (item-lock-immune stadium-search).
+  // Frostlass Freezing Shroud passive bench damage. Punk Up energy accel
+  // on evolution.
+  "grimmsnarl-froslass": [
+    "Maman's Grimmsnarl ex",
+    "Maman's Morgrem",
+    "Maman's Impidimp",
+    "Spike Muff Gym",
+  ],
+  // João Pires's "Mega Starmie ex / Mega Frostlass" — Top 4 Prague 2026.
+  // Risky Ruins stadium passive 2-counter spread per turn + Jetting Blow
+  // 50-dmg bench snipe = compound damage threat. Mega Frostlass scales by
+  // opp hand size (devastates post-Iono).
+  "mega-starmie-froslass": [
+    "Mega Starmie ex",
+    "Risky Ruins",
+    "Mega Frostlass",
+    "Staryu",
   ],
 };
 
@@ -174,6 +233,89 @@ export function archetypeTrainerBonus(
       if (card.name === "Boss's Orders") return 14;
       if (card.name === "Counter Catcher") return 12;
       return 0;
+    case "dragapult-dudunsparce":
+      // Lillie's Determination is the T2 draw refill (post-Buddy-Buddy).
+      if (card.name === "Lillie's Determination") return 22;
+      // Buddy-Buddy Poffin tutors the Dreepy + Munkidori T1 bench.
+      if (card.name === "Buddy-Buddy Poffin") return 20;
+      // Rare Candy bypasses Drakloak — crucial for T3 Phantom Dive.
+      if (card.name === "Rare Candy") return 18;
+      // Boss's Orders gusts opp setup Pokémon (Roselia / Dwebble / Munkidori).
+      if (card.name === "Boss's Orders") return 16;
+      // Pokégear 3.0 chains into supporters when no draw in hand.
+      if (card.name === "Pokégear 3.0") return 12;
+      // Brock's Scouting can grab Dreepy + Dudunsparce together (Evolution branch).
+      if (card.name === "Brock's Scouting") return 12;
+      // Erratic Machinations — Mateusz famously discarded 16 cards in finals
+      // G2 to refresh hand. Situationally massive when hand stalls.
+      if (card.name === "Erratic Machinations") return 10;
+      // Night Stretcher retrieves a KO'd Dudunsparce + an energy.
+      if (card.name === "Night Stretcher") return 10;
+      // Hero's Cape ACE SPEC — preferred over Unfair Stamp (1-prize buffer).
+      if (card.name === "Hero's Cape") return 22;
+      return 0;
+    case "crustle":
+      // Pokégear 3.0 chains into the deck's toolbox supporters.
+      if (card.name === "Pokégear 3.0") return 22;
+      // Lillie's Determination — primary T1 draw refill.
+      if (card.name === "Lillie's Determination") return 20;
+      // Buddy-Buddy Poffin tutors the wide Dwebble bench.
+      if (card.name === "Buddy-Buddy Poffin") return 18;
+      // Hilda — toolbox supporter, situational draw / search.
+      if (card.name === "Hilda") return 14;
+      // Brock's Scouting hits Evolution branch when Dwebble→Crustle is teed up.
+      if (card.name === "Brock's Scouting") return 14;
+      // Pokémon Center Lady is the wall-phase healer.
+      if (card.name === "Pokémon Center Lady") return 16;
+      // Colress's Tenacity chains stadium → energy (refills lost stadium).
+      if (card.name === "Colress's Tenacity") return 14;
+      // Boss's Orders sniped opp setup pieces in the wall phase.
+      if (card.name === "Boss's Orders") return 12;
+      // Hero's Cape on Crustle = 250 HP wall.
+      if (card.name === "Hero's Cape") return 24;
+      return 0;
+    case "cynthia-garchomp":
+      // Cynthia is the deck's signature engine supporter (energy refill / draw).
+      if (card.name === "Cynthia") return 26;
+      // Buddy-Buddy Poffin double-played T1 sets up the Gible + Roselia bench.
+      if (card.name === "Buddy-Buddy Poffin") return 22;
+      // Boss's Orders converts Garchomp's Corkscrew Dive into prize trades.
+      if (card.name === "Boss's Orders") return 16;
+      // Rare Candy can skip Gabite step on a T3 Garchomp swing.
+      if (card.name === "Rare Candy") return 14;
+      // Cynthia's Power Weight — HP buffer on the Garchomp line.
+      if (card.name === "Cynthia's Power Weight") return 12;
+      // Unfair Stamp — Netti's variant-defining ACE SPEC.
+      if (card.name === "Unfair Stamp") return 18;
+      return 0;
+    case "grimmsnarl-froslass":
+      // Spike Muff Gym — item-lock-immune stadium-search; deck's signature
+      // recovery tool against Budew lines.
+      if (card.name === "Spike Muff Gym") return 28;
+      // Lillie's Determination — primary T2 draw refill.
+      if (card.name === "Lillie's Determination") return 22;
+      // Buddy-Buddy Poffin tutors the Maman's Impidimp + Munkidori bench.
+      if (card.name === "Buddy-Buddy Poffin") return 20;
+      // Petrel — Order Up tutor target. Toolbox supporter access.
+      if (card.name === "Petrel") return 16;
+      // Boss's Orders converts Shadow Bullet's spread into prize trades.
+      if (card.name === "Boss's Orders") return 14;
+      // Poké Pad tutors non-rule-box (Munkidori) — keeps options open.
+      if (card.name === "Poké Pad") return 12;
+      return 0;
+    case "mega-starmie-froslass":
+      // Risky Ruins — deck's signature accelerator. Compounds Jetting Blow
+      // bench snipe into KO range against evolving basics.
+      if (card.name === "Risky Ruins") return 30;
+      // Crispin attaches 2 different basic energies — primary acceleration.
+      if (card.name === "Crispin") return 22;
+      // Lillie's Determination — T2 draw refill.
+      if (card.name === "Lillie's Determination") return 20;
+      // Buddy-Buddy Poffin tutors the Staryu + Snorunt + Munkidori bench.
+      if (card.name === "Buddy-Buddy Poffin") return 18;
+      // Boss's Orders converts spread damage into KOs.
+      if (card.name === "Boss's Orders") return 16;
+      return 0;
     default:
       return 0;
   }
@@ -223,6 +365,52 @@ export function archetypeAttachBonus(
       // Drakloak still needs energy in case Rare Candy doesn't show up.
       if (name === "Drakloak") return 10;
       return 0;
+    case "dragapult-dudunsparce":
+      // Dragapult ex is the primary 200-dmg Phantom Dive attacker.
+      if (name === "Dragapult ex") return 25;
+      // Dudunsparce ex Destructive Drill bypasses Crustle / EX-immunity.
+      if (name === "Dudunsparce ex") return 22;
+      // Drakloak holds energy when Rare Candy isn't available.
+      if (name === "Drakloak") return 12;
+      // Dreepy is the seed for the Dragapult line.
+      if (name === "Dreepy") return 8;
+      return 0;
+    case "crustle":
+      // Crustle is the wall — energy buffers Growing Grass HP and Spiky Energy.
+      if (name === "Crustle") return 22;
+      // Mega Kangaskhan ex rapid-fire — backup attacker against EX-immune walls.
+      if (name === "Mega Kangaskhan ex") return 18;
+      // Cornerstone Mask Ogerpon ex — ability-immune front-line tank.
+      if (name === "Cornerstone Mask Ogerpon ex") return 12;
+      // Dwebble holds energy until Crustle evolution.
+      if (name === "Dwebble") return 10;
+      return 0;
+    case "cynthia-garchomp":
+      // Cynthia's Garchomp is the only attacker — Corkscrew Dive / Dragon Slice.
+      if (name === "Cynthia's Garchomp") return 25;
+      // Cynthia's Roserade powers Garchomp via attach-from-deck ability;
+      // attaching to Roserade itself is wasted — DON'T boost Roserade.
+      if (name === "Cynthia's Gabite") return 14;
+      if (name === "Cynthia's Gible") return 8;
+      return 0;
+    case "grimmsnarl-froslass":
+      // Maman's Grimmsnarl ex — Shadow Bullet 180 + 30 spread is the plan.
+      if (name === "Maman's Grimmsnarl ex") return 25;
+      // Munkidori needs 1 energy for Adrena-Brain damage shifts.
+      if (name === "Munkidori") return 16;
+      // Maman's Morgrem evolves into Grimmsnarl with Punk Up energy accel.
+      if (name === "Maman's Morgrem") return 12;
+      return 0;
+    case "mega-starmie-froslass":
+      // Mega Starmie ex Jetting Blow (120 active + 50 bench) is the engine.
+      if (name === "Mega Starmie ex") return 25;
+      // Mega Frostlass — late-game hand-size punisher (50× opp hand cards).
+      if (name === "Mega Frostlass") return 18;
+      // Munkidori shifts damage onto opp's bench for KO range.
+      if (name === "Munkidori") return 12;
+      // Staryu — feeds the Mega Starmie line.
+      if (name === "Staryu") return 8;
+      return 0;
     default:
       return 0;
   }
@@ -268,6 +456,47 @@ export function archetypeBenchBonus(
       if (name === "Munkidori") return 12;
       if (name === "Budew") return 10;
       return 0;
+    case "dragapult-dudunsparce":
+      // Dreepy redundancy = gust insurance for the Stage 2 line.
+      if (name === "Dreepy") return 18;
+      // Dunsparce evolves into Dudunsparce ex (anti-Crustle attacker).
+      if (name === "Dunsparce") return 14;
+      // Munkidori for Adrena-Brain damage shifts.
+      if (name === "Munkidori") return 12;
+      return 0;
+    case "crustle":
+      // Wide Dwebble bench is the wall foundation — multiple lines so
+      // 1 KO doesn't sink the plan.
+      if (name === "Dwebble") return 20;
+      // Cornerstone Mask Ogerpon ex — Free-Heal pivot + ability-damage immunity.
+      if (name === "Cornerstone Mask Ogerpon ex") return 12;
+      // Mega Kangaskhan ex — rapid-fire backup against EX-immune opponents.
+      if (name === "Kangaskhan") return 10;
+      return 0;
+    case "cynthia-garchomp":
+      // Wide Gible bench (3+) so Boss's Orders can't pick off the line.
+      if (name === "Cynthia's Gible") return 18;
+      // Cynthia's Roselia is the energy ramp — non-negotiable bench drop.
+      if (name === "Cynthia's Roselia") return 16;
+      return 0;
+    case "grimmsnarl-froslass":
+      // Maman's Impidimp redundancy = the Grimmsnarl line.
+      if (name === "Maman's Impidimp") return 18;
+      // Munkidori for Adrena-Brain.
+      if (name === "Munkidori") return 14;
+      // Snorunt for Frostlass evolution (Freezing Shroud passive).
+      if (name === "Snorunt") return 12;
+      // Tatsugiri — Order Up tutors a supporter from top 6.
+      if (name === "Tatsugiri") return 10;
+      return 0;
+    case "mega-starmie-froslass":
+      // Multiple Staryu = redundant Mega Starmie ex lines.
+      if (name === "Staryu") return 18;
+      // Snorunt for Mega Frostlass evolution (hand-size scaling).
+      if (name === "Snorunt") return 14;
+      // Munkidori for Adrena-Brain.
+      if (name === "Munkidori") return 12;
+      return 0;
     default:
       return 0;
   }
@@ -297,6 +526,42 @@ export function archetypeAbilityBonus(
       return 0;
     case "dragapult-blaziken":
       // Adrena-Brain (Munkidori) moves damage to the active for setup turns.
+      if (abilityName === "Adrena-Brain") return 18;
+      return 0;
+    case "dragapult-dudunsparce":
+      // Recon Directive (Drakloak) — top-2 filter for Phantom Dive pieces.
+      if (abilityName === "Recon Directive") return 20;
+      // Adrena-Brain (Munkidori) — damage redistribution.
+      if (abilityName === "Adrena-Brain") return 16;
+      // Run Away Draw (Dudunsparce nonex) — 1-card draw + retreat utility.
+      if (abilityName === "Run Away Draw") return 12;
+      return 0;
+    case "crustle":
+      // Mysterious Rocking Inability — passive EX-damage immunity. Triggered
+      // by Crustle being in play; not an activated ability but worth flagging
+      // so the AI keeps Crustle promoted in EX-heavy matchups.
+      if (abilityName === "Mysterious Rocking Inability") return 25;
+      // Free-Heal (Cornerstone Mask Ogerpon ex) — heal on switch-out.
+      if (abilityName === "Free-Heal") return 12;
+      return 0;
+    case "cynthia-garchomp":
+      // Roserade's energy-ramp ability is the deck's only acceleration path.
+      if (abilityName === "Roserade") return 22;
+      // Cynthia's Gabite tutor ability finds the rest of the line.
+      if (abilityName === "Cynthia's Gabite") return 18;
+      return 0;
+    case "grimmsnarl-froslass":
+      // Punk Up (Grimmsnarl ex) — search a Dark energy from deck on evolve.
+      if (abilityName === "Punk Up") return 22;
+      // Freezing Shroud (Frostlass) — passive 10 dmg per turn to ability Pokémon.
+      if (abilityName === "Freezing Shroud") return 16;
+      // Order Up (Tatsugiri) — top 6 → take 1 supporter.
+      if (abilityName === "Order Up") return 14;
+      // Adrena-Brain (Munkidori) — damage shift.
+      if (abilityName === "Adrena-Brain") return 12;
+      return 0;
+    case "mega-starmie-froslass":
+      // Adrena-Brain (Munkidori) — sets up Jetting Blow exact-KO math.
       if (abilityName === "Adrena-Brain") return 18;
       return 0;
     default:
@@ -437,6 +702,147 @@ const PLAYBOOKS: Partial<Record<Archetype, PlaybookEntry>> = {
         "Boss's Orders": 25,
         "Counter Catcher": 20,
         "Crispin": 28,
+      },
+    },
+    abilityBonus: {
+      1: {},
+      2: { "Adrena-Brain": 18 },
+      3: { "Adrena-Brain": 22 },
+    },
+  },
+  // Sourced from prague-2026-top16/top4/finals replays. Mateusz
+  // Łaszkiewicz's championship line. T1 is item-only (T1 supporter ban) —
+  // Poffin double-tutors Dreepy + Munkidori. T2 is Lillie's draw + Drakloak
+  // evolve. T3 is Phantom Dive (Rare Candy → Dragapult ex). Hero's Cape on
+  // 1-prize Dudunsparce is the matchup-defining ACE SPEC choice — verify
+  // it's strongly preferred from T2 onward.
+  "dragapult-dudunsparce": {
+    cardBonus: {
+      1: {
+        "Buddy-Buddy Poffin": 40,
+        "Poké Pad": 25,
+        "Ultra Ball": 18,
+      },
+      2: {
+        "Lillie's Determination": 50,
+        "Rare Candy": 40,
+        "Buddy-Buddy Poffin": 25,
+        "Hero's Cape": 35,
+      },
+      3: {
+        "Boss's Orders": 35,
+        "Rare Candy": 30,
+        "Pokégear 3.0": 18,
+      },
+    },
+    abilityBonus: {
+      1: {},
+      2: { "Recon Directive": 25 },
+      3: { "Recon Directive": 22, "Adrena-Brain": 18 },
+    },
+  },
+  // Sourced from prague-2026-top8/top4/finals replays. Elmar Tresp's
+  // finalist deck. Plan INVERTED from typical aggro: wall first, attack
+  // last. T1 PASS on Ascension when energy attach matters more — observed
+  // across all 3 source matches. T3+ wall phase: stack Growing Grass /
+  // Spiky Energy + Pokémon Center Lady heals; only attack when opp ≤2
+  // prizes. Ascension's playbook bonus is intentionally LOW (the AI's
+  // greedy step-loop already finds zero-cost attacks; we want to dampen
+  // it on this archetype, not boost it).
+  "crustle": {
+    cardBonus: {
+      1: {
+        "Pokégear 3.0": 35,
+        "Buddy-Buddy Poffin": 30,
+        "Lillie's Determination": 25,
+      },
+      2: {
+        "Hero's Cape": 50,
+        "Lillie's Determination": 30,
+        "Pokémon Center Lady": 25,
+      },
+      3: {
+        "Pokémon Center Lady": 35,
+        "Colress's Tenacity": 30,
+        "Boss's Orders": 22,
+      },
+    },
+    abilityBonus: { 1: {}, 2: {}, 3: {} },
+  },
+  // Sourced from prague-2026-r13/top4 replays. Neddy Kosek's "Cynthia's
+  // Garchomp" line. T1 often double-Poffin — wide bench of 4-5 basics
+  // (Cynthia's Gible x2-3 + Cynthia's Roselia x1-2). T2 evolves Roselia
+  // → Roserade (energy ramp) and Gible → Gabite (line tutor). T3
+  // Garchomp Corkscrew Dive (attack + draw) lands the first prize.
+  "cynthia-garchomp": {
+    cardBonus: {
+      1: {
+        "Buddy-Buddy Poffin": 50,
+        "Ultra Ball": 18,
+      },
+      2: {
+        "Cynthia": 50,
+        "Rare Candy": 30,
+        "Cynthia's Power Weight": 20,
+      },
+      3: {
+        "Boss's Orders": 35,
+        "Cynthia": 30,
+        "Unfair Stamp": 25,
+      },
+    },
+    abilityBonus: {
+      1: {},
+      2: { "Roserade": 30 },
+      3: { "Roserade": 25, "Cynthia's Gabite": 22 },
+    },
+  },
+  // Sourced from prague-2026-top16 replay. Nicklas Rosu's "Maman's
+  // Grimmsnarl ex" line. T1 — Spike Muff Gym (item-lock-immune stadium)
+  // is the deck's archetype-defining play. T2 evolve Snorunt → Frostlass
+  // (Freezing Shroud passive) + Maman's Impidimp → Morgrem. T3 evolve
+  // Morgrem → Grimmsnarl ex; Punk Up ability searches Dark energy from
+  // deck on evolve = energy acceleration to fuel Shadow Bullet.
+  "grimmsnarl-froslass": {
+    cardBonus: {
+      1: {
+        "Spike Muff Gym": 55,
+        "Buddy-Buddy Poffin": 35,
+        "Poké Pad": 22,
+      },
+      2: {
+        "Lillie's Determination": 45,
+        "Buddy-Buddy Poffin": 25,
+      },
+      3: {
+        "Boss's Orders": 25,
+        "Petrel": 20,
+      },
+    },
+    abilityBonus: {
+      1: { "Order Up": 20 },
+      2: { "Freezing Shroud": 25 },
+      3: { "Punk Up": 30, "Adrena-Brain": 18 },
+    },
+  },
+  // Sourced from prague-2026-r13 replay. João Pires's variant — Risky
+  // Ruins is the deck's signature accelerator (passive 2-counter spread
+  // per turn on opp ability Pokémon). T1 prioritizes Risky Ruins over
+  // any other stadium. T2 evolve Staryu → Mega Starmie ex with Crispin
+  // attach. T3 Jetting Blow + Boss's Orders to convert spread into KOs.
+  "mega-starmie-froslass": {
+    cardBonus: {
+      1: {
+        "Risky Ruins": 55,
+        "Buddy-Buddy Poffin": 30,
+      },
+      2: {
+        "Crispin": 50,
+        "Lillie's Determination": 30,
+      },
+      3: {
+        "Boss's Orders": 30,
+        "Crispin": 25,
       },
     },
     abilityBonus: {
