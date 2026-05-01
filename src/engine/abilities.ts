@@ -1717,6 +1717,17 @@ export function activateAbility(
       if (!allies.some((p) => p.card.name === e.allyName)) {
         return { ok: false, reason: `Requires ${e.allyName} in play.` };
       }
+      // Card text: "You can't use more than 1 Lunar Cycle Ability each turn."
+      // Per-instance abilityUsedThisTurn is set on the activating Lunatone
+      // by the wrapper after this case returns; a second copy in play would
+      // otherwise bypass that lock. Scan all Lunatones for a sibling that
+      // already activated this turn.
+      const sibling = allies.find(
+        (p) => p !== holder && p.card.name === holder.card.name && p.abilityUsedThisTurn,
+      );
+      if (sibling) {
+        return { ok: false, reason: `Lunar Cycle: only 1 use per turn across all copies.` };
+      }
       // Discard a Basic <costEnergyType> Energy from hand.
       const idx = pl.hand.findIndex(
         (c) =>
@@ -1825,23 +1836,40 @@ const TRIGGERED_ON_EVOLVE: Record<string, TriggeredOnEvolveEffect> = {
     },
   },
   // Hariyama — switch one of opp's Benched Pokémon to Active (gust).
+  // Humans with >1 bench target need to choose which Pokémon to gust;
+  // route through the canonical pokemonCatcher picker (mirrors Pokémon
+  // Catcher in trainerEffects.ts). AI / single-target paths resolve inline.
   "Heave-Ho Catcher": {
     label: "Heave-Ho Catcher: gust opponent's Benched",
     run: (state, player) => {
       const oppId: PlayerId = player === "p1" ? "p2" : "p1";
       const opp = state.players[oppId];
+      const pl = state.players[player];
       if (!opp.active || opp.bench.length === 0) {
         logEvent(state, player, `Heave-Ho Catcher: nothing to gust — opponent has no Benched Pokémon.`);
         return;
       }
-      // Auto-pick highest-HP bench target for strongest gust impact.
-      const target = opp.bench.slice().sort((a, b) => b.card.hp - a.card.hp)[0];
-      const idx = opp.bench.indexOf(target);
-      const pulled = opp.bench.splice(idx, 1)[0];
-      const wasActive = opp.active;
-      opp.active = pulled;
-      opp.bench.push(wasActive);
-      logEvent(state, player, `Heave-Ho Catcher gusts ${pulled.card.name} to Active.`);
+      if (pl.isAI || opp.bench.length === 1) {
+        const target =
+          opp.bench.length === 1
+            ? opp.bench[0]
+            : opp.bench.slice().sort((a, b) => b.card.hp - a.card.hp)[0];
+        const idx = opp.bench.indexOf(target);
+        const pulled = opp.bench.splice(idx, 1)[0];
+        const wasActive = opp.active;
+        opp.active = pulled;
+        opp.bench.push(wasActive);
+        logEvent(state, player, `Heave-Ho Catcher gusts ${pulled.card.name} to Active.`);
+        return;
+      }
+      state.pendingInPlayTarget = {
+        player,
+        label: "Heave-Ho Catcher: pick an opposing Benched Pokémon to gust",
+        scope: "opp",
+        slot: "bench",
+        filter: "anyPokemon",
+        action: { kind: "pokemonCatcher" },
+      };
     },
   },
   // Brambleghast — make opp's Active Pokémon Confused.
@@ -2173,19 +2201,36 @@ const TRIGGERED_ON_EVOLVE: Record<string, TriggeredOnEvolveEffect> = {
   },
 
   // Hop's Dubwool Defiant Horn — gust opp's bench (alias of Heave-Ho Catcher).
+  // Same picker pattern: humans with >1 bench target choose; AI / single
+  // target resolves inline.
   "Defiant Horn": {
     label: "Defiant Horn: gust opp's Benched",
     run: (state, player) => {
       const oppId: PlayerId = player === "p1" ? "p2" : "p1";
       const opp = state.players[oppId];
+      const pl = state.players[player];
       if (!opp.active || opp.bench.length === 0) return;
-      const target = opp.bench.slice().sort((a, b) => b.card.hp - a.card.hp)[0];
-      const idx = opp.bench.indexOf(target);
-      const pulled = opp.bench.splice(idx, 1)[0];
-      const wasActive = opp.active;
-      opp.active = pulled;
-      opp.bench.push(wasActive);
-      logEvent(state, player, `Defiant Horn gusts ${pulled.card.name} to Active.`);
+      if (pl.isAI || opp.bench.length === 1) {
+        const target =
+          opp.bench.length === 1
+            ? opp.bench[0]
+            : opp.bench.slice().sort((a, b) => b.card.hp - a.card.hp)[0];
+        const idx = opp.bench.indexOf(target);
+        const pulled = opp.bench.splice(idx, 1)[0];
+        const wasActive = opp.active;
+        opp.active = pulled;
+        opp.bench.push(wasActive);
+        logEvent(state, player, `Defiant Horn gusts ${pulled.card.name} to Active.`);
+        return;
+      }
+      state.pendingInPlayTarget = {
+        player,
+        label: "Defiant Horn: pick an opposing Benched Pokémon to gust",
+        scope: "opp",
+        slot: "bench",
+        filter: "anyPokemon",
+        action: { kind: "pokemonCatcher" },
+      };
     },
   },
 

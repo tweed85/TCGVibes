@@ -11,7 +11,7 @@
 // plain `text` so the UI can display them even though they won't fire.
 
 import { addStatus, drawCards, flipCoin, logEvent, prizeValue, setPendingPromote } from "./rules";
-import { benchDamageBlocked, benchDamageBlockedByFlowerCurtain, effectiveMaxHp } from "./ongoingEffects";
+import { benchDamageBlocked, benchDamageBlockedByFlowerCurtain, effectiveMaxHp, effectiveWeaknesses } from "./ongoingEffects";
 import { applyTrainerEffect } from "./trainerEffects";
 import { getAttackEffects } from "../data/effectPatterns";
 import type {
@@ -1882,12 +1882,16 @@ export function resolveAttackEffects(
 
       case "multiCoinPerOppPokemon": {
         // Mega Zygarde ex "Nullifying Zero". Bench snipe honoring Flower
-        // Curtain / Battle Cage semantics for non-Active targets.
+        // Curtain / Battle Cage semantics for non-Active targets. Card text
+        // says "Don't apply Weakness and Resistance for Benched Pokémon" —
+        // i.e. W/R DOES apply to the Active. Apply it inline here for the
+        // active target only; bench targets take flat damagePerHeads.
         postHooks.push(() => {
           const opp = state.players[ctx.defenderOwner];
           const targets: Array<{ p: import("./types").PokemonInPlay; isActive: boolean }> = [];
           if (opp.active) targets.push({ p: opp.active, isActive: true });
           for (const b of opp.bench) targets.push({ p: b, isActive: false });
+          const atkType = ctx.attacker.card.types[0];
           let total = 0;
           for (const { p, isActive } of targets) {
             const heads = flipCoin(state, `${ctx.move.name} coin on ${p.card.name}`);
@@ -1900,9 +1904,26 @@ export function resolveAttackEffects(
               logEvent(state, "system", `Flower Curtain protects ${p.card.name}.`);
               continue;
             }
-            p.damage += e.damagePerHeads;
-            total += e.damagePerHeads;
-            logEvent(state, "system", `${p.card.name} takes ${e.damagePerHeads} damage.`);
+            let dmg = e.damagePerHeads;
+            if (isActive) {
+              const weak = effectiveWeaknesses(p, state).find((w) => w.type === atkType);
+              const res = p.card.resistances?.find((r) => r.type === atkType);
+              const ignoresWeakness =
+                p.noWeaknessUntilTurn !== undefined && state.turn <= p.noWeaknessUntilTurn;
+              if (!ignoresWeakness && weak && weak.value.startsWith("×")) {
+                const mult = parseInt(weak.value.slice(1), 10) || 2;
+                dmg *= mult;
+                logEvent(state, "system", `Weakness: ${p.card.name} takes ×${mult} from ${atkType} attacks.`);
+              }
+              if (res && res.value.startsWith("-")) {
+                const red = parseInt(res.value.slice(1), 10) || 30;
+                dmg = Math.max(0, dmg - red);
+                logEvent(state, "system", `Resistance: ${p.card.name} reduces ${atkType} damage by ${red}.`);
+              }
+            }
+            p.damage += dmg;
+            total += dmg;
+            logEvent(state, "system", `${p.card.name} takes ${dmg} damage.`);
           }
           if (total === 0) {
             logEvent(state, "system", `${ctx.move.name}: no heads — no damage dealt.`);

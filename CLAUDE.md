@@ -258,7 +258,7 @@ enough that greedy already plays it well.
 
 ## Test suite
 
-- **Vitest — 337 tests across 26 files** (+ 3 AI_BENCH-gated).
+- **Vitest — 345 tests across 27 files** (+ 3 AI_BENCH-gated).
   - `src/engine/__tests__/`: abilityDetection, dawnChain, energy,
     gameFlow, integration, ongoingEffects, presetDeckSmoke,
     trainerDetection, weakness, undoRng, undoIntegration,
