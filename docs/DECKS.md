@@ -30,8 +30,8 @@ validated by [../src/data/__tests__/communityDecks.test.ts](../src/data/__tests_
   Spikemuth Gym (item-lock-immune stadium-search). Punk Up energy accel.
 - `zanchi-mega-starmie-froslass` — 32nd. Risky Ruins passive 2-counter
   spread + Mega Froslass ex hand-size scaling damage.
-- `reklev-hops-trevenant` — Tord Reklev's stream of the Prague top-64
-  Hop's Trevenant list. Single-prize Hop's-prefix engine. Horrifying
+- `reklev-hops-trevenant` — Hop's Trevenant, Prague Regional 2026
+  community list. Single-prize Hop's-prefix engine. Horrifying
   Revenge (130 dmg if you lost a KO last turn) + Postwick / Hop's
   Choice Band damage layering.
 

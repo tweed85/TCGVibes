@@ -36,6 +36,7 @@ import {
 import { setDeckSearchPick } from "./pendingPick";
 import { getAttackEffects } from "../data/effectPatterns";
 import {
+  abilitiesActiveOnInstance,
   applySurvivalBrace,
   applyAbilityKoSurvival,
   actionBlockedByOppActive,
@@ -318,10 +319,11 @@ export function attachEnergy(
     // "When you attach this card from your hand to a Psychic Pokémon, search
     // your deck for up to 2 Basic Psychic Pokémon and put them onto your
     // Bench. Then, shuffle your deck."
-    if (target.card.types.includes("Psychic") && pl.bench.length < 5) {
+    const cap = maxBenchSize(state, pl.bench, pl.active);
+    if (target.card.types.includes("Psychic") && pl.bench.length < cap) {
       const pred = (c: Card) =>
         c.supertype === "Pokémon" && c.subtypes.includes("Basic") && c.types.includes("Psychic");
-      const slots = Math.min(2, 5 - pl.bench.length);
+      const slots = Math.min(2, cap - pl.bench.length);
       if (!setDeckSearchPick(state, player, pred, slots, "Telepathic Psychic Energy: pick up to 2 Basic Psychic Pokémon to Bench", { toBench: true })) {
         logEvent(state, player, "finds no Basic Psychic Pokémon.");
       }
@@ -421,7 +423,8 @@ export function playTrainer(
       (p) =>
         !!p &&
         p.tools.length > 0 &&
-        (p.card.abilities ?? []).some((a) => a.name === "ACE Nullifier"),
+        (p.card.abilities ?? []).some((a) => a.name === "ACE Nullifier") &&
+        abilitiesActiveOnInstance(state, p),
     );
     if (blocker) {
       return fail(`${blocker.card.name}'s ACE Nullifier blocks ACE SPEC cards.`);

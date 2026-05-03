@@ -46,8 +46,8 @@ Pressure-test findings, MVP scope cuts, and deferred AI overhaul phases. See [..
 - **7. Opp modeling** — route opp's MCTS-rollout moves through their
   detected archetype playbook instead of greedy.
 - **8. Opening book from real tournament data** — *substantially
-  seeded*: Prague Regional 2026 R9 + Day 2 (top16/top8/top4/finals) +
-  Reklev Hop's Trevenant stream all logged in
+  seeded*: Prague Regional 2026 R9 + Day 2 (top16/top8/top4/finals)
+  logged in
   [../data/tournament-replays/](../data/tournament-replays/). **12 archetype
   playbooks wired** in [../src/engine/aiArchetype.ts](../src/engine/aiArchetype.ts):
   festival-leads, arboliva, alakazam, lucario-ex, rocket-mewtwo,

@@ -3,6 +3,7 @@
 // retreat cost / HP), these require the player to *press* the Stadium to
 // take its action on their turn.
 
+import { fireTriggeredOnMoveToActive, fireTriggeredOnMoveToBench } from "./abilities";
 import { endTurn, logEvent } from "./rules";
 import { setDeckSearchPick } from "./pendingPick";
 import type {
@@ -303,6 +304,8 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
         player,
         `Surfing Beach: switches ${outgoing.card.name} → ${incoming.card.name}.`,
       );
+      fireTriggeredOnMoveToActive(state, player, incoming);
+      fireTriggeredOnMoveToBench(state, player, outgoing);
     },
   },
 

@@ -730,6 +730,8 @@ export function activateAbility(
       pl.active = incoming;
       pl.bench.push(outgoing);
       logEvent(state, player, `uses ${ability.name}: switches ${outgoing.card.name} → ${incoming.card.name}.`);
+      fireTriggeredOnMoveToActive(state, player, incoming);
+      fireTriggeredOnMoveToBench(state, player, outgoing);
       break;
     }
 
@@ -1185,17 +1187,14 @@ export function activateAbility(
       const opp = state.players[oppId];
       if (!opp.active || opp.bench.length === 0) break;
       // Auto-pick most-valuable benched.
-      const idx = opp.bench.findIndex((p) => p);
-      const pulled = opp.bench.splice(idx, 1)[0];
-      const was = opp.active;
-      opp.active = pulled;
-      opp.bench.push(was);
+      const r = performGust(state, oppId, opp.bench.findIndex((p) => p));
+      if (!r) break;
       const EXCLUSIVE = ["asleep", "confused", "paralyzed"];
       if (EXCLUSIVE.includes(e.status)) {
-        pulled.statuses = pulled.statuses.filter((x) => !EXCLUSIVE.includes(x));
+        r.pulled.statuses = r.pulled.statuses.filter((x) => !EXCLUSIVE.includes(x));
       }
-      if (!pulled.statuses.includes(e.status)) pulled.statuses.push(e.status);
-      logEvent(state, player, `uses ${ability.name}: gusts ${pulled.card.name} — now ${e.status}.`);
+      if (!r.pulled.statuses.includes(e.status)) r.pulled.statuses.push(e.status);
+      logEvent(state, player, `uses ${ability.name}: gusts ${r.pulled.card.name} — now ${e.status}.`);
       break;
     }
 
@@ -1508,6 +1507,8 @@ export function activateAbility(
       }
       if (!incoming.statuses.includes(e.status)) incoming.statuses.push(e.status);
       logEvent(state, player, `uses ${ability.name}: switches in ${incoming.card.name} — now ${e.status}.`);
+      fireTriggeredOnMoveToActive(state, player, incoming);
+      fireTriggeredOnMoveToBench(state, player, outgoing);
       break;
     }
 
@@ -1517,6 +1518,8 @@ export function activateAbility(
       const outgoing = pl.active;
       pl.active = incoming;
       pl.bench.push(outgoing);
+      fireTriggeredOnMoveToActive(state, player, incoming);
+      fireTriggeredOnMoveToBench(state, player, outgoing);
       const oppId: PlayerId = player === "p1" ? "p2" : "p1";
       const opp = state.players[oppId];
       if (opp.active && opp.bench.length > 0) {
@@ -1612,11 +1615,8 @@ export function activateAbility(
       const opp = state.players[oppId];
       if (!opp.active || opp.bench.length === 0)
         return { ok: false, reason: "Opponent has no Benched Pokémon." };
-      const pulled = opp.bench.shift()!;
-      const was = opp.active;
-      opp.active = pulled;
-      opp.bench.push(was);
-      logEvent(state, player, `uses ${ability.name}: discards ${tool.name}; gusts ${pulled.card.name}.`);
+      const r = performGust(state, oppId, 0);
+      if (r) logEvent(state, player, `uses ${ability.name}: discards ${tool.name}; gusts ${r.pulled.card.name}.`);
       break;
     }
 
@@ -1910,12 +1910,8 @@ const TRIGGERED_ON_EVOLVE: Record<string, TriggeredOnEvolveEffect> = {
           opp.bench.length === 1
             ? opp.bench[0]
             : opp.bench.slice().sort((a, b) => b.card.hp - a.card.hp)[0];
-        const idx = opp.bench.indexOf(target);
-        const pulled = opp.bench.splice(idx, 1)[0];
-        const wasActive = opp.active;
-        opp.active = pulled;
-        opp.bench.push(wasActive);
-        logEvent(state, player, `Heave-Ho Catcher gusts ${pulled.card.name} to Active.`);
+        const r = performGust(state, oppId, opp.bench.indexOf(target));
+        if (r) logEvent(state, player, `Heave-Ho Catcher gusts ${r.pulled.card.name} to Active.`);
         return;
       }
       state.pendingInPlayTarget = {
@@ -2122,12 +2118,8 @@ const TRIGGERED_ON_EVOLVE: Record<string, TriggeredOnEvolveEffect> = {
       const candidates = opp.bench.filter((p) => (p.card.hp - p.damage) <= 90);
       if (candidates.length === 0) return;
       const pick = candidates[0];
-      const idx = opp.bench.indexOf(pick);
-      const pulled = opp.bench.splice(idx, 1)[0];
-      const wasActive = opp.active;
-      opp.active = pulled;
-      opp.bench.push(wasActive);
-      logEvent(state, player, `Glittering Star Pattern: gusts ${pulled.card.name} into the Active spot.`);
+      const r = performGust(state, oppId, opp.bench.indexOf(pick));
+      if (r) logEvent(state, player, `Glittering Star Pattern: gusts ${r.pulled.card.name} into the Active spot.`);
     },
   },
 
@@ -2271,12 +2263,8 @@ const TRIGGERED_ON_EVOLVE: Record<string, TriggeredOnEvolveEffect> = {
           opp.bench.length === 1
             ? opp.bench[0]
             : opp.bench.slice().sort((a, b) => b.card.hp - a.card.hp)[0];
-        const idx = opp.bench.indexOf(target);
-        const pulled = opp.bench.splice(idx, 1)[0];
-        const wasActive = opp.active;
-        opp.active = pulled;
-        opp.bench.push(wasActive);
-        logEvent(state, player, `Defiant Horn gusts ${pulled.card.name} to Active.`);
+        const r = performGust(state, oppId, opp.bench.indexOf(target));
+        if (r) logEvent(state, player, `Defiant Horn gusts ${r.pulled.card.name} to Active.`);
         return;
       }
       state.pendingInPlayTarget = {
@@ -2747,6 +2735,26 @@ export function fireTriggeredOnMoveToBench(
     trig.run(state, player, moved);
     moved.abilityUsedThisTurn = true;
   }
+}
+
+// Gust a Benched Pokémon to the Active spot. Statuses are NOT cleared (gust
+// is not a switch). Always fires the triggered-on-move dispatchers on both
+// Pokémon involved. Returns the {pulled, wasActive} pair, or null if the
+// arguments don't describe a valid swap.
+export function performGust(
+  state: GameState,
+  side: PlayerId,
+  benchIndex: number,
+): { pulled: PokemonInPlay; wasActive: PokemonInPlay } | null {
+  const pl = state.players[side];
+  if (!pl.active || benchIndex < 0 || benchIndex >= pl.bench.length) return null;
+  const pulled = pl.bench.splice(benchIndex, 1)[0];
+  const wasActive = pl.active;
+  pl.active = pulled;
+  pl.bench.push(wasActive);
+  fireTriggeredOnMoveToActive(state, side, pulled);
+  fireTriggeredOnMoveToBench(state, side, wasActive);
+  return { pulled, wasActive };
 }
 
 // Reactions on the opponent's side when player X's active moved to bench.

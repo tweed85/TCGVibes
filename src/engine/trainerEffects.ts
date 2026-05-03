@@ -18,6 +18,7 @@ import {
   fireTriggeredOnMoveToActive,
   fireTriggeredOnMoveToBench,
   knockOutFromAbilityCounters,
+  performGust,
 } from "./abilities";
 import { findByName } from "../data/cards";
 import {
@@ -734,6 +735,12 @@ export function precheckTrainerEffect(
   if (id === "searchAnyPokemon" && pl.hand.length < 3) {
     return "Need 2 other cards in hand to discard for Ultra Ball.";
   }
+  // Secret Box: discards 3 other cards from hand. Without this gate,
+  // playTrainer still discards Secret Box itself for no effect — losing
+  // the ACE SPEC.
+  if (id === "secretBoxQuadSearch" && pl.hand.length < 4) {
+    return "Secret Box: need 3 other cards in hand to discard.";
+  }
   if (id === "drawUntil6Discard" && pl.hand.length < 2) {
     return "Need an extra card to discard for this Supporter.";
   }
@@ -1290,11 +1297,8 @@ export function applyTrainerEffect(
       if (pl.isAI || targetId || opp.bench.length === 1) {
         const idx = targetId ? opp.bench.findIndex((p) => p.instanceId === targetId) : 0;
         if (idx < 0) return;
-        const pulled = opp.bench.splice(idx, 1)[0];
-        const wasActive = opp.active;
-        opp.active = pulled;
-        opp.bench.push(wasActive);
-        logEvent(state, player, `gusts ${pulled.card.name} into the Active spot.`);
+        const r = performGust(state, oppId, idx);
+        if (r) logEvent(state, player, `gusts ${r.pulled.card.name} into the Active spot.`);
         return;
       }
       // Humans with multiple bench targets: ask via picker.
@@ -1797,11 +1801,8 @@ export function applyTrainerEffect(
       if (!targetId || opp.bench.length === 0 || !opp.active) return;
       const idx = opp.bench.findIndex((p) => p.instanceId === targetId);
       if (idx === -1) return;
-      const pulled = opp.bench.splice(idx, 1)[0];
-      const wasActive = opp.active;
-      opp.active = pulled;
-      opp.bench.push(wasActive);
-      logEvent(state, player, `gusts ${pulled.card.name} into the Active spot.`);
+      const r = performGust(state, oppId, idx);
+      if (r) logEvent(state, player, `gusts ${r.pulled.card.name} into the Active spot.`);
       return;
     }
 
@@ -1810,12 +1811,7 @@ export function applyTrainerEffect(
         logEvent(state, player, "has no Benched Pokémon to switch to.");
         return;
       }
-      const incoming = pl.bench.shift()!;
-      const outgoing = pl.active;
-      clearAllStatuses(outgoing);
-      pl.active = incoming;
-      pl.bench.push(outgoing);
-      logEvent(state, player, `switches ${outgoing.card.name} → ${incoming.card.name}.`);
+      performSwitch(state, player, 0);
       return;
     }
 
@@ -1846,12 +1842,7 @@ export function applyTrainerEffect(
         logEvent(state, player, "Kieran: no Benched Pokémon to switch to and opponent has no ex/V Active.");
         return;
       }
-      const incoming = pl.bench.shift()!;
-      const outgoing = pl.active;
-      clearAllStatuses(outgoing);
-      pl.active = incoming;
-      pl.bench.push(outgoing);
-      logEvent(state, player, `Kieran: switches ${outgoing.card.name} → ${incoming.card.name}.`);
+      performSwitch(state, player, 0);
       return;
     }
 
@@ -2481,12 +2472,11 @@ export function applyTrainerEffect(
       }
       if (pl.isAI || basics.length === 1) {
         const idx = opp.bench.findIndex((p) => p.card.subtypes.includes("Basic"));
-        const pulled = opp.bench.splice(idx, 1)[0];
-        const wasActive = opp.active;
-        opp.active = pulled;
-        opp.bench.push(wasActive);
-        if (!pulled.statuses.includes("confused")) pulled.statuses.push("confused");
-        logEvent(state, player, `gusts ${pulled.card.name} to Active; it is now Confused.`);
+        const r = performGust(state, oppId, idx);
+        if (r) {
+          if (!r.pulled.statuses.includes("confused")) r.pulled.statuses.push("confused");
+          logEvent(state, player, `gusts ${r.pulled.card.name} to Active; it is now Confused.`);
+        }
         return;
       }
       state.pendingInPlayTarget = {
@@ -2714,19 +2704,11 @@ export function applyTrainerEffect(
       if (opp.active && opp.bench.length > 0) {
         const benchedTarget = opp.bench.slice().sort((a, b) => b.card.hp - a.card.hp)[0];
         const idx = opp.bench.indexOf(benchedTarget);
-        const pulled = opp.bench.splice(idx, 1)[0];
-        const oppOld = opp.active;
-        opp.active = pulled;
-        opp.bench.push(oppOld);
-        logEvent(state, player, `gusts ${pulled.card.name} to Active.`);
+        const r = performGust(state, oppId, idx);
+        if (r) logEvent(state, player, `gusts ${r.pulled.card.name} to Active.`);
       }
       if (pl.active && pl.bench.length > 0) {
-        const incoming = pl.bench.shift()!;
-        const outgoing = pl.active;
-        clearAllStatuses(outgoing);
-        pl.active = incoming;
-        pl.bench.push(outgoing);
-        logEvent(state, player, `switches ${outgoing.card.name} → ${incoming.card.name}.`);
+        performSwitch(state, player, 0);
       }
       return;
     }
@@ -2776,16 +2758,14 @@ export function applyTrainerEffect(
 
     case "scrambleSwitch": {
       if (!pl.active || pl.bench.length === 0) return;
-      const incoming = pl.bench.shift()!;
-      const outgoing = pl.active;
-      clearAllStatuses(outgoing);
-      pl.active = incoming;
-      pl.bench.push(outgoing);
-      // Move all energy from the outgoing (now on bench) to the new Active.
+      performSwitch(state, player, 0);
+      // Move all energy from the outgoing (now at end of bench) to the new Active.
       const prev = pl.bench[pl.bench.length - 1];
-      pl.active.attachedEnergy.push(...prev.attachedEnergy);
-      prev.attachedEnergy = [];
-      logEvent(state, player, `switches + transfers Energy to ${pl.active.card.name}.`);
+      if (pl.active && prev) {
+        pl.active.attachedEnergy.push(...prev.attachedEnergy);
+        prev.attachedEnergy = [];
+        logEvent(state, player, `switches + transfers Energy to ${pl.active.card.name}.`);
+      }
       enforceSpecialEnergyAttachRules(state);
       return;
     }
@@ -3070,57 +3050,46 @@ export function applyTrainerEffect(
       // out of pl.hand by the time this runs), then search deck for one
       // Item, Pokémon Tool, Supporter, and Stadium.
       //
-      // Discard step: deterministic auto-discard for both AI and human (the
-      // hand-discard picker is not yet plumbed; lowest-priority-first heuristic
-      // protects basic Energy when the hand has them, otherwise drops oldest).
-      // Search step: AI auto-takes the first match of each kind. Humans get
-      // chained deck-search pickers (Item → Tool → Supporter → Stadium).
-      if (pl.hand.length < 3) {
-        logEvent(state, player, "Secret Box: not enough cards in hand to discard 3.");
-        return;
-      }
-      const isBasicEn = (c: Card) =>
-        c.supertype === "Energy" && (c.subtypes ?? []).includes("Basic");
-      // Discard heuristic: prefer to keep basic Energy + Pokémon; drop dupes
-      // and Trainers we already played. Sort ascending by "keep priority"; the
-      // first 3 are dropped.
-      const isPokemon = (c: Card) => c.supertype === "Pokémon";
-      const handCounts = new Map<string, number>();
-      for (const c of pl.hand) handCounts.set(c.name, (handCounts.get(c.name) ?? 0) + 1);
-      const sorted = pl.hand
-        .map((c, i) => ({ c, i }))
-        .sort((a, b) => {
-          const aDup = (handCounts.get(a.c.name) ?? 1) > 1 ? 0 : 1;
-          const bDup = (handCounts.get(b.c.name) ?? 1) > 1 ? 0 : 1;
-          if (aDup !== bDup) return aDup - bDup; // duplicates first
-          const aP = isPokemon(a.c) ? 2 : isBasicEn(a.c) ? 3 : 1;
-          const bP = isPokemon(b.c) ? 2 : isBasicEn(b.c) ? 3 : 1;
-          if (aP !== bP) return aP - bP; // Trainers first, Pokémon next, Energy last
-          return a.i - b.i;
-        });
-      const toDiscardIdxs = sorted.slice(0, 3).map((x) => x.i).sort((a, b) => b - a);
-      for (const i of toDiscardIdxs) {
-        const [c2] = pl.hand.splice(i, 1);
-        pl.discard.push(c2);
-      }
-      logEvent(state, player, "Secret Box: discards 3 cards.");
-
-      const isItemOnly = (c: Card) =>
-        c.supertype === "Trainer" &&
-        (c.subtypes ?? []).includes("Item") &&
-        !(c.subtypes ?? []).includes("Pokémon Tool") &&
-        !(c.subtypes ?? []).includes("Tool");
-      const isTool = (c: Card) =>
-        c.supertype === "Trainer" &&
-        ((c.subtypes ?? []).includes("Pokémon Tool") || (c.subtypes ?? []).includes("Tool"));
-      const isSupp = (c: Card) =>
-        c.supertype === "Trainer" && (c.subtypes ?? []).includes("Supporter");
-      const isStadium = (c: Card) =>
-        c.supertype === "Trainer" && (c.subtypes ?? []).includes("Stadium");
-
+      // Hand-size precheck lives in precheckTrainerEffect so the trainer
+      // card itself isn't wasted on illegal plays.
       if (pl.isAI) {
-        // AI: auto-take first match of each kind in one shot. Functionally
-        // correct; AI's selection of "specific copy" rarely matters.
+        // AI auto-discard heuristic: prefer to keep basic Energy + Pokémon;
+        // drop dupes and Trainers first.
+        const isBasicEn = (c: Card) =>
+          c.supertype === "Energy" && (c.subtypes ?? []).includes("Basic");
+        const isPokemon = (c: Card) => c.supertype === "Pokémon";
+        const handCounts = new Map<string, number>();
+        for (const c of pl.hand) handCounts.set(c.name, (handCounts.get(c.name) ?? 0) + 1);
+        const sorted = pl.hand
+          .map((c, i) => ({ c, i }))
+          .sort((a, b) => {
+            const aDup = (handCounts.get(a.c.name) ?? 1) > 1 ? 0 : 1;
+            const bDup = (handCounts.get(b.c.name) ?? 1) > 1 ? 0 : 1;
+            if (aDup !== bDup) return aDup - bDup;
+            const aP = isPokemon(a.c) ? 2 : isBasicEn(a.c) ? 3 : 1;
+            const bP = isPokemon(b.c) ? 2 : isBasicEn(b.c) ? 3 : 1;
+            if (aP !== bP) return aP - bP;
+            return a.i - b.i;
+          });
+        const toDiscardIdxs = sorted.slice(0, 3).map((x) => x.i).sort((a, b) => b - a);
+        for (const i of toDiscardIdxs) {
+          const [c2] = pl.hand.splice(i, 1);
+          pl.discard.push(c2);
+        }
+        logEvent(state, player, "Secret Box: discards 3 cards.");
+        // AI auto-take first match of each kind in one shot.
+        const isItemOnly = (c: Card) =>
+          c.supertype === "Trainer" &&
+          (c.subtypes ?? []).includes("Item") &&
+          !(c.subtypes ?? []).includes("Pokémon Tool") &&
+          !(c.subtypes ?? []).includes("Tool");
+        const isTool = (c: Card) =>
+          c.supertype === "Trainer" &&
+          ((c.subtypes ?? []).includes("Pokémon Tool") || (c.subtypes ?? []).includes("Tool"));
+        const isSupp = (c: Card) =>
+          c.supertype === "Trainer" && (c.subtypes ?? []).includes("Supporter");
+        const isStadium = (c: Card) =>
+          c.supertype === "Trainer" && (c.subtypes ?? []).includes("Stadium");
         const grab = (label: string, pred: (c: Card) => boolean): void => {
           const idx = pl.deck.findIndex(pred);
           if (idx >= 0) {
@@ -3135,14 +3104,17 @@ export function applyTrainerEffect(
         shuffleDeck(state, player);
         return;
       }
-      // Human: open the Item picker first; chain to Tool → Supporter → Stadium.
-      if (
-        !setDeckSearchPick(state, player, isItemOnly, 1, "Secret Box (1 of 4): pick an Item", {
-          postResolveChain: { kind: "secret-box-tool" },
-        })
-      ) {
-        logEvent(state, player, "Secret Box: no Item in deck.");
-      }
+      // Human: pick 3 cards to discard, then chain Item → Tool → Supporter → Stadium.
+      state.pendingHandReveal = {
+        player,
+        target: player,
+        label: "Secret Box: pick 3 cards from your hand to discard",
+        min: 3,
+        max: 3,
+        filter: "any",
+        action: "discard",
+        postAction: { kind: "secretBoxStartItemSearch" },
+      };
       return;
     }
 
@@ -3513,11 +3485,8 @@ export function applyTrainerEffect(
       if (opp.active && opp.bench.length > 0) {
         const target = opp.bench.slice().sort((a, b) => b.card.hp - a.card.hp)[0];
         const idx = opp.bench.indexOf(target);
-        const pulled = opp.bench.splice(idx, 1)[0];
-        const wasActive = opp.active;
-        opp.active = pulled;
-        opp.bench.push(wasActive);
-        logEvent(state, player, `gusts ${pulled.card.name} into Active.`);
+        const r = performGust(state, oppId, idx);
+        if (r) logEvent(state, player, `gusts ${r.pulled.card.name} into Active.`);
       }
       return;
     }
@@ -3678,11 +3647,8 @@ export function resolveInPlayTarget(
       if (!opp.active || fromActive) return { ok: false, reason: "Pick a Benched Pokémon." };
       const idx = opp.bench.findIndex((p) => p.instanceId === instanceId);
       if (idx < 0) return { ok: false, reason: "Target not in bench." };
-      const pulled = opp.bench.splice(idx, 1)[0];
-      const wasActive = opp.active;
-      opp.active = pulled;
-      opp.bench.push(wasActive);
-      logEvent(state, clicker, `gusts ${pulled.card.name} into the Active spot.`);
+      const r = performGust(state, oppId, idx);
+      if (r) logEvent(state, clicker, `gusts ${r.pulled.card.name} into the Active spot.`);
       state.pendingInPlayTarget = null;
       return { ok: true };
     }
@@ -3731,12 +3697,11 @@ export function resolveInPlayTarget(
       if (!target.card.subtypes.includes("Basic")) return { ok: false, reason: "Must be a Basic." };
       const idx = opp.bench.findIndex((p) => p.instanceId === instanceId);
       if (idx < 0) return { ok: false, reason: "Target not in bench." };
-      const pulled = opp.bench.splice(idx, 1)[0];
-      const wasActive = opp.active;
-      opp.active = pulled;
-      opp.bench.push(wasActive);
-      if (!pulled.statuses.includes("confused")) pulled.statuses.push("confused");
-      logEvent(state, clicker, `gusts ${pulled.card.name} to Active; it is now Confused.`);
+      const r = performGust(state, oppId, idx);
+      if (r) {
+        if (!r.pulled.statuses.includes("confused")) r.pulled.statuses.push("confused");
+        logEvent(state, clicker, `gusts ${r.pulled.card.name} to Active; it is now Confused.`);
+      }
       state.pendingInPlayTarget = null;
       return { ok: true };
     }
@@ -4238,6 +4203,19 @@ export function resolveHandReveal(
       if (!setDeckSearchPick(state, clicker, isPokemonCard, searchMax, postAction.label)) {
         logEvent(state, clicker, "finds no Pokémon.");
       }
+    }
+  } else if (postAction?.kind === "secretBoxStartItemSearch") {
+    const isItemOnly = (c: Card) =>
+      c.supertype === "Trainer" &&
+      (c.subtypes ?? []).includes("Item") &&
+      !(c.subtypes ?? []).includes("Pokémon Tool") &&
+      !(c.subtypes ?? []).includes("Tool");
+    if (
+      !setDeckSearchPick(state, clicker, isItemOnly, 1, "Secret Box (1 of 4): pick an Item", {
+        postResolveChain: { kind: "secret-box-tool" },
+      })
+    ) {
+      logEvent(state, clicker, "Secret Box: no Item in deck.");
     }
   }
   return { ok: true };

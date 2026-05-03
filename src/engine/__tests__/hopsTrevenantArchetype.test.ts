@@ -1,9 +1,6 @@
-// hops-trevenant archetype playbook (Tord Reklev livestream replay).
-// Mateusz/Tresp/Netti tournament data was unavailable for this deck;
-// playbook is sourced from a Tord Reklev livestream playing the Prague
-// top-64 list (https://youtube.com/live/hgSunrEL210). Plays + card text
-// independently verified against data/pokemon/tournament-legal-cards.json
-// before wiring.
+// hops-trevenant archetype playbook — Prague Regional 2026 community
+// list. Plays + card text independently verified against
+// data/pokemon/tournament-legal-cards.json before wiring.
 //
 // Key card-text-driven design decisions:
 //   - Postwick + Hop's Choice Band layer +30/+30 onto Hop's attacks. Both
@@ -148,7 +145,7 @@ describe("hops-trevenant — attach bonuses (attacker priority)", () => {
   });
 });
 
-describe("hops-trevenant — playbook (T1-T3 from Reklev stream)", () => {
+describe("hops-trevenant — playbook (T1-T3)", () => {
   it("T1: Hop's Bag dominates (item-only T1, fill bench with Phantumps)", () => {
     expect(playbookCardBonus("hops-trevenant", 1, "Hop's Bag")).toBeGreaterThan(35);
     expect(playbookCardBonus("hops-trevenant", 1, "Postwick")).toBeGreaterThan(25);

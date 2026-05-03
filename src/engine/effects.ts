@@ -12,6 +12,7 @@
 
 import { addStatus, applyEvolveSideEffects, drawCards, flipCoin, logEvent, prizeValue, setPendingPromote } from "./rules";
 import { benchDamageBlocked, benchDamageBlockedByFlowerCurtain, effectiveMaxHp, effectiveWeaknesses, teraBenchImmunity } from "./ongoingEffects";
+import { fireTriggeredOnMoveToActive, fireTriggeredOnMoveToBench, performGust } from "./abilities";
 import { applyTrainerEffect } from "./trainerEffects";
 import { getAttackEffects } from "../data/effectPatterns";
 import type {
@@ -728,12 +729,8 @@ export function resolveAttackEffects(
           if (!opp.active || opp.bench.length === 0) return;
           // Auto-pick: highest-HP bench target.
           const target = opp.bench.slice().sort((a, b) => b.card.hp - a.card.hp)[0];
-          const idx = opp.bench.indexOf(target);
-          const pulled = opp.bench.splice(idx, 1)[0];
-          const wasActive = opp.active;
-          opp.active = pulled;
-          opp.bench.push(wasActive);
-          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: gusts ${pulled.card.name} to Active.`);
+          const r = performGust(state, ctx.defenderOwner, opp.bench.indexOf(target));
+          if (r) logEvent(state, ctx.attackerOwner, `${ctx.move.name}: gusts ${r.pulled.card.name} to Active.`);
         });
         break;
       }
@@ -1560,6 +1557,8 @@ export function resolveAttackEffects(
           atkPl.active = incoming;
           atkPl.bench.push(outgoing);
           logEvent(state, ctx.attackerOwner, `switches ${outgoing.card.name} → ${incoming.card.name}.`);
+          fireTriggeredOnMoveToActive(state, ctx.attackerOwner, incoming);
+          fireTriggeredOnMoveToBench(state, ctx.attackerOwner, outgoing);
         });
         break;
       }

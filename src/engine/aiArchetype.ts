@@ -114,8 +114,8 @@ const SIGNATURES: Record<Exclude<Archetype, "generic">, string[]> = {
     "Mega Froslass ex",
     "Staryu",
   ],
-  // Tord Reklev's "Hop's Trevenant" — derived from a livestream of Reklev
-  // playing the Prague top-64 list. Hop's Trevenant's Horrifying Revenge
+  // "Hop's Trevenant" — Prague Regional 2026 community list. Hop's
+  // Trevenant's Horrifying Revenge
   // (30+, +100 if any of your Hop's Pokémon were KO'd last turn) is the
   // unique attacker — turns lost prizes into 130-dmg counter-attacks.
   // Postwick stadium + Hop's Choice Band tool layer +30/+30 onto every
@@ -934,8 +934,8 @@ const PLAYBOOKS: Partial<Record<Archetype, PlaybookEntry>> = {
       3: { "Adrena-Brain": 22 },
     },
   },
-  // Sourced from a Tord Reklev livestream of the Prague top-64 Hop's
-  // Trevenant list. T1 — item-only (T1 supporter ban). Telepathic Psychic
+  // Prague Regional 2026 community Hop's Trevenant list.
+  // T1 — item-only (T1 supporter ban). Telepathic Psychic
   // Energy is the buddy-buddy-poffin-on-an-energy: attaching it from hand
   // to a Psychic Pokémon (Phantump) searches 2 Basic Psychic to bench.
   // Hop's Bag fills the rest of the bench. Postwick stadium goes down

@@ -27,7 +27,7 @@ See [../CLAUDE.md](../CLAUDE.md) for the project entry point.
   - Dragapult-Dudunsparce + Crustle + Cynthia-Garchomp +
     Grimmsnarl-Froslass + Mega-Starmie-Froslass — Prague Regional 2026
     Day 2 replays (top16 / top8 / top4 / finals)
-  - Hops-Trevenant — Tord Reklev livestream of the Prague top-64 list
+  - Hops-Trevenant — Prague Regional 2026 community list
 - Dragapult-Dudunsparce signature is `Dudunsparce ex` (sig[0]) so detection
   prefers it over plain Dragapult-Blaziken when Dudunsparce ex is present.
 - Crustle's playbook intentionally inverts aggro: heavy T2-T3 Hero's Cape +

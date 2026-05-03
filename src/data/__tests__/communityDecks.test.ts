@@ -260,7 +260,7 @@ Energy: 9
   },
   {
     id: "reklev-hops-trevenant",
-    source: "Tord Reklev (livestream), Prague top-64 list, Prague Regional 2026",
+    source: "Hop's Trevenant — Prague Regional 2026 community list",
     decklist: `Pokémon: 17
 4 Hop's Phantump ASC 95
 3 Hop's Trevenant ASC 96

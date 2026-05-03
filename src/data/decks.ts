@@ -470,7 +470,7 @@ export const DECK_SPECS: DeckSpec[] = [
   },
   {
     id: "reklev-hops-trevenant",
-    name: "Hop's Trevenant (Tord Reklev's Prague Top 64 list)",
+    name: "Hop's Trevenant",
     description: "Single-prize Hop's-prefix engine. Hop's Trevenant Horrifying Revenge (130 dmg if you lost a KO last turn) + Postwick / Hop's Choice Band damage layering.",
     decklist: REKLEV_HOPS_TREVENANT,
   },

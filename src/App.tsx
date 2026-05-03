@@ -835,19 +835,33 @@ export default function App() {
 
   const onAttack = (atkIndex: number) => {
     if (!myTurn) return;
-    // If the attack carries a snipeOne effect and the opponent has more than
-    // one benched Pokémon, pause first so the user can pick the target.
+    // If the attack carries a snipeOne effect with multiple candidate targets,
+    // pause first so the user can pick. benchOnly attacks need bench.length > 1;
+    // free-pick (Cruel Arrow style) needs (Active ? 1 : 0) + bench.length > 1
+    // since Active is also a valid target.
     const move = me.active?.card.attacks[atkIndex];
-    const hasSnipe = move ? getAttackEffects(move).some((e) => e.kind === "snipeOne") : false;
-    if (hasSnipe && opp.bench.length > 1) {
-      setPendingSnipeAttack(atkIndex);
-      return;
+    const snipe = move ? getAttackEffects(move).find((e) => e.kind === "snipeOne") : undefined;
+    if (snipe && snipe.kind === "snipeOne") {
+      const benchOnly = !!snipe.benchOnly;
+      const candidateCount = (benchOnly ? 0 : (opp.active ? 1 : 0)) + opp.bench.length;
+      const needsPick = benchOnly ? opp.bench.length > 1 : candidateCount > 1;
+      if (needsPick) {
+        setPendingSnipeAttack(atkIndex);
+        return;
+      }
     }
     const r = attack(state, viewingPlayer, atkIndex);
     if (r.ok) lockUndoAfterAttack();
     handle(r);
   };
 
+  // benchIdx convention:
+  //   null  → auto (engine default: most-damaged bench for benchOnly, Active
+  //                  for free-pick when opp.active exists)
+  //   >= 0  → opponent's bench index
+  //   -1    → explicit "target opponent's Active" (free-pick mode only —
+  //           engine treats negative override as the default branch, which
+  //           for free-pick prefers Active)
   const commitSnipeAttack = (benchIdx: number | null) => {
     if (pendingSnipeAttack === null) return;
     state.snipeTargetOverride = benchIdx;
@@ -1364,13 +1378,19 @@ export default function App() {
         <CardZoomModal card={zoomCard} onClose={() => setZoomCard(null)} />
       )}
 
-      {pendingSnipeAttack !== null && (
-        <SnipeTargetModal
-          bench={opp.bench}
-          onPick={(idx) => commitSnipeAttack(idx)}
-          onCancel={() => setPendingSnipeAttack(null)}
-        />
-      )}
+      {pendingSnipeAttack !== null && (() => {
+        const move = me.active?.card.attacks[pendingSnipeAttack];
+        const snipe = move ? getAttackEffects(move).find((e) => e.kind === "snipeOne") : undefined;
+        const benchOnly = snipe?.kind === "snipeOne" ? !!snipe.benchOnly : true;
+        return (
+          <SnipeTargetModal
+            bench={opp.bench}
+            active={benchOnly ? null : opp.active}
+            onPick={(idx) => commitSnipeAttack(idx)}
+            onCancel={() => setPendingSnipeAttack(null)}
+          />
+        );
+      })()}
 
       {state.pendingPick && state.pendingPick.player === viewingPlayer && (
         <PickModal
@@ -2784,24 +2804,42 @@ function SetupModal({
 
 function SnipeTargetModal({
   bench,
+  active,
   onPick,
   onCancel,
 }: {
   bench: PokemonInPlay[];
+  // Free-pick attacks (Cruel Arrow style: "X damage to 1 of opp's Pokémon"
+  // without "Benched") may target Active too. benchOnly attacks pass null.
+  active: PokemonInPlay | null;
+  // null = engine default; non-negative = bench index; -1 = explicit Active.
   onPick: (idx: number | null) => void;
   onCancel: () => void;
 }) {
+  const freePick = active !== null;
   return (
     <div className="modal-backdrop" onClick={onCancel}>
       <div className="modal pick-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Pick a Benched Pokémon to snipe</h2>
+          <h2>{freePick ? "Pick a Pokémon to hit" : "Pick a Benched Pokémon to snipe"}</h2>
         </div>
         <div className="pick-source-note">
-          This attack hits one of the opponent's Benched Pokémon. Pick any, or
-          let the engine auto-target the most damaged.
+          {freePick
+            ? "This attack hits 1 of the opponent's Pokémon (Active or Bench). Weakness/Resistance applies to the Active target only."
+            : "This attack hits one of the opponent's Benched Pokémon. Pick any, or let the engine auto-target the most damaged."}
         </div>
         <div className="pick-pool">
+          {active && (
+            <div
+              key={active.instanceId}
+              className="pick-card"
+              onClick={() => onPick(-1)}
+              title="Target Active"
+            >
+              <CardView card={active.card} />
+              <div className="pick-card-label">Active</div>
+            </div>
+          )}
           {bench.map((p, i) => (
             <div
               key={p.instanceId}
@@ -2813,7 +2851,9 @@ function SnipeTargetModal({
           ))}
         </div>
         <div className="modal-actions">
-          <button onClick={() => onPick(null)}>Auto-target (most damaged)</button>
+          {!freePick && (
+            <button onClick={() => onPick(null)}>Auto-target (most damaged)</button>
+          )}
           <button onClick={onCancel}>Cancel attack</button>
         </div>
       </div>

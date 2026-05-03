@@ -728,7 +728,10 @@ export function effectiveRetreatCost(p: PokemonInPlay, state?: GameState): Energ
     if (owner) {
       const allies = [owner.active, ...owner.bench].filter((a): a is PokemonInPlay => !!a);
       for (const holder of allies) {
-        if (!abilitiesActiveOn(state, holder.card)) continue;
+        // Instance-level so Initialization (rule-box ability suppressor) and
+        // Sticky Bind (Stage-2 ability suppressor) silence rule-box / Stage-2
+        // holders like Latias ex (Skyliner) in mirror matches.
+        if (!abilitiesActiveOnInstance(state, holder)) continue;
         for (const ability of holder.card.abilities ?? []) {
           if (ability.name === "Metal Bridge") {
             if (p.attachedEnergy.some((e) => e.provides.includes("Metal"))) reduce += 99;

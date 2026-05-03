@@ -1251,7 +1251,8 @@ export interface PendingHandReveal {
   // (Perrin: "search for the SAME number of Pokémon").
   postAction?:
     | { kind: "drawUntilHand"; targetSize: number } // Naveen
-    | { kind: "searchDeckAnyPokemon"; max: number; label: string; useRevealedCount?: boolean };
+    | { kind: "searchDeckAnyPokemon"; max: number; label: string; useRevealedCount?: boolean }
+    | { kind: "secretBoxStartItemSearch" }; // Secret Box: kicks off Item → Tool → Supporter → Stadium chain
 }
 
 // Click-an-in-play-Pokémon prompt. `scope` restricts which side/slot is
