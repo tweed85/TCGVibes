@@ -10,6 +10,7 @@ import type {
   StatusCondition,
 } from "./types";
 import {
+  abilitiesActiveOnInstance,
   canBeAfflictedBy,
   effectiveMaxHp,
   enforceAreaZeroBench,
@@ -531,13 +532,17 @@ export function pokemonCheckup(state: GameState): void {
 
   // 0b. Freezing Shroud (Froslass) — during Pokémon Checkup, put 1 damage
   // counter on each Pokémon (both yours and your opponent's) that has an
-  // Ability, except any Froslass.
+  // Ability, except any Froslass. Source-side gate: a Froslass whose
+  // abilities are suppressed by Sticky Bind / Initialization / Midnight
+  // Fluttering on its own instance does NOT contribute the passive (matches
+  // CLAUDE.md "Triggered abilities honor instance suppressors" pattern).
   {
     const froslassInPlay = (() => {
       for (const pid of ORDER) {
         const pl = state.players[pid];
         const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
         for (const a of allies) {
+          if (!abilitiesActiveOnInstance(state, a)) continue;
           if ((a.card.abilities ?? []).some((ab) => ab.name === "Freezing Shroud")) {
             return true;
           }
@@ -1085,15 +1090,18 @@ export function endTurn(state: GameState): void {
       }
     }
   }
-  // Ignition Energy: "discard it at the end of your turn." Scan all of the
-  // ending player's Pokémon and discard any attached Ignition Energy cards.
-  for (const p of [prev.active, ...prev.bench]) {
-    if (!p) continue;
+  // Ignition Energy: "If this card is attached to your Active Pokémon,
+  // discard it at the end of your turn." Scope is the ACTIVE only, not bench
+  // — bench-attached Ignition Energy persists across turns until that
+  // Pokémon is promoted. (The dataset's `rules` text drops "Active" from
+  // some printings; we hardcode the rule to match the printed card.)
+  if (prev.active) {
+    const p = prev.active;
     for (let i = p.attachedEnergy.length - 1; i >= 0; i--) {
       if (p.attachedEnergy[i].name === "Ignition Energy") {
         const [e] = p.attachedEnergy.splice(i, 1);
         prev.discard.push(e);
-        logEvent(state, prev.id, `Ignition Energy discards itself at end of turn.`);
+        logEvent(state, prev.id, `Ignition Energy discards itself at end of turn (Active).`);
       }
     }
   }

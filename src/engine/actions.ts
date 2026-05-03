@@ -751,17 +751,19 @@ function executeAttackHit(
     }
   }
   // Survival Brace: cap damage so full-HP defender survives with 10 HP; it
-  // discards after triggering.
+  // discards after triggering. Skipped when the attack carries
+  // `ignoreOppEffects` (Dudunsparce ex Destructive Drill / Crustle Superb
+  // Scissors / etc.) — those bypass effects on opp Pokémon entirely.
   let survivalBraceTriggered = false;
-  if (def && damage > 0) {
+  if (def && damage > 0 && !result.ignoreOppEffects) {
     const before = damage;
     damage = applySurvivalBrace(state, def, damage);
     if (damage !== before) survivalBraceTriggered = true;
   }
   // Sturdy / Focus Sash equivalents (passive abilities): cap damage so the
   // defender survives at 10 HP. Predicates handle "only at full HP" or coin
-  // flip variants.
-  if (def && damage > 0) {
+  // flip variants. Same `ignoreOppEffects` bypass.
+  if (def && damage > 0 && !result.ignoreOppEffects) {
     damage = applyAbilityKoSurvival(state, def, damage);
   }
   logEvent(state, player, `attacks with ${move.name} for ${damage}.`);

@@ -24,6 +24,7 @@ export type Archetype =
   | "cynthia-garchomp"
   | "grimmsnarl-froslass"
   | "mega-starmie-froslass"
+  | "hops-trevenant"
   | "generic";
 
 // Distinctive cards that flag a deck as an archetype. The first match wins;
@@ -81,37 +82,51 @@ const SIGNATURES: Record<Exclude<Archetype, "generic">, string[]> = {
     "Crustle",
     "Dwebble",
     "Cornerstone Mask Ogerpon ex",
-    "Mysterious Rocking",
+    "Mega Kangaskhan ex",
   ],
-  // Neddy Kosek's "Cynthia's Garchomp" — Top 4 Prague 2026. Cynthia's-prefix
-  // engine: Cynthia's Gabite tutors more line members, Cynthia's Roserade
-  // accelerates energy. Garchomp Corkscrew Dive (attack + draw) enables
-  // aggressive Boss's Orders pre-commitment.
+  // Neddy Kosek's "Cynthia's Garchomp ex" — Top 4 Prague 2026. Cynthia's-
+  // prefix engine: Cynthia's Gabite tutors more line members, Cynthia's
+  // Roserade accelerates energy. Garchomp ex Corkscrew Dive (attack + draw)
+  // enables aggressive Boss's Orders pre-commitment.
   "cynthia-garchomp": [
-    "Cynthia's Garchomp",
+    "Cynthia's Garchomp ex",
     "Cynthia's Gabite",
     "Cynthia's Gible",
     "Cynthia's Roserade",
   ],
-  // Nicklas Rosu's "Maman's Grimmsnarl ex" — Top 16 Prague 2026. Maman's-
-  // prefix engine + Spike Muff Gym (item-lock-immune stadium-search).
-  // Frostlass Freezing Shroud passive bench damage. Punk Up energy accel
+  // Nicklas Rosu's "Marnie's Grimmsnarl ex" — Top 16 Prague 2026. Marnie's-
+  // prefix engine + Spikemuth Gym (item-lock-immune stadium-search).
+  // Froslass Freezing Shroud passive bench damage. Punk Up energy accel
   // on evolution.
   "grimmsnarl-froslass": [
-    "Maman's Grimmsnarl ex",
-    "Maman's Morgrem",
-    "Maman's Impidimp",
-    "Spike Muff Gym",
+    "Marnie's Grimmsnarl ex",
+    "Marnie's Morgrem",
+    "Marnie's Impidimp",
+    "Spikemuth Gym",
   ],
-  // João Pires's "Mega Starmie ex / Mega Frostlass" — Top 4 Prague 2026.
-  // Risky Ruins stadium passive 2-counter spread per turn + Jetting Blow
-  // 50-dmg bench snipe = compound damage threat. Mega Frostlass scales by
-  // opp hand size (devastates post-Iono).
+  // Lorenzo Zanchi's "Mega Starmie ex / Mega Froslass ex" — 32nd Prague
+  // 2026. Risky Ruins stadium passive 2-counter spread per turn + Jetting
+  // Blow 50-dmg bench snipe = compound damage threat. Mega Froslass ex
+  // scales by opp hand size (devastates post-Iono).
   "mega-starmie-froslass": [
     "Mega Starmie ex",
     "Risky Ruins",
-    "Mega Frostlass",
+    "Mega Froslass ex",
     "Staryu",
+  ],
+  // Tord Reklev's "Hop's Trevenant" — derived from a livestream of Reklev
+  // playing the Prague top-64 list. Hop's Trevenant's Horrifying Revenge
+  // (30+, +100 if any of your Hop's Pokémon were KO'd last turn) is the
+  // unique attacker — turns lost prizes into 130-dmg counter-attacks.
+  // Postwick stadium + Hop's Choice Band tool layer +30/+30 onto every
+  // Hop's attack; Hop's Snorlax's Extra Helpings ability adds another +30.
+  // Telepathic Psychic Energy is a Buddy-Buddy-Poffin-on-an-energy combo
+  // (attach + search 2 Basic Psychic to bench).
+  "hops-trevenant": [
+    "Hop's Trevenant",
+    "Hop's Phantump",
+    "Postwick",
+    "Hop's Choice Band",
   ],
 };
 
@@ -289,12 +304,12 @@ export function archetypeTrainerBonus(
       if (card.name === "Unfair Stamp") return 18;
       return 0;
     case "grimmsnarl-froslass":
-      // Spike Muff Gym — item-lock-immune stadium-search; deck's signature
+      // Spikemuth Gym — item-lock-immune stadium-search; deck's signature
       // recovery tool against Budew lines.
-      if (card.name === "Spike Muff Gym") return 28;
+      if (card.name === "Spikemuth Gym") return 28;
       // Lillie's Determination — primary T2 draw refill.
       if (card.name === "Lillie's Determination") return 22;
-      // Buddy-Buddy Poffin tutors the Maman's Impidimp + Munkidori bench.
+      // Buddy-Buddy Poffin tutors the Marnie's Impidimp + Munkidori bench.
       if (card.name === "Buddy-Buddy Poffin") return 20;
       // Petrel — Order Up tutor target. Toolbox supporter access.
       if (card.name === "Petrel") return 16;
@@ -315,6 +330,35 @@ export function archetypeTrainerBonus(
       if (card.name === "Buddy-Buddy Poffin") return 18;
       // Boss's Orders converts spread damage into KOs.
       if (card.name === "Boss's Orders") return 16;
+      return 0;
+    case "hops-trevenant":
+      // Postwick — signature stadium, +30 to Hop's Pokémon attacks. Always
+      // worth dropping early; even if opp bumps, you have 4 copies.
+      if (card.name === "Postwick") return 28;
+      // Hop's Choice Band — signature tool. Cost reduction (-1C) PLUS +30
+      // to active. Routine T2 attach.
+      if (card.name === "Hop's Choice Band") return 24;
+      // Lillie's Determination — primary draw engine. Deck has no Pidgeot/
+      // Bibarel-style draw, so Lillie's is the only "draw 8" hand reset.
+      if (card.name === "Lillie's Determination") return 22;
+      // Hop's Bag — deck-fill item: search 2 Basic Hop's Pokémon to bench.
+      // Critical for setting up redundant Phantump lines.
+      if (card.name === "Hop's Bag") return 20;
+      // Boss's Orders — finisher gust; Trevenant's Horrifying Revenge KO
+      // ranges depend on hitting the right target.
+      if (card.name === "Boss's Orders") return 18;
+      // Team Rocket's Petrel — Order Up tutor for any supporter (acts as a
+      // 5th Lillie's / extra Hassel).
+      if (card.name === "Team Rocket's Petrel") return 14;
+      // Poké Pad — non-rule-box tutor. Hits Phantump / Cramorant / Trevenant.
+      if (card.name === "Poké Pad") return 12;
+      // Hassel — conditional draw refill (only after losing a KO). Modest
+      // bonus because it's situational.
+      if (card.name === "Hassel") return 12;
+      // Pokégear 3.0 — fallback supporter search.
+      if (card.name === "Pokégear 3.0") return 10;
+      // Secret Box ACE SPEC — search any 2 items.
+      if (card.name === "Secret Box") return 18;
       return 0;
     default:
       return 0;
@@ -386,30 +430,44 @@ export function archetypeAttachBonus(
       if (name === "Dwebble") return 10;
       return 0;
     case "cynthia-garchomp":
-      // Cynthia's Garchomp is the only attacker — Corkscrew Dive / Dragon Slice.
-      if (name === "Cynthia's Garchomp") return 25;
+      // Cynthia's Garchomp ex is the only attacker — Corkscrew Dive / Dragon Slice.
+      if (name === "Cynthia's Garchomp ex") return 25;
       // Cynthia's Roserade powers Garchomp via attach-from-deck ability;
       // attaching to Roserade itself is wasted — DON'T boost Roserade.
       if (name === "Cynthia's Gabite") return 14;
       if (name === "Cynthia's Gible") return 8;
       return 0;
     case "grimmsnarl-froslass":
-      // Maman's Grimmsnarl ex — Shadow Bullet 180 + 30 spread is the plan.
-      if (name === "Maman's Grimmsnarl ex") return 25;
+      // Marnie's Grimmsnarl ex — Shadow Bullet 180 + 30 spread is the plan.
+      if (name === "Marnie's Grimmsnarl ex") return 25;
       // Munkidori needs 1 energy for Adrena-Brain damage shifts.
       if (name === "Munkidori") return 16;
-      // Maman's Morgrem evolves into Grimmsnarl with Punk Up energy accel.
-      if (name === "Maman's Morgrem") return 12;
+      // Marnie's Morgrem evolves into Grimmsnarl with Punk Up energy accel.
+      if (name === "Marnie's Morgrem") return 12;
       return 0;
     case "mega-starmie-froslass":
       // Mega Starmie ex Jetting Blow (120 active + 50 bench) is the engine.
       if (name === "Mega Starmie ex") return 25;
-      // Mega Frostlass — late-game hand-size punisher (50× opp hand cards).
-      if (name === "Mega Frostlass") return 18;
+      // Mega Froslass ex — late-game hand-size punisher (50× opp hand cards).
+      if (name === "Mega Froslass ex") return 18;
       // Munkidori shifts damage onto opp's bench for KO range.
       if (name === "Munkidori") return 12;
       // Staryu — feeds the Mega Starmie line.
       if (name === "Staryu") return 8;
+      return 0;
+    case "hops-trevenant":
+      // Hop's Trevenant — primary 1-energy attacker; Horrifying Revenge
+      // peaks at 130 + Postwick + Choice Band = 190.
+      if (name === "Hop's Trevenant") return 25;
+      // Hop's Snorlax — backup big-attacker. Dynamic Press 140 + ability
+      // stacking. Energy is already attached for Trevenant in most cases.
+      if (name === "Hop's Snorlax") return 18;
+      // Hop's Zacian ex — Insta-Strike 30 + 30 bench snipe (1 colorless,
+      // free with Hop's Choice Band cost reduction). Brave Slash unreachable
+      // without metal energy in this list — only the cheap snipe matters.
+      if (name === "Hop's Zacian ex") return 14;
+      // Hop's Phantump — 1-energy Splashing Dodge stall while building.
+      if (name === "Hop's Phantump") return 8;
       return 0;
     default:
       return 0;
@@ -480,8 +538,8 @@ export function archetypeBenchBonus(
       if (name === "Cynthia's Roselia") return 16;
       return 0;
     case "grimmsnarl-froslass":
-      // Maman's Impidimp redundancy = the Grimmsnarl line.
-      if (name === "Maman's Impidimp") return 18;
+      // Marnie's Impidimp redundancy = the Grimmsnarl line.
+      if (name === "Marnie's Impidimp") return 18;
       // Munkidori for Adrena-Brain.
       if (name === "Munkidori") return 14;
       // Snorunt for Frostlass evolution (Freezing Shroud passive).
@@ -492,10 +550,25 @@ export function archetypeBenchBonus(
     case "mega-starmie-froslass":
       // Multiple Staryu = redundant Mega Starmie ex lines.
       if (name === "Staryu") return 18;
-      // Snorunt for Mega Frostlass evolution (hand-size scaling).
+      // Snorunt for Mega Froslass ex evolution (hand-size scaling).
       if (name === "Snorunt") return 14;
       // Munkidori for Adrena-Brain.
       if (name === "Munkidori") return 12;
+      return 0;
+    case "hops-trevenant":
+      // Hop's Phantump bench redundancy = the Trevenant evolve line. 4-of
+      // in the list; multiple bench copies insure against Boss's Orders.
+      if (name === "Hop's Phantump") return 18;
+      // Hop's Snorlax — Extra Helpings ability is +30 to all Hop's attacks
+      // just by being in play. Even unattacking, having it on bench helps.
+      if (name === "Hop's Snorlax") return 14;
+      // Genesect — non-Hop's lead for matchups where you don't want to give
+      // opp a free Hop's KO to fuel their own Trevenant Revenge (mirror).
+      if (name === "Genesect") return 12;
+      // Latias ex — escape artist (free retreat). Pivot tool.
+      if (name === "Latias ex") return 8;
+      // Fezandipiti ex — draw engine basic.
+      if (name === "Fezandipiti ex") return 8;
       return 0;
     default:
       return 0;
@@ -537,32 +610,42 @@ export function archetypeAbilityBonus(
       if (abilityName === "Run Away Draw") return 12;
       return 0;
     case "crustle":
-      // Mysterious Rocking Inability — passive EX-damage immunity. Triggered
-      // by Crustle being in play; not an activated ability but worth flagging
-      // so the AI keeps Crustle promoted in EX-heavy matchups.
-      if (abilityName === "Mysterious Rocking Inability") return 25;
+      // Mysterious Rock Inn — passive EX-damage immunity (real card name,
+      // not "Mysterious Rocking Inability" as broadcast caster called it).
+      // Triggered by Crustle being in play; not an activated ability but
+      // worth flagging so the AI keeps Crustle promoted in EX-heavy matchups.
+      if (abilityName === "Mysterious Rock Inn") return 25;
       // Free-Heal (Cornerstone Mask Ogerpon ex) — heal on switch-out.
       if (abilityName === "Free-Heal") return 12;
       return 0;
     case "cynthia-garchomp":
-      // Roserade's energy-ramp ability is the deck's only acceleration path.
-      if (abilityName === "Roserade") return 22;
-      // Cynthia's Gabite tutor ability finds the rest of the line.
-      if (abilityName === "Cynthia's Gabite") return 18;
+      // Champion's Call (Cynthia's Gabite) — tutors a Cynthia's Pokémon
+      // from deck. Deck's only line-search ability.
+      if (abilityName === "Champion's Call") return 22;
+      // Cheer On to Glory (Cynthia's Roserade) — passive +30 to all your
+      // Cynthia's Pokémon attacks vs Active. (Earlier wiring incorrectly
+      // tagged this as energy-ramp; the deck has no on-card energy ramp.)
+      if (abilityName === "Cheer On to Glory") return 18;
       return 0;
     case "grimmsnarl-froslass":
       // Punk Up (Grimmsnarl ex) — search a Dark energy from deck on evolve.
       if (abilityName === "Punk Up") return 22;
-      // Freezing Shroud (Frostlass) — passive 10 dmg per turn to ability Pokémon.
+      // Freezing Shroud (Froslass) — passive 10 dmg per turn to ability Pokémon.
       if (abilityName === "Freezing Shroud") return 16;
-      // Order Up (Tatsugiri) — top 6 → take 1 supporter.
-      if (abilityName === "Order Up") return 14;
+      // Attract Customers (Tatsugiri, real name; broadcast caller said "Order
+      // Up") — top 6 reveal then take 1 Supporter to hand.
+      if (abilityName === "Attract Customers") return 14;
       // Adrena-Brain (Munkidori) — damage shift.
       if (abilityName === "Adrena-Brain") return 12;
       return 0;
     case "mega-starmie-froslass":
       // Adrena-Brain (Munkidori) — sets up Jetting Blow exact-KO math.
       if (abilityName === "Adrena-Brain") return 18;
+      return 0;
+    case "hops-trevenant":
+      // Extra Helpings (Hop's Snorlax) — passive +30 to ALL your Hop's
+      // attacks while Snorlax is in play. Highest-value ability in the deck.
+      if (abilityName === "Extra Helpings") return 22;
       return 0;
     default:
       return 0;
@@ -793,20 +876,20 @@ const PLAYBOOKS: Partial<Record<Archetype, PlaybookEntry>> = {
     },
     abilityBonus: {
       1: {},
-      2: { "Roserade": 30 },
-      3: { "Roserade": 25, "Cynthia's Gabite": 22 },
+      2: { "Cheer On to Glory": 30 },
+      3: { "Cheer On to Glory": 25, "Champion's Call": 22 },
     },
   },
-  // Sourced from prague-2026-top16 replay. Nicklas Rosu's "Maman's
-  // Grimmsnarl ex" line. T1 — Spike Muff Gym (item-lock-immune stadium)
-  // is the deck's archetype-defining play. T2 evolve Snorunt → Frostlass
-  // (Freezing Shroud passive) + Maman's Impidimp → Morgrem. T3 evolve
+  // Sourced from prague-2026-top16 replay. Nicklas Rosu's "Marnie's
+  // Grimmsnarl ex" line. T1 — Spikemuth Gym (item-lock-immune stadium)
+  // is the deck's archetype-defining play. T2 evolve Snorunt → Froslass
+  // (Freezing Shroud passive) + Marnie's Impidimp → Morgrem. T3 evolve
   // Morgrem → Grimmsnarl ex; Punk Up ability searches Dark energy from
   // deck on evolve = energy acceleration to fuel Shadow Bullet.
   "grimmsnarl-froslass": {
     cardBonus: {
       1: {
-        "Spike Muff Gym": 55,
+        "Spikemuth Gym": 55,
         "Buddy-Buddy Poffin": 35,
         "Poké Pad": 22,
       },
@@ -820,7 +903,7 @@ const PLAYBOOKS: Partial<Record<Archetype, PlaybookEntry>> = {
       },
     },
     abilityBonus: {
-      1: { "Order Up": 20 },
+      1: { "Attract Customers": 20 },
       2: { "Freezing Shroud": 25 },
       3: { "Punk Up": 30, "Adrena-Brain": 18 },
     },
@@ -849,6 +932,39 @@ const PLAYBOOKS: Partial<Record<Archetype, PlaybookEntry>> = {
       1: {},
       2: { "Adrena-Brain": 18 },
       3: { "Adrena-Brain": 22 },
+    },
+  },
+  // Sourced from a Tord Reklev livestream of the Prague top-64 Hop's
+  // Trevenant list. T1 — item-only (T1 supporter ban). Telepathic Psychic
+  // Energy is the buddy-buddy-poffin-on-an-energy: attaching it from hand
+  // to a Psychic Pokémon (Phantump) searches 2 Basic Psychic to bench.
+  // Hop's Bag fills the rest of the bench. Postwick stadium goes down
+  // when opp threatens stadium (otherwise hold). T2 — Lillie's draw +
+  // evolve Phantump to Trevenant + Hop's Choice Band tool. T3 — Boss's
+  // Orders into Horrifying Revenge (130 dmg if you lost a KO, +30/+30 from
+  // Postwick + Choice Band = 190 OHKO range).
+  "hops-trevenant": {
+    cardBonus: {
+      1: {
+        "Hop's Bag": 40,
+        "Postwick": 30,
+        "Poké Pad": 18,
+      },
+      2: {
+        "Lillie's Determination": 50,
+        "Hop's Choice Band": 35,
+        "Postwick": 25,
+      },
+      3: {
+        "Boss's Orders": 35,
+        "Hop's Choice Band": 25,
+        "Hassel": 18,
+      },
+    },
+    abilityBonus: {
+      1: {},
+      2: { "Extra Helpings": 18 },
+      3: { "Extra Helpings": 22 },
     },
   },
 };

@@ -146,12 +146,13 @@ describe("Dawn — 1 Basic + 1 Stage 1 + 1 Stage 2 chained picker", () => {
     const evoIdx = state.pendingPick!.pool.findIndex(() => true);
     const evoName = evoIdx >= 0 ? state.pendingPick!.pool[evoIdx].name : null;
     resolvePendingPick(state, player, evoIdx >= 0 ? [evoIdx] : []);
-    // Stage 2: basic Energy picker.
+    // Stage 2: Energy picker (Hilda card text says "an Energy card" — both
+    // Basic and Special Energy are eligible).
     expect(state.pendingPick).not.toBeNull();
-    expect(state.pendingPick!.label).toMatch(/basic Energy/);
+    expect(state.pendingPick!.label).toMatch(/Energy/);
     expect(state.pendingPick!.max).toBe(1);
     for (const c of state.pendingPick!.pool) {
-      expect(c.supertype === "Energy" && c.subtypes.includes("Basic")).toBe(true);
+      expect(c.supertype === "Energy").toBe(true);
     }
     const energyIdx = state.pendingPick!.pool.findIndex(() => true);
     const energyName = energyIdx >= 0 ? state.pendingPick!.pool[energyIdx].name : null;

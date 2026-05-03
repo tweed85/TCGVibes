@@ -186,6 +186,15 @@ export type AttackEffect =
   | { kind: "defenderCantAttackNextTurn" } // During opp's next turn, Defending can't use attacks.
   | { kind: "selfDamageReductionNextTurn"; amount: number } // "takes N less damage next turn"
   | { kind: "snipeOne"; damage: number } // "This attack also does N damage to 1 of opp's Benched"
+  // "N damage to 1 of your opponent's Pokémon for each <type> Energy
+  // attached to this Pokémon." (Genesect Bug's Cannon — N=20×Grass count.)
+  // Targets opp Active or Bench (not "Benched only" — covers either). Apply
+  // W/R only when target is Active per parenthetical.
+  | { kind: "snipeOnePerEnergy"; perEnergy: number; energyType: EnergyType }
+  // Duskull "Come and Get You": "Put up to N <SelfName> from your discard
+  // pile onto your Bench." `selfNameOnly: true` flags the same-name match;
+  // a future variant could allow line-name (e.g. "Hop's Phantump").
+  | { kind: "recurSelfFromDiscardToBench"; max: number; selfNameOnly: true }
   // "This attack does N damage to 2/3 of your opponent's Pokémon." Hits both
   // Active + Bench; auto-picks the most-damaged targets.
   | { kind: "damageMultipleTargets"; damage: number; count: number; benchOnly: boolean }
@@ -1270,6 +1279,13 @@ export interface PendingInPlayTarget {
     // Ability: place N counters on the clicked opp Pokémon, then KO the
     // ability holder. (Dusknoir Cursed Blast.)
     | { kind: "abilityCursedBlast"; counters: number; holderInstanceId: string; ownerId: PlayerId; abilityName: string }
+    // Ability: attach the stashed basic Energy from discard to the clicked
+    // own Pokémon. (Blaziken ex Seething Spirit.)
+    | { kind: "abilityAttachEnergyFromDiscard"; energyIndexInDiscard: number; ownerId: PlayerId; abilityName: string }
+    // Shaymin "Send Flowers" — first-step picker. Player clicks a Benched
+    // Pokémon of `pokemonType`; resolver chains into a deck-search-pick that
+    // attaches the chosen Energy to the clicked instance via `attachToInstanceId`.
+    | { kind: "sendFlowersAttach"; attackName: string; pokemonType: string }
     // Distributed-damage attack picker (Oil Salvo / Phantom Dive). Each
     // click hits the chosen opp Pokémon for `perHit` damage; `remaining`
     // decrements. When remaining reaches 0, the picker closes. `benchOnly`
@@ -1330,7 +1346,10 @@ export type DeckSearchChainStep =
   | { kind: "dawn-stage1" } // Dawn: after picking the Basic, pick a Stage 1
   | { kind: "dawn-stage2" } // Dawn: after picking the Stage 1, pick a Stage 2
   | { kind: "hilda-energy" } // Hilda: after the Evolution, pick a basic Energy
-  | { kind: "colress-energy" }; // Colress's Tenacity: after Stadium, pick basic Energy
+  | { kind: "colress-energy" } // Colress's Tenacity: after Stadium, pick basic Energy
+  | { kind: "secret-box-tool" } // Secret Box step 2 of 4
+  | { kind: "secret-box-supporter" } // Secret Box step 3 of 4
+  | { kind: "secret-box-stadium" }; // Secret Box step 4 of 4
 
 // Short "hey, heads up" modal shown between chained deck searches when the
 // current stage has no qualifying cards. Lets the player acknowledge the

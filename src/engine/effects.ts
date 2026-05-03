@@ -10,8 +10,8 @@
 // Effects that the engine doesn't understand are preserved on the Attack as
 // plain `text` so the UI can display them even though they won't fire.
 
-import { addStatus, drawCards, flipCoin, logEvent, prizeValue, setPendingPromote } from "./rules";
-import { benchDamageBlocked, benchDamageBlockedByFlowerCurtain, effectiveMaxHp, effectiveWeaknesses } from "./ongoingEffects";
+import { addStatus, applyEvolveSideEffects, drawCards, flipCoin, logEvent, prizeValue, setPendingPromote } from "./rules";
+import { benchDamageBlocked, benchDamageBlockedByFlowerCurtain, effectiveMaxHp, effectiveWeaknesses, teraBenchImmunity } from "./ongoingEffects";
 import { applyTrainerEffect } from "./trainerEffects";
 import { getAttackEffects } from "../data/effectPatterns";
 import type {
@@ -620,6 +620,10 @@ export function resolveAttackEffects(
             if (benchDamageBlockedByFlowerCurtain(state, ctx.defenderOwner, t)) {
               continue;
             }
+            if (teraBenchImmunity(state, t)) {
+              logEvent(state, "system", `${t.card.name} (Tera) is immune to bench damage.`);
+              continue;
+            }
             const place = Math.min(remaining, e.counters);
             t.damage += place * 10;
             remaining -= place;
@@ -966,6 +970,10 @@ export function resolveAttackEffects(
               logEvent(state, "system", `Flower Curtain protects ${t.card.name}.`);
               continue;
             }
+            if (teraBenchImmunity(state, t)) {
+              logEvent(state, "system", `${t.card.name} (Tera) is immune to bench damage.`);
+              continue;
+            }
             t.damage += e.damage;
             logEvent(
               state,
@@ -1263,6 +1271,10 @@ export function resolveAttackEffects(
               logEvent(state, "system", `Flower Curtain protects ${target.card.name}.`);
               continue;
             }
+            if (isBench && teraBenchImmunity(state, target)) {
+              logEvent(state, "system", `${target.card.name} (Tera) is immune to bench damage.`);
+              continue;
+            }
             target.damage += e.perHit;
             logEvent(
               state,
@@ -1296,6 +1308,10 @@ export function resolveAttackEffects(
               logEvent(state, "system", `Flower Curtain protects ${t.card.name}.`);
               continue;
             }
+            if (isBench && teraBenchImmunity(state, t)) {
+              logEvent(state, "system", `${t.card.name} (Tera) is immune to bench damage.`);
+              continue;
+            }
             t.damage += e.damage;
             logEvent(state, "system", `${t.card.name} takes ${e.damage} damage.`);
           }
@@ -1323,8 +1339,135 @@ export function resolveAttackEffects(
             logEvent(state, "system", `Flower Curtain protects ${target.card.name}.`);
             return;
           }
+          if (teraBenchImmunity(state, target)) {
+            logEvent(state, "system", `${target.card.name} (Tera) is immune to bench damage.`);
+            return;
+          }
           target.damage += e.damage;
           logEvent(state, "system", `${target.card.name} takes ${e.damage} damage (snipe).`);
+        });
+        break;
+      }
+
+      case "recurSelfFromDiscardToBench": {
+        // Duskull "Come and Get You". Pull up to N copies of the attacker's
+        // own card name from discard and put them on the player's bench.
+        // Bench cap of 5 still applies. Auto-resolves (rebuilds an obvious
+        // line; not a meaningful player choice).
+        postHooks.push(() => {
+          const pl = state.players[ctx.attackerOwner];
+          const selfName = ctx.attacker.card.name;
+          let added = 0;
+          for (let i = 0; i < pl.discard.length && added < e.max && pl.bench.length < 5; ) {
+            const c = pl.discard[i];
+            if (c.supertype === "Pokémon" && c.name === selfName) {
+              const card = c as import("./types").PokemonCard;
+              pl.discard.splice(i, 1);
+              pl.bench.push({
+                instanceId: `${selfName}-${state.turn}-${added}-${pl.bench.length}`,
+                card,
+                damage: 0,
+                attachedEnergy: [],
+                evolvedFrom: [],
+                tools: [],
+                playedThisTurn: true,
+                evolvedThisTurn: false,
+                statuses: [],
+                abilityUsedThisTurn: false,
+              });
+              added++;
+            } else {
+              i++;
+            }
+          }
+          logEvent(
+            state,
+            ctx.attackerOwner,
+            `${ctx.move.name}: brings ${added} ${selfName} back to Bench from discard.`,
+          );
+        });
+        break;
+      }
+
+      case "snipeOnePerEnergy": {
+        // Genesect Bug's Cannon: 20 dmg × Grass Energy attached to attacker,
+        // applied to one of opp's Pokémon (Active OR Bench). Card text says
+        // "Don't apply Weakness and Resistance for Benched Pokémon" — i.e.
+        // W/R applies when target is the Active.
+        postHooks.push(() => {
+          const opp = state.players[ctx.defenderOwner];
+          // Count attacker's matching energies (counts each energy card; for
+          // Special Energy that provides the type, count as 1 for that type).
+          const matching = ctx.attacker.attachedEnergy.filter((en) =>
+            en.provides.includes(e.energyType),
+          ).length;
+          if (matching === 0) {
+            logEvent(state, "system", `${ctx.move.name}: no ${e.energyType} Energy on attacker — no damage.`);
+            return;
+          }
+          const baseDmg = e.perEnergy * matching;
+          // Pick target: snipeTargetOverride first (UI / AI hint), else
+          // most-damaged from the full pool (Active + Bench).
+          const pool: { p: import("./types").PokemonInPlay; isActive: boolean }[] = [];
+          if (opp.active) pool.push({ p: opp.active, isActive: true });
+          for (const b of opp.bench) pool.push({ p: b, isActive: false });
+          if (pool.length === 0) return;
+          // Bench-target indices are relative to opp.bench; the override
+          // matches that convention. Map negative override to "Active" by
+          // convention if -1 is used; otherwise treat as bench index.
+          let chosen = pool.slice().sort((a, b) => b.p.damage - a.p.damage)[0];
+          if (
+            state.snipeTargetOverride !== null &&
+            state.snipeTargetOverride >= 0 &&
+            state.snipeTargetOverride < opp.bench.length
+          ) {
+            chosen = { p: opp.bench[state.snipeTargetOverride], isActive: false };
+          }
+          // Bench-side immunities first.
+          if (!chosen.isActive) {
+            if (benchDamageBlocked(state)) {
+              logEvent(state, "system", `Battle Cage protects ${chosen.p.card.name}.`);
+              return;
+            }
+            if (benchDamageBlockedByFlowerCurtain(state, ctx.defenderOwner, chosen.p)) {
+              logEvent(state, "system", `Flower Curtain protects ${chosen.p.card.name}.`);
+              return;
+            }
+            if (teraBenchImmunity(state, chosen.p)) {
+              logEvent(state, "system", `${chosen.p.card.name} (Tera) is immune to bench damage.`);
+              return;
+            }
+            chosen.p.damage += baseDmg;
+            logEvent(
+              state,
+              "system",
+              `${chosen.p.card.name} takes ${baseDmg} damage (snipe ×${matching} ${e.energyType}).`,
+            );
+            return;
+          }
+          // Active target — apply W/R.
+          let dmg = baseDmg;
+          const atkType = ctx.attacker.card.types[0];
+          const weak = effectiveWeaknesses(chosen.p, state).find((w) => w.type === atkType);
+          const res = chosen.p.card.resistances?.find((r) => r.type === atkType);
+          const ignoresWeakness =
+            chosen.p.noWeaknessUntilTurn !== undefined && state.turn <= chosen.p.noWeaknessUntilTurn;
+          if (!ignoresWeakness && weak && weak.value.startsWith("×")) {
+            const mult = parseInt(weak.value.slice(1), 10) || 2;
+            dmg *= mult;
+            logEvent(state, "system", `Weakness: ${chosen.p.card.name} takes ×${mult} from ${atkType}.`);
+          }
+          if (res && res.value.startsWith("-")) {
+            const red = parseInt(res.value.slice(1), 10) || 30;
+            dmg = Math.max(0, dmg - red);
+            logEvent(state, "system", `Resistance: ${chosen.p.card.name} reduces ${atkType} damage by ${red}.`);
+          }
+          chosen.p.damage += dmg;
+          logEvent(
+            state,
+            "system",
+            `${chosen.p.card.name} takes ${dmg} damage (snipe ×${matching} ${e.energyType}).`,
+          );
         });
         break;
       }
@@ -1904,6 +2047,10 @@ export function resolveAttackEffects(
               logEvent(state, "system", `Flower Curtain protects ${p.card.name}.`);
               continue;
             }
+            if (!isActive && teraBenchImmunity(state, p)) {
+              logEvent(state, "system", `${p.card.name} (Tera) is immune to bench damage.`);
+              continue;
+            }
             let dmg = e.damagePerHeads;
             if (isActive) {
               const weak = effectiveWeaknesses(p, state).find((w) => w.type === atkType);
@@ -2027,8 +2174,11 @@ export function resolveAttackEffects(
 
       case "searchEnergyAttachBenchType": {
         // Shaymin "Send Flowers" — search deck for any Energy, attach to one
-        // of your Benched Pokémon of the given type. Auto-pick the first
-        // Energy and first matching bench ally.
+        // of your Benched Pokémon of the given type. Humans with multiple
+        // bench targets pick the target first (via pendingInPlayTarget),
+        // then pick the energy from the deck. AI / single-target paths
+        // auto-resolve with a smarter heuristic (most-charged ally first,
+        // since Shaymin is typically used to bridge an ally to its cost).
         postHooks.push(() => {
           const pl = state.players[ctx.attackerOwner];
           const bench = pl.bench.filter((p) => p.card.types.includes(e.pokemonType));
@@ -2036,21 +2186,47 @@ export function resolveAttackEffects(
             logEvent(state, "system", `${ctx.move.name}: no Benched ${e.pokemonType} Pokémon.`);
             return;
           }
-          const target = bench[0];
-          const idx = pl.deck.findIndex((c) => c.supertype === "Energy");
-          if (idx < 0) {
+          const hasEnergyInDeck = pl.deck.some((c) => c.supertype === "Energy");
+          if (!hasEnergyInDeck) {
             logEvent(state, "system", `${ctx.move.name}: no Energy in deck.`);
             return;
           }
-          const [en] = pl.deck.splice(idx, 1);
-          target.attachedEnergy.push(en as import("./types").EnergyCard);
-          // Shuffle the remainder.
-          const arr = pl.deck;
-          for (let i = arr.length - 1; i > 0; i--) {
-            const j = state.rng.int(i + 1);
-            [arr[i], arr[j]] = [arr[j], arr[i]];
+          if (pl.isAI || bench.length === 1) {
+            // Auto-pick: bench Pokémon with most matching attached energy
+            // (closest to attacking), tiebreak on highest HP. Energy: pick
+            // the first matching basic if any, else any energy.
+            const target = bench.slice().sort((a, b) => {
+              if (a.attachedEnergy.length !== b.attachedEnergy.length) {
+                return b.attachedEnergy.length - a.attachedEnergy.length;
+              }
+              return b.card.hp - a.card.hp;
+            })[0];
+            const idx = pl.deck.findIndex((c) => c.supertype === "Energy");
+            const [en] = pl.deck.splice(idx, 1);
+            target.attachedEnergy.push(en as import("./types").EnergyCard);
+            // Shuffle the remainder.
+            const arr = pl.deck;
+            for (let i = arr.length - 1; i > 0; i--) {
+              const j = state.rng.int(i + 1);
+              [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: attaches ${en.name} to ${target.card.name}.`);
+            return;
           }
-          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: attaches ${en.name} to ${target.card.name}.`);
+          // Human with multiple targets: open the bench picker first; the
+          // resolver will chain into a deck-search-pick for the Energy.
+          state.pendingInPlayTarget = {
+            player: ctx.attackerOwner,
+            label: `${ctx.move.name}: pick a Benched ${e.pokemonType} Pokémon to attach an Energy to`,
+            scope: "own",
+            slot: "bench",
+            filter: "anyPokemon",
+            action: {
+              kind: "sendFlowersAttach",
+              attackName: ctx.move.name,
+              pokemonType: e.pokemonType,
+            },
+          };
         });
         break;
       }
@@ -2076,7 +2252,11 @@ export function resolveAttackEffects(
           // Mutate the in-play card to the evolution; preserve damage & energy.
           ctx.attacker.evolvedFrom.push(ctx.attacker.card);
           ctx.attacker.card = evo as import("./types").PokemonCard;
-          ctx.attacker.evolvedThisTurn = true;
+          // Centralize evolve cleanup (clears Asleep/Paralyzed/Burned/Poisoned,
+          // resets abilityUsedThisTurn, sets evolvedThisTurn, clears scheduled
+          // turn-locked flags). Confused persists under Dizzying Valley per
+          // the helper's own logic.
+          applyEvolveSideEffects(state, ctx.attacker);
           logEvent(state, ctx.attackerOwner, `${ctx.move.name}: evolves into ${evo.name}.`);
         });
         break;

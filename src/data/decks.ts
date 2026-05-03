@@ -152,6 +152,255 @@ Trainer: 34
 Energy: 10
 10 Fighting Energy MEE 6`;
 
+// ---------------------------------------------------------------------------
+// Tournament-sourced community decks. All eight pasted verbatim from each
+// player's published list at limitlesstcg.com (Prague Regional 2026), then
+// validated by src/data/__tests__/communityDecks.test.ts — every entry
+// resolves to a card in the current pool with zero unmatched / zero rule
+// violations / parser-clean. Pair with archetype playbooks already wired
+// in src/engine/aiArchetype.ts.
+// ---------------------------------------------------------------------------
+
+const MATEUSZ_DRAGAPULT_DUDUNSPARCE = `Pokémon: 19
+4 Dreepy ASC 158
+4 Drakloak ASC 159
+3 Dragapult ex ASC 160
+2 Dunsparce JTG 120
+2 Dudunsparce TEF 129
+1 Dudunsparce ex JTG 121
+2 Munkidori ASC 99
+1 Budew ASC 16
+
+Trainer: 32
+4 Lillie's Determination MEG 119
+3 Crispin SCR 133
+3 Boss's Orders MEG 114
+2 Brock's Scouting JTG 146
+1 Acerola's Mischief MEG 113
+4 Buddy-Buddy Poffin ASC 184
+4 Poké Pad POR 81
+4 Ultra Ball MEG 131
+2 Pokégear 3.0 SVI 186
+2 Night Stretcher ASC 196
+1 Hero's Cape TEF 152
+2 Risky Ruins MEG 127
+
+Energy: 9
+4 Psychic Energy MEE 5
+3 Fire Energy MEE 2
+2 Darkness Energy MEE 7`;
+
+const TRESP_CRUSTLE = `Pokémon: 10
+4 Dwebble DRI 11
+3 Crustle DRI 12
+2 Mega Kangaskhan ex MEG 104
+1 Cornerstone Mask Ogerpon ex TWM 112
+
+Trainer: 35
+4 Lillie's Determination MEG 119
+4 Boss's Orders MEG 114
+4 Team Rocket's Petrel ASC 207
+2 Hilda WHT 84
+2 Colress's Tenacity SFA 57
+1 Xerosic's Machinations SFA 64
+1 Pokémon Center Lady MEG 123
+4 Pokégear 3.0 SVI 186
+4 Jumbo Ice Cream PFL 91
+2 Ultra Ball MEG 131
+2 Buddy-Buddy Poffin ASC 184
+1 Super Potion JTG 158
+1 Switch MEG 130
+1 Hero's Cape TEF 152
+1 Forest of Vitality MEG 117
+1 Team Rocket's Factory ASC 203
+
+Energy: 15
+4 Mist Energy TEF 161
+4 Spiky Energy JTG 159
+4 Growing Grass Energy POR 86
+2 Rocky Fighting Energy POR 87
+1 Grass Energy MEE 1`;
+
+const KOSEK_CYNTHIA_GARCHOMP = `Pokémon: 19
+4 Cynthia's Gible ASC 109
+4 Cynthia's Gabite ASC 110
+3 Cynthia's Garchomp ex ASC 111
+4 Cynthia's Roselia DRI 7
+3 Cynthia's Roserade DRI 8
+1 Cynthia's Spiritomb ASC 133
+
+Trainer: 32
+4 Boss's Orders MEG 114
+4 Lillie's Determination MEG 119
+2 Larry's Skill PRE 115
+1 Team Rocket's Petrel ASC 207
+4 Poké Pad POR 81
+4 Buddy-Buddy Poffin ASC 184
+3 Fighting Gong MEG 116
+2 Pokégear 3.0 SVI 186
+2 Premium Power Pro MEG 124
+1 Switch MEG 130
+1 Unfair Stamp TWM 165
+4 Cynthia's Power Weight DRI 162
+
+Energy: 9
+5 Fighting Energy MEE 6
+4 Rocky Fighting Energy POR 87`;
+
+const PIRES_MEGA_STARMIE_DUSKNOIR = `Pokémon: 21
+4 Duskull PRE 35
+3 Dusclops PRE 36
+2 Dusknoir PRE 37
+3 Staryu POR 20
+2 Mega Starmie ex POR 21
+2 Munkidori ASC 99
+1 Fezandipiti ex ASC 142
+1 Latias ex SSP 76
+1 Bloodmoon Ursaluna ex TWM 141
+1 Budew ASC 16
+1 Meowth ex POR 62
+
+Trainer: 30
+4 Lillie's Determination MEG 119
+3 Hilda WHT 84
+2 Boss's Orders MEG 114
+1 Judge POR 76
+1 Wally's Compassion MEG 132
+4 Ultra Ball MEG 131
+4 Buddy-Buddy Poffin ASC 184
+3 Pokégear 3.0 SVI 186
+3 Poké Pad POR 81
+2 Night Stretcher ASC 196
+3 Risky Ruins MEG 127
+
+Energy: 9
+3 Water Energy MEE 3
+3 Darkness Energy MEE 7
+2 Ignition Energy WHT 86
+1 Legacy Energy TWM 167`;
+
+const CIPOLLA_DRAGAPULT_BLAZIKEN = `Pokémon: 23
+4 Dreepy ASC 158
+4 Drakloak ASC 159
+2 Dragapult ex ASC 160
+2 Torchic DRI 40
+1 Combusken DRI 41
+2 Blaziken ex JTG 24
+2 Munkidori ASC 99
+2 Budew ASC 16
+1 Fezandipiti ex ASC 142
+1 Meowth ex POR 62
+1 Lillie's Clefairy ex ASC 76
+1 Shaymin DRI 10
+
+Trainer: 29
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin SCR 133
+2 Dawn PFL 87
+4 Buddy-Buddy Poffin ASC 184
+4 Ultra Ball MEG 131
+3 Poké Pad POR 81
+2 Rare Candy MEG 125
+2 Night Stretcher ASC 196
+1 Unfair Stamp TWM 165
+1 Risky Ruins MEG 127
+1 Team Rocket's Watchtower ASC 210
+
+Energy: 8
+3 Psychic Energy MEE 5
+3 Fire Energy MEE 2
+2 Darkness Energy MEE 7`;
+
+const ROSU_GRIMMSNARL_FROSLASS = `Pokémon: 20
+4 Munkidori ASC 99
+3 Marnie's Impidimp DRI 134
+2 Marnie's Morgrem DRI 135
+2 Marnie's Grimmsnarl ex DRI 136
+2 Snorunt ASC 46
+2 Froslass TWM 53
+2 Budew ASC 16
+1 Tatsugiri TWM 131
+1 Shaymin DRI 10
+1 Yveltal MEG 88
+
+Trainer: 31
+4 Lillie's Determination MEG 119
+4 Team Rocket's Petrel ASC 207
+3 Boss's Orders MEG 114
+4 Buddy-Buddy Poffin ASC 184
+4 Poké Pad POR 81
+3 Night Stretcher ASC 196
+2 Rare Candy MEG 125
+1 Unfair Stamp TWM 165
+1 Energy Switch MEG 115
+1 Air Balloon ASC 181
+4 Spikemuth Gym DRI 169
+
+Energy: 9
+9 Darkness Energy MEE 7`;
+
+const ZANCHI_MEGA_STARMIE_FROSLASS = `Pokémon: 16
+3 Snorunt ASC 46
+2 Froslass TWM 53
+2 Mega Froslass ex ASC 47
+3 Staryu POR 20
+2 Mega Starmie ex POR 21
+3 Munkidori ASC 99
+1 Meowth ex POR 62
+
+Trainer: 35
+4 Lillie's Determination MEG 119
+4 Hilda WHT 84
+2 Crispin SCR 133
+2 Boss's Orders MEG 114
+2 Wally's Compassion MEG 132
+1 Larry's Skill PRE 115
+4 Buddy-Buddy Poffin ASC 184
+4 Poké Pad POR 81
+4 Ultra Ball MEG 131
+2 Night Stretcher ASC 196
+2 Pokégear 3.0 SVI 186
+1 Air Balloon ASC 181
+3 Risky Ruins MEG 127
+
+Energy: 9
+4 Water Energy MEE 3
+3 Darkness Energy MEE 7
+1 Ignition Energy WHT 86
+1 Legacy Energy TWM 167`;
+
+const REKLEV_HOPS_TREVENANT = `Pokémon: 17
+4 Hop's Phantump ASC 95
+3 Hop's Trevenant ASC 96
+2 Hop's Snorlax JTG 117
+2 Hop's Cramorant ASC 177
+1 Genesect SFA 40
+1 Latias ex SSP 76
+1 Fezandipiti ex ASC 142
+1 Lillie's Clefairy ex ASC 76
+1 Shaymin DRI 10
+1 Hop's Zacian ex JTG 111
+
+Trainer: 36
+4 Lillie's Determination MEG 119
+4 Boss's Orders MEG 114
+4 Team Rocket's Petrel ASC 207
+3 Hassel TWM 151
+4 Poké Pad POR 81
+2 Hop's Bag JTG 147
+2 Night Stretcher ASC 196
+2 Pokégear 3.0 SVI 186
+1 Ultra Ball MEG 131
+1 Secret Box TWM 163
+4 Hop's Choice Band JTG 148
+1 Air Balloon ASC 181
+4 Postwick JTG 154
+
+Energy: 7
+4 Telepathic Psychic Energy POR 88
+3 Mist Energy TEF 161`;
+
 export const DECK_SPECS: DeckSpec[] = [
   {
     id: "festival-leads",
@@ -176,6 +425,54 @@ export const DECK_SPECS: DeckSpec[] = [
     name: "Mega Lucario",
     description: "Mega Lucario ex hits hard under Premium Power Pro with a Fighting-search engine.",
     decklist: LUCARIO,
+  },
+  {
+    id: "mateusz-dragapult-dudunsparce",
+    name: "Dragapult / Dudunsparce (Mateusz Łaszkiewicz, Prague 1st)",
+    description: "Champion list. Dragapult ex Phantom Dive primary; Dudunsparce ex Destructive Drill bypasses EX-immunity walls. Hero's Cape ACE SPEC on the 1-prize Dudunsparce.",
+    decklist: MATEUSZ_DRAGAPULT_DUDUNSPARCE,
+  },
+  {
+    id: "tresp-crustle",
+    name: "Crustle (Elmar Tresp, Prague 2nd)",
+    description: "Wall-first finalist list. Mysterious Rocking Inability immunity to EX damage; Mega Kangaskhan ex backup attacker. Hero's Cape ACE SPEC = 250 HP Crustle.",
+    decklist: TRESP_CRUSTLE,
+  },
+  {
+    id: "kosek-cynthia-garchomp",
+    name: "Cynthia's Garchomp ex (Neddy Kosek, Prague 3rd)",
+    description: "Cynthia's-prefix evolution engine. Cynthia's Roserade energy ramp + Garchomp ex Corkscrew Dive (attack + draw). Unfair Stamp ACE SPEC.",
+    decklist: KOSEK_CYNTHIA_GARCHOMP,
+  },
+  {
+    id: "pires-mega-starmie-dusknoir",
+    name: "Mega Starmie / Dusknoir (João Pires, Prague 4th)",
+    description: "Mega Starmie ex Jetting Blow + Dusknoir Cursed Blast (anti-Crustle bypass). Risky Ruins compound spread damage.",
+    decklist: PIRES_MEGA_STARMIE_DUSKNOIR,
+  },
+  {
+    id: "cipolla-dragapult-blaziken",
+    name: "Dragapult / Blaziken (Vincenzo Cipolla, Prague 8th)",
+    description: "Stage-2 setup deck. Blaziken ex Charging Up energy acceleration into Dragapult ex Phantom Dive.",
+    decklist: CIPOLLA_DRAGAPULT_BLAZIKEN,
+  },
+  {
+    id: "rosu-grimmsnarl-froslass",
+    name: "Marnie's Grimmsnarl ex / Froslass (Nicklas Rosu, Prague Top 16)",
+    description: "Marnie's-prefix engine + Spikemuth Gym (item-lock-immune stadium-search). Punk Up energy acceleration on evolve.",
+    decklist: ROSU_GRIMMSNARL_FROSLASS,
+  },
+  {
+    id: "zanchi-mega-starmie-froslass",
+    name: "Mega Starmie / Mega Froslass ex (Lorenzo Zanchi, Prague)",
+    description: "Risky Ruins stadium passive 2-counter spread + Mega Froslass ex hand-size scaling damage.",
+    decklist: ZANCHI_MEGA_STARMIE_FROSLASS,
+  },
+  {
+    id: "reklev-hops-trevenant",
+    name: "Hop's Trevenant (Tord Reklev's Prague Top 64 list)",
+    description: "Single-prize Hop's-prefix engine. Hop's Trevenant Horrifying Revenge (130 dmg if you lost a KO last turn) + Postwick / Hop's Choice Band damage layering.",
+    decklist: REKLEV_HOPS_TREVENANT,
   },
 ];
 

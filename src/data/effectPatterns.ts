@@ -119,6 +119,13 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
       } else if (/for each Prize card your opponent has taken/i.test(text)) {
         effects.push({ kind: "perPrizeOppTaken", perCount: base });
         baseDamageOverride = 0;
+      } else if (/for each of your opponent'?s pok[eé]mon ex in play/i.test(text)) {
+        // Dudunsparce ex Tenacious Tail — 60× per opp ex Pokémon in play.
+        // Without this branch, the "60×" base leaks through and combines
+        // with the per-ex-count from the secondary `perOppPokemonEx`
+        // matcher, doubling the damage.
+        effects.push({ kind: "perOppPokemonEx", perCount: base });
+        baseDamageOverride = 0;
       } else if (perEnergyMatch) {
         const qualifier = (perEnergyMatch[1] ?? "").trim();
         const energyType = matchEnergyType(qualifier);
@@ -690,10 +697,50 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
     if (m) effects.push({ kind: "selfDamageReductionNextTurn", amount: parseInt(m[1], 10) });
   }
 
+  // ---- "Put up to N <self-name> from your discard pile onto your Bench." ---
+  // Duskull "Come and Get You". The self-name is whatever Pokémon hosts this
+  // attack — we don't know it at pattern-extract time, so the handler reads
+  // ctx.attacker.card.name and matches against discard. We only detect the
+  // pattern + N here; the matcher carries the same-name flag.
+  {
+    const m = text.match(
+      /put up to (\d+) [A-Za-z'éÉ-]+ from your discard pile onto your bench/i,
+    );
+    if (m) {
+      effects.push({
+        kind: "recurSelfFromDiscardToBench",
+        max: parseInt(m[1], 10),
+        selfNameOnly: true,
+      });
+    }
+  }
+
+  // ---- Snipe one Pokémon, scaled by energy attached ------------------------
+  // Genesect Bug's Cannon: "20 damage to 1 of your opponent's Pokémon for
+  // each Grass Energy attached to this Pokémon." Must precede the generic
+  // snipeOne so we don't double-register.
+  let snipePerEnergyMatched = false;
+  {
+    const m = text.match(
+      /(\d+) damage to 1 of your opponent'?s (?:benched )?pok[eé]mon for each ([A-Za-z]+) energy attached to this pok[eé]mon/i,
+    );
+    if (m) {
+      const energyType = matchEnergyType(m[2]);
+      if (energyType) {
+        effects.push({
+          kind: "snipeOnePerEnergy",
+          perEnergy: parseInt(m[1], 10),
+          energyType,
+        });
+        snipePerEnergyMatched = true;
+      }
+    }
+  }
+
   // ---- Snipe one benched Pokémon --------------------------------------------
   {
     const m = text.match(/(\d+) damage to 1 of your opponent'?s (?:benched )?pok[eé]mon/i);
-    if (m && !/each of/i.test(text)) {
+    if (m && !/each of/i.test(text) && !snipePerEnergyMatched) {
       effects.push({ kind: "snipeOne", damage: parseInt(m[1], 10) });
     }
   }
@@ -2339,14 +2386,6 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
     }
   }
 
-  // Dudunsparce ex Tenacious Tail: "This attack does N damage for each of
-  // your opponent's Pokémon ex in play."
-  {
-    const m = text.match(
-      /this attack does (\d+) damage for each of your opponent'?s pok[eé]mon ex in play/i,
-    );
-    if (m) effects.push({ kind: "perOppPokemonEx", perCount: parseInt(m[1], 10) });
-  }
 
   // Mamoswine ex Rumbling March: "This attack does N more damage for each
   // Stage 2 Pokémon on your Bench."

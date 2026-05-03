@@ -102,7 +102,7 @@ describe("archetype detection — Prague Day 2 replay seeds", () => {
   it("detects cynthia-garchomp from the Cynthia's-prefix line", () => {
     const state = bootBlankState(7103);
     state.players.p1.deck = [
-      mkPokemon("Cynthia's Garchomp", { subtypes: ["Stage 2"] }),
+      mkPokemon("Cynthia's Garchomp ex", { subtypes: ["Stage 2", "ex"] }),
       mkPokemon("Cynthia's Gabite", { subtypes: ["Stage 1"] }),
       mkPokemon("Cynthia's Gible"),
       mkPokemon("Cynthia's Roserade", { subtypes: ["Stage 1"] }),
@@ -111,24 +111,24 @@ describe("archetype detection — Prague Day 2 replay seeds", () => {
     expect(detectArchetype(state, "p1")).toBe("cynthia-garchomp");
   });
 
-  it("detects grimmsnarl-froslass from the Maman's-prefix line + Spike Muff Gym", () => {
+  it("detects grimmsnarl-froslass from the Marnie's-prefix line + Spikemuth Gym", () => {
     const state = bootBlankState(7104);
     state.players.p1.deck = [
-      mkPokemon("Maman's Grimmsnarl ex", { subtypes: ["Stage 2", "ex"] }),
-      mkPokemon("Maman's Morgrem", { subtypes: ["Stage 1"] }),
-      mkPokemon("Maman's Impidimp"),
-      mkTrainer("Spike Muff Gym", "Stadium"),
+      mkPokemon("Marnie's Grimmsnarl ex", { subtypes: ["Stage 2", "ex"] }),
+      mkPokemon("Marnie's Morgrem", { subtypes: ["Stage 1"] }),
+      mkPokemon("Marnie's Impidimp"),
+      mkTrainer("Spikemuth Gym", "Stadium"),
     ];
     state.players.p1.hand = [];
     expect(detectArchetype(state, "p1")).toBe("grimmsnarl-froslass");
   });
 
-  it("detects mega-starmie-froslass from Mega Starmie ex + Risky Ruins + Mega Frostlass", () => {
+  it("detects mega-starmie-froslass from Mega Starmie ex + Risky Ruins + Mega Froslass ex", () => {
     const state = bootBlankState(7105);
     state.players.p1.deck = [
       mkPokemon("Mega Starmie ex", { subtypes: ["Mega", "ex"] }),
       mkTrainer("Risky Ruins", "Stadium"),
-      mkPokemon("Mega Frostlass", { subtypes: ["Mega"] }),
+      mkPokemon("Mega Froslass ex", { subtypes: ["Mega"] }),
       mkPokemon("Staryu"),
     ];
     state.players.p1.hand = [];
@@ -201,9 +201,12 @@ describe("playbook bonuses — cynthia-garchomp (Cynthia's-prefix engine)", () =
     expect(playbookCardBonus("cynthia-garchomp", 1, "Buddy-Buddy Poffin")).toBeGreaterThan(45);
   });
 
-  it("T2: Cynthia engine + Roserade ramp ability", () => {
+  it("T2: Cynthia engine + Cynthia's Roserade Cheer On to Glory ability", () => {
     expect(playbookCardBonus("cynthia-garchomp", 2, "Cynthia")).toBeGreaterThan(45);
-    expect(playbookAbilityBonus("cynthia-garchomp", 2, "Roserade")).toBeGreaterThan(20);
+    // Cheer On to Glory is the real ability name (passive +30 buff, not the
+    // "energy ramp" the broadcast caster called it). Earlier wiring tagged
+    // this as "Roserade" — fixed in the audit pass.
+    expect(playbookAbilityBonus("cynthia-garchomp", 2, "Cheer On to Glory")).toBeGreaterThan(20);
   });
 
   it("T3: Boss's Orders + Unfair Stamp ACE SPEC", () => {
@@ -212,9 +215,9 @@ describe("playbook bonuses — cynthia-garchomp (Cynthia's-prefix engine)", () =
   });
 });
 
-describe("playbook bonuses — grimmsnarl-froslass (Spike Muff Gym + Punk Up)", () => {
-  it("T1: Spike Muff Gym dominates (item-lock-immune stadium-search)", () => {
-    expect(playbookCardBonus("grimmsnarl-froslass", 1, "Spike Muff Gym")).toBeGreaterThan(50);
+describe("playbook bonuses — grimmsnarl-froslass (Spikemuth Gym + Punk Up)", () => {
+  it("T1: Spikemuth Gym dominates (item-lock-immune stadium-search)", () => {
+    expect(playbookCardBonus("grimmsnarl-froslass", 1, "Spikemuth Gym")).toBeGreaterThan(50);
     expect(playbookCardBonus("grimmsnarl-froslass", 1, "Buddy-Buddy Poffin")).toBeGreaterThan(30);
   });
 

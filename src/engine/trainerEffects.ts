@@ -718,6 +718,19 @@ export function precheckTrainerEffect(
   if (id === "trArcherShuffleDraw" && !pl.yourPokemonKoedLastOppTurn) {
     return "Team Rocket's Archer requires a Team Rocket's Pokémon to have been Knocked Out during your opponent's last turn.";
   }
+  // Hassel — only playable if any of your Pokémon were KO'd during opp's
+  // last turn (matches Acerola/Unfair Stamp pattern).
+  if (id === "hasselTop8Take3" && !pl.yourPokemonKoedLastOppTurn) {
+    return "Hassel can only be played the turn after one of your Pokémon was Knocked Out.";
+  }
+  // Acerola's Mischief — "You can use this card only if your opponent has
+  // 2 or fewer Prize cards remaining."
+  if (id === "acerolasMischief") {
+    const opp = state.players[player === "p1" ? "p2" : "p1"];
+    if (opp.prizes.length > 2) {
+      return "Acerola's Mischief: opponent must have 2 or fewer Prize cards remaining.";
+    }
+  }
   if (id === "searchAnyPokemon" && pl.hand.length < 3) {
     return "Need 2 other cards in hand to discard for Ultra Ball.";
   }
@@ -2199,12 +2212,16 @@ export function applyTrainerEffect(
 
     case "searchEvolutionAndEnergy": {
       const isEvo = (c: Card) => c.supertype === "Pokémon" && !!c.evolvesFrom;
+      // Hilda card text: "an Energy card" — Special Energy is eligible too,
+      // not just Basic. Prefer basic for AI heuristic since it usually fits
+      // any cost; fall back to any energy if no basic.
+      const isAnyEnergy = (c: Card) => c.supertype === "Energy";
       const isBasicEnergyCard = (c: Card) =>
         c.supertype === "Energy" && c.subtypes.includes("Basic");
       if (pl.isAI) {
         // AI: auto-pick first match of each. Cheaper than driving two picks.
         const evo = pl.deck.find(isEvo);
-        const energy = pl.deck.find(isBasicEnergyCard);
+        const energy = pl.deck.find(isBasicEnergyCard) ?? pl.deck.find(isAnyEnergy);
         if (evo) pl.deck.splice(pl.deck.indexOf(evo), 1);
         if (energy) pl.deck.splice(pl.deck.indexOf(energy), 1);
         const took: Card[] = [];
@@ -2240,28 +2257,47 @@ export function applyTrainerEffect(
     }
 
     case "discardOppItemsHand": {
-      // Xerosic's Machinations — your opponent reveals their hand; you
-      // discard 1 Item and 1 Pokémon Tool card you find there. We model it
-      // as a single "up to 2 Item-or-Tool" pick.
+      // Xerosic's Machinations — card text: "Your opponent discards cards
+      // from their hand until they have 3 cards in their hand." (NOT the
+      // older "discard 2 Items/Tools" effect; that was a different Xerosic
+      // card from a prior set.) The opponent chooses what to discard.
       const opp = state.players[oppId];
-      const eligible = opp.hand.filter((c) => {
-        if (c.supertype !== "Trainer") return false;
-        const subs = c.subtypes;
-        return subs.includes("Item") || subs.includes("Pokémon Tool") || subs.includes("Tool");
-      });
-      if (eligible.length === 0) {
-        logEvent(state, player, `${opp.name} has no Items or Tools in hand.`);
+      const excess = opp.hand.length - 3;
+      if (excess <= 0) {
+        logEvent(state, player, `${opp.name} already has ≤3 cards in hand — no effect.`);
         return;
       }
-      state.pendingHandReveal = {
-        player,
-        target: oppId,
-        label: `Xerosic's Machinations: discard up to 2 Items/Tools from ${opp.name}'s hand`,
-        min: 0,
-        max: 2,
-        filter: "itemOrTool",
-        action: "discard",
-      };
+      // For AI / single-target: auto-discard the excess (priority: keep
+      // Pokémon and Energy, discard Trainers first). Humans get a picker
+      // owned by the opponent.
+      if (state.players[oppId].isAI || true) {
+        // Sort hand ascending by "importance to keep". Lowest priority cards
+        // get discarded first. Heuristic: Items < Supporters < Tools < Stadiums
+        // < Pokémon < Energy. Drops `excess` cards from the bottom of that
+        // priority order.
+        const indexed = opp.hand.map((c, i) => {
+          let priority = 5; // Pokémon / Energy default — keep
+          if (c.supertype === "Trainer") {
+            const subs = c.subtypes ?? [];
+            if (subs.includes("Item")) priority = 1;
+            else if (subs.includes("Supporter")) priority = 2;
+            else if (subs.includes("Pokémon Tool") || subs.includes("Tool")) priority = 3;
+            else if (subs.includes("Stadium")) priority = 4;
+          } else if (c.supertype === "Energy") priority = 6;
+          return { i, priority, name: c.name };
+        });
+        indexed.sort((a, b) => a.priority - b.priority);
+        const dropIdx = new Set(indexed.slice(0, excess).map((e) => e.i));
+        const newHand = opp.hand.filter((_, i) => !dropIdx.has(i));
+        const dropped = opp.hand.filter((_, i) => dropIdx.has(i));
+        opp.discard.push(...dropped);
+        opp.hand = newHand;
+        logEvent(
+          state,
+          player,
+          `Xerosic's Machinations: ${opp.name} discards ${excess} card${excess > 1 ? "s" : ""}.`,
+        );
+      }
       return;
     }
 
@@ -3028,22 +3064,34 @@ export function applyTrainerEffect(
     case "secretBoxQuadSearch": {
       // ACE SPEC — discard 3 cards from hand (Secret Box itself is already
       // out of pl.hand by the time this runs), then search deck for one
-      // Item, Pokémon Tool, Supporter, and Stadium. Auto-discards the 3
-      // lowest-priority cards (Basic Energy first, then by hand index).
-      // The 4-card search auto-takes the first match of each kind so the
-      // play resolves in one click.
+      // Item, Pokémon Tool, Supporter, and Stadium.
+      //
+      // Discard step: deterministic auto-discard for both AI and human (the
+      // hand-discard picker is not yet plumbed; lowest-priority-first heuristic
+      // protects basic Energy when the hand has them, otherwise drops oldest).
+      // Search step: AI auto-takes the first match of each kind. Humans get
+      // chained deck-search pickers (Item → Tool → Supporter → Stadium).
       if (pl.hand.length < 3) {
         logEvent(state, player, "Secret Box: not enough cards in hand to discard 3.");
         return;
       }
       const isBasicEn = (c: Card) =>
         c.supertype === "Energy" && (c.subtypes ?? []).includes("Basic");
+      // Discard heuristic: prefer to keep basic Energy + Pokémon; drop dupes
+      // and Trainers we already played. Sort ascending by "keep priority"; the
+      // first 3 are dropped.
+      const isPokemon = (c: Card) => c.supertype === "Pokémon";
+      const handCounts = new Map<string, number>();
+      for (const c of pl.hand) handCounts.set(c.name, (handCounts.get(c.name) ?? 0) + 1);
       const sorted = pl.hand
         .map((c, i) => ({ c, i }))
         .sort((a, b) => {
-          const av = isBasicEn(a.c) ? 0 : 1;
-          const bv = isBasicEn(b.c) ? 0 : 1;
-          if (av !== bv) return av - bv;
+          const aDup = (handCounts.get(a.c.name) ?? 1) > 1 ? 0 : 1;
+          const bDup = (handCounts.get(b.c.name) ?? 1) > 1 ? 0 : 1;
+          if (aDup !== bDup) return aDup - bDup; // duplicates first
+          const aP = isPokemon(a.c) ? 2 : isBasicEn(a.c) ? 3 : 1;
+          const bP = isPokemon(b.c) ? 2 : isBasicEn(b.c) ? 3 : 1;
+          if (aP !== bP) return aP - bP; // Trainers first, Pokémon next, Energy last
           return a.i - b.i;
         });
       const toDiscardIdxs = sorted.slice(0, 3).map((x) => x.i).sort((a, b) => b - a);
@@ -3052,14 +3100,7 @@ export function applyTrainerEffect(
         pl.discard.push(c2);
       }
       logEvent(state, player, "Secret Box: discards 3 cards.");
-      // Search for one of each: Item, Tool, Supporter, Stadium.
-      const grab = (label: string, pred: (c: Card) => boolean): void => {
-        const idx = pl.deck.findIndex(pred);
-        if (idx >= 0) {
-          pl.hand.push(pl.deck.splice(idx, 1)[0]);
-          logEvent(state, player, `Secret Box: takes ${label}.`);
-        }
-      };
+
       const isItemOnly = (c: Card) =>
         c.supertype === "Trainer" &&
         (c.subtypes ?? []).includes("Item") &&
@@ -3072,11 +3113,32 @@ export function applyTrainerEffect(
         c.supertype === "Trainer" && (c.subtypes ?? []).includes("Supporter");
       const isStadium = (c: Card) =>
         c.supertype === "Trainer" && (c.subtypes ?? []).includes("Stadium");
-      grab("an Item", isItemOnly);
-      grab("a Pokémon Tool", isTool);
-      grab("a Supporter", isSupp);
-      grab("a Stadium", isStadium);
-      shuffleDeck(state, player);
+
+      if (pl.isAI) {
+        // AI: auto-take first match of each kind in one shot. Functionally
+        // correct; AI's selection of "specific copy" rarely matters.
+        const grab = (label: string, pred: (c: Card) => boolean): void => {
+          const idx = pl.deck.findIndex(pred);
+          if (idx >= 0) {
+            pl.hand.push(pl.deck.splice(idx, 1)[0]);
+            logEvent(state, player, `Secret Box: takes ${label}.`);
+          }
+        };
+        grab("an Item", isItemOnly);
+        grab("a Pokémon Tool", isTool);
+        grab("a Supporter", isSupp);
+        grab("a Stadium", isStadium);
+        shuffleDeck(state, player);
+        return;
+      }
+      // Human: open the Item picker first; chain to Tool → Supporter → Stadium.
+      if (
+        !setDeckSearchPick(state, player, isItemOnly, 1, "Secret Box (1 of 4): pick an Item", {
+          postResolveChain: { kind: "secret-box-tool" },
+        })
+      ) {
+        logEvent(state, player, "Secret Box: no Item in deck.");
+      }
       return;
     }
 
@@ -4012,6 +4074,79 @@ export function resolveInPlayTarget(
         holder.damage = 9999;
         knockOutFromAbilityCounters(state, ownerId, holder);
       }
+      return { ok: true };
+    }
+    case "sendFlowersAttach": {
+      // Shaymin "Send Flowers" first step — player clicked a Benched
+      // Pokémon of the right type. Stash the instance, close the in-play
+      // picker, open a deck-search-pick that auto-routes the chosen Energy
+      // onto that target via `attachToInstanceId`.
+      const ownerId = clicker;
+      if (targetOwner !== ownerId) {
+        return { ok: false, reason: "Pick one of your own Benched Pokémon." };
+      }
+      const ownerPlState = state.players[ownerId];
+      const isOnBench = ownerPlState.bench.some((p) => p.instanceId === instanceId);
+      if (!isOnBench) {
+        return { ok: false, reason: "Pick a Benched target." };
+      }
+      const targetType = pending.action.pokemonType;
+      if (!target.card.types.some((t) => t === targetType)) {
+        return { ok: false, reason: `Target must be a ${targetType} Pokémon.` };
+      }
+      const attackName = pending.action.attackName;
+      state.pendingInPlayTarget = null;
+      // Open the energy deck-search; on resolve the Energy auto-routes to
+      // the stashed bench instance via attachToInstanceId.
+      const ok = setDeckSearchPick(
+        state,
+        ownerId,
+        (c) => c.supertype === "Energy",
+        1,
+        `${attackName}: pick an Energy to attach to ${target.card.name}`,
+        { attachToInstanceId: instanceId },
+      );
+      if (!ok) {
+        logEvent(state, ownerId, `${attackName}: no Energy in deck.`);
+      }
+      return { ok: true };
+    }
+    case "abilityAttachEnergyFromDiscard": {
+      // Blaziken ex Seething Spirit + similar — the player picked which of
+      // their own Pokémon receives the basic Energy from discard.
+      const ownerId = pending.action.ownerId;
+      if (targetOwner !== ownerId) {
+        return { ok: false, reason: "Pick one of your own Pokémon." };
+      }
+      const ownerPlState = state.players[ownerId];
+      const idx = pending.action.energyIndexInDiscard;
+      // The discard index may have shifted if the discard was mutated between
+      // when we stashed it and now. Re-find a Basic energy if needed.
+      let energy: import("./types").EnergyCard | null = null;
+      const inDiscard = ownerPlState.discard[idx];
+      if (
+        inDiscard &&
+        inDiscard.supertype === "Energy" &&
+        inDiscard.subtypes.includes("Basic")
+      ) {
+        energy = ownerPlState.discard.splice(idx, 1)[0] as import("./types").EnergyCard;
+      } else {
+        const fallback = ownerPlState.discard.findIndex(
+          (c) => c.supertype === "Energy" && c.subtypes.includes("Basic"),
+        );
+        if (fallback < 0) {
+          state.pendingInPlayTarget = null;
+          return { ok: false, reason: "No basic Energy in discard." };
+        }
+        energy = ownerPlState.discard.splice(fallback, 1)[0] as import("./types").EnergyCard;
+      }
+      target.attachedEnergy.push(energy);
+      logEvent(
+        state,
+        clicker,
+        `uses ${pending.action.abilityName}: attaches ${energy.name} to ${target.card.name} from discard.`,
+      );
+      state.pendingInPlayTarget = null;
       return { ok: true };
     }
   }

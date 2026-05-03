@@ -70,8 +70,14 @@ const NAMED_ABILITY_EFFECTS: Record<string, AbilityEffect> = {
   },
   // Mamoswine ex — search for any Pokémon.
   "Mammoth Hauler": { kind: "searchDeckPokemon", oncePerTurn: true },
-  // Cynthia's Gabite — search for any Cynthia's Pokémon (we approximate as any Pokémon).
-  "Champion's Call": { kind: "searchDeckPokemon", oncePerTurn: true },
+  // Cynthia's Gabite — search for a Cynthia's Pokémon. Restrict to the
+  // Cynthia's-prefix line so the AI / human picker doesn't tutor unrelated
+  // Pokémon (was previously over-broad `searchDeckPokemon`).
+  "Champion's Call": {
+    kind: "searchDeckPokemonNamePrefix",
+    namePrefix: "Cynthia's ",
+    oncePerTurn: true,
+  },
   // Mega Dragonite ex — switch.
   "Sky Transport": { kind: "switchWithBench", oncePerTurn: true },
   // Alcremie ex — heal 30 from any.
@@ -633,6 +639,49 @@ export function activateAbility(
         c.supertype === "Energy" && c.subtypes.includes("Basic");
       const idx = pl.discard.findIndex(isBasicEnergy);
       if (idx < 0) return { ok: false, reason: "No basic Energy in discard." };
+      // Some abilities (Blaziken ex Seething Spirit) attach to ANY of your
+      // Pokémon, not just the holder. Disambiguate by the holder's actual
+      // ability text — "1 of your Pokémon" → any, otherwise → self.
+      const targetsAny = /\b1 of your pok[eé]mon\b/i.test(ability.text ?? "");
+      if (targetsAny) {
+        const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+        // AI / single-target: auto-pick. Heuristic — prefer an ally that
+        // already has matching energy in cost, falling back to the holder.
+        if (pl.isAI || allies.length === 1) {
+          const en = pl.discard.splice(idx, 1)[0] as EnergyCard;
+          // Pick the ally that most "wants" this energy: most-attached-of-same-
+          // type already, then highest HP. Falls back to holder.
+          const target = allies.slice().sort((a, b) => {
+            const aHas = a.attachedEnergy.filter((e) =>
+              en.provides.some((p) => e.provides.includes(p)),
+            ).length;
+            const bHas = b.attachedEnergy.filter((e) =>
+              en.provides.some((p) => e.provides.includes(p)),
+            ).length;
+            if (aHas !== bHas) return bHas - aHas;
+            return b.card.hp - a.card.hp;
+          })[0];
+          target.attachedEnergy.push(en);
+          logEvent(state, player, `uses ${ability.name}: attaches ${en.name} to ${target.card.name} from discard.`);
+          break;
+        }
+        // Human picker: stash the chosen energy index and route through the
+        // in-play target picker.
+        state.pendingInPlayTarget = {
+          player,
+          label: `${ability.name}: pick one of your Pokémon to attach the discarded ${(pl.discard[idx] as EnergyCard).name}`,
+          scope: "own",
+          slot: "anywhere",
+          filter: "anyPokemon",
+          action: {
+            kind: "abilityAttachEnergyFromDiscard",
+            energyIndexInDiscard: idx,
+            ownerId: player,
+            abilityName: ability.name,
+          },
+        };
+        return { ok: true };
+      }
       const [en] = pl.discard.splice(idx, 1) as [EnergyCard];
       holder.attachedEnergy.push(en);
       logEvent(state, player, `uses ${ability.name}: attaches ${en.name} to ${holder.card.name} from discard.`);
@@ -1155,6 +1204,13 @@ export function activateAbility(
       const opp = state.players[oppId];
       const targets = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
       if (targets.length === 0) return { ok: false, reason: "No opposing Pokémon." };
+      // Dusclops + Dusknoir share the "Cursed Blast" ability name but place
+      // 5 vs 13 counters. The registry default is 5 (Dusclops); override
+      // with the holder's actual ability text if it specifies a different
+      // count. Pattern: "put 13 damage counters on..." or "put 5 damage
+      // counters on...". Falls back to registry default on any miss.
+      const counterMatch = ability.text?.match(/put\s+(\d+)\s+damage counters?/i);
+      if (counterMatch) e.counters = parseInt(counterMatch[1], 10);
       // Human players pick the target Pokémon — Cursed Blast is a one-time
       // play with a heavy cost (self-KO), so the call is theirs to make.
       if (!pl.isAI) {

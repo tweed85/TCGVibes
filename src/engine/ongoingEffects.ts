@@ -368,6 +368,20 @@ export function benchDamageBlockedByFlowerCurtain(
   );
 }
 
+// Tera Pokémon rule: "As long as this Pokémon is on your Bench, prevent all
+// damage done to this Pokémon by attacks (both yours and your opponent's)."
+// Cornerstone Mask Ogerpon ex / Bloodmoon Ursaluna ex / 30+ other Tera ex
+// inherit this. Bench-snipe / spread / counter-placement attacks must skip
+// targets that are Tera AND on the bench. (Active Tera Pokémon take normal
+// damage.) `_state` reserved for future ability-suppressor checks.
+export function teraBenchImmunity(
+  _state: GameState,
+  benched: PokemonInPlay,
+): boolean {
+  const subtypes = benched.card.subtypes ?? [];
+  return subtypes.includes("Tera");
+}
+
 // Dizzying Valley: Confused doesn't clear on evolve/devolve.
 export function confusedPersistsOnEvolve(state: GameState): boolean {
   return state.stadium?.card.name === "Dizzying Valley";

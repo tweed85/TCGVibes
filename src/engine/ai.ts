@@ -192,7 +192,23 @@ function scoreOpeningActive(card: PokemonCard, primaryEnergy: EnergyType | null)
 export function resolveAiPendingPromote(state: GameState, player: PlayerId): boolean {
   if (state.pendingPromote !== player) return false;
   const pl = state.players[player];
-  if (pl.bench.length === 0) return false;
+  // Bench-empty safety net: if the engine left us in a "must promote but no
+  // bench" state (some indirect KO paths skip the inline knockOut game-over
+  // check at rules.ts:951), declare the player out and end the game here so
+  // the harness doesn't get stuck. The upstream callsite that set pending
+  // promote without checking bench is a real bug to fix separately.
+  if (pl.bench.length === 0) {
+    state.winner = opponentOf(player);
+    state.phase = "gameOver";
+    state.pendingPromote = null;
+    state.pendingPromoteQueue = [];
+    logEvent(
+      state,
+      "system",
+      `${pl.name} has no Pokémon left. ${state.players[opponentOf(player)].name} wins.`,
+    );
+    return true;
+  }
 
   const scored = pl.bench.map((p, i) => ({ i, score: scorePromoteCandidate(p, state, player) }));
   scored.sort((a, b) => b.score - a.score);
@@ -320,6 +336,12 @@ function estimateDamage(
         // Expected heads = coins / 2.
         damage += (e.perHeads * e.coins) / 2;
         break;
+      case "flipUntilTailsPerHeads":
+        // Mega Kangaskhan ex Rapid-Fire Combo. Geometric distribution, p=0.5
+        // for tails — expected number of heads = 1. Estimator under-counts
+        // without this case (sees only base damage and ignores the bonus).
+        damage += e.perHeads;
+        break;
       case "perAttachedEnergy": {
         const energies = attacker.attachedEnergy;
         const matching = e.energyType
@@ -355,6 +377,17 @@ function estimateDamage(
         // applied below). Other targets only hit bench, no defender contribution.
         if (e.target === "allOpponents") damage += e.damage;
         break;
+      case "snipeOnePerEnergy": {
+        // Genesect Bug's Cannon: per-energy×count damage to one of opp's
+        // Pokémon (Active or Bench). For active-damage estimation, count
+        // the matching energies and add the resulting damage — this is
+        // the entire damage on a Bug's Cannon (no base damage).
+        const matching = attacker.attachedEnergy.filter((en) =>
+          en.provides.includes(e.energyType),
+        ).length;
+        damage += e.perEnergy * matching;
+        break;
+      }
       // selfDamage / applyStatus / heal / discardOwnEnergy / drawCards don't
       // affect the defender's raw damage tally.
       default:

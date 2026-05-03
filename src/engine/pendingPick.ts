@@ -51,7 +51,17 @@ export function setDeckSearchPick(
   pred: (c: Card) => boolean,
   max: number,
   label: string,
-  options: { toBench?: boolean; toEvolve?: boolean; postResolveChain?: import("./types").DeckSearchChainStep; min?: number } = {},
+  options: {
+    toBench?: boolean;
+    toEvolve?: boolean;
+    postResolveChain?: import("./types").DeckSearchChainStep;
+    min?: number;
+    // After the pick resolves, route the picked Energy onto this Pokémon
+    // (instead of leaving it in hand). Used by Shaymin "Send Flowers"
+    // and Wondrous-Patch-style flows. Only meaningful when the predicate
+    // restricts to Energy.
+    attachToInstanceId?: string;
+  } = {},
 ): boolean {
   const pl = state.players[player];
   const safeDeck = excludePrizes(pl, pl.deck);
@@ -89,6 +99,7 @@ export function setDeckSearchPick(
     toBench: options.toBench,
     toEvolve: options.toEvolve,
     postResolveChain: options.postResolveChain,
+    attachToInstanceId: options.attachToInstanceId,
   };
   state.phase = "pick";
   return true;
@@ -148,11 +159,12 @@ function applyChainStep(
       break;
     }
     case "hilda-energy": {
-      // Hilda step 2: after the Evolution Pokémon, pick a basic Energy.
-      const pred = (c: Card) =>
-        c.supertype === "Energy" && (c.subtypes ?? []).includes("Basic");
-      if (!setDeckSearchPick(state, player, pred, 1, "Hilda (2 of 2): pick a basic Energy")) {
-        logEvent(state, player, "Hilda: no basic Energy in deck.");
+      // Hilda step 2: after the Evolution Pokémon, pick any Energy. Card
+      // text says "an Energy card" — Special Energy (e.g. Spiky, Mist,
+      // Telepathic Psychic) is eligible too, not just Basic.
+      const pred = (c: Card) => c.supertype === "Energy";
+      if (!setDeckSearchPick(state, player, pred, 1, "Hilda (2 of 2): pick an Energy")) {
+        logEvent(state, player, "Hilda: no Energy in deck.");
       }
       break;
     }
@@ -162,6 +174,38 @@ function applyChainStep(
         c.supertype === "Energy" && (c.subtypes ?? []).includes("Basic");
       if (!setDeckSearchPick(state, player, pred, 1, "Colress's Tenacity (2 of 2): pick a basic Energy")) {
         logEvent(state, player, "Colress's Tenacity: no basic Energy in deck.");
+      }
+      break;
+    }
+    case "secret-box-tool": {
+      // Secret Box step 2 of 4 — after Item, pick a Pokémon Tool.
+      const pred = (c: Card) =>
+        c.supertype === "Trainer" &&
+        ((c.subtypes ?? []).includes("Pokémon Tool") || (c.subtypes ?? []).includes("Tool"));
+      if (!setDeckSearchPick(state, player, pred, 1, "Secret Box (2 of 4): pick a Pokémon Tool", {
+        postResolveChain: { kind: "secret-box-supporter" },
+      })) {
+        logEvent(state, player, "Secret Box: no Pokémon Tool in deck.");
+      }
+      break;
+    }
+    case "secret-box-supporter": {
+      // Secret Box step 3 of 4 — pick a Supporter.
+      const pred = (c: Card) =>
+        c.supertype === "Trainer" && (c.subtypes ?? []).includes("Supporter");
+      if (!setDeckSearchPick(state, player, pred, 1, "Secret Box (3 of 4): pick a Supporter", {
+        postResolveChain: { kind: "secret-box-stadium" },
+      })) {
+        logEvent(state, player, "Secret Box: no Supporter in deck.");
+      }
+      break;
+    }
+    case "secret-box-stadium": {
+      // Secret Box step 4 of 4 — pick a Stadium.
+      const pred = (c: Card) =>
+        c.supertype === "Trainer" && (c.subtypes ?? []).includes("Stadium");
+      if (!setDeckSearchPick(state, player, pred, 1, "Secret Box (4 of 4): pick a Stadium")) {
+        logEvent(state, player, "Secret Box: no Stadium in deck.");
       }
       break;
     }
