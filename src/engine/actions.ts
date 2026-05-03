@@ -559,7 +559,10 @@ export function retreat(
   }
   if (benchIndex < 0 || benchIndex >= pl.bench.length)
     return fail("Invalid bench slot.");
-  const cost = effectiveRetreatCost(pl.active);
+  // Pass state so bench-wide ability discounts apply (Latias ex Skyliner,
+  // Heatran Metal Bridge, Secret Forest Path stadium). Without state, only
+  // tool/stadium reductions read off the active itself would land.
+  const cost = effectiveRetreatCost(pl.active, state);
   const provided = energyPoolForCost(pl.active, state);
   if (!canPayCost(provided, cost))
     return fail("Not enough Energy to retreat.");

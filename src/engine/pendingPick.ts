@@ -100,6 +100,10 @@ export function setDeckSearchPick(
     toEvolve: options.toEvolve,
     postResolveChain: options.postResolveChain,
     attachToInstanceId: options.attachToInstanceId,
+    // Snapshot the non-matching deck cards so the UI's "All" tab can show
+    // the entire deck during the search. Slice() to avoid sharing state with
+    // pl.deck (which gets mutated when the pick resolves).
+    nonEligiblePool: rest.slice(),
   };
   state.phase = "pick";
   return true;
@@ -206,6 +210,26 @@ function applyChainStep(
         c.supertype === "Trainer" && (c.subtypes ?? []).includes("Stadium");
       if (!setDeckSearchPick(state, player, pred, 1, "Secret Box (4 of 4): pick a Stadium")) {
         logEvent(state, player, "Secret Box: no Stadium in deck.");
+      }
+      break;
+    }
+    case "larry-skill-supporter": {
+      // Larry's Skill step 2 of 3 — after the Pokémon, pick a Supporter.
+      const pred = (c: Card) =>
+        c.supertype === "Trainer" && (c.subtypes ?? []).includes("Supporter");
+      if (!setDeckSearchPick(state, player, pred, 1, "Larry's Skill (2 of 3): pick a Supporter", {
+        postResolveChain: { kind: "larry-skill-energy" },
+      })) {
+        logEvent(state, player, "Larry's Skill: no Supporter in deck.");
+      }
+      break;
+    }
+    case "larry-skill-energy": {
+      // Larry's Skill step 3 of 3 — pick a Basic Energy.
+      const pred = (c: Card) =>
+        c.supertype === "Energy" && (c.subtypes ?? []).includes("Basic");
+      if (!setDeckSearchPick(state, player, pred, 1, "Larry's Skill (3 of 3): pick a Basic Energy")) {
+        logEvent(state, player, "Larry's Skill: no Basic Energy in deck.");
       }
       break;
     }

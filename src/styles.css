@@ -89,14 +89,13 @@ button, select, input, [role="button"] {
 
 .app {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   grid-template-areas:
     "header"
     "opp"
     "board"
     "hand"
-    "action"
-    "tip";
+    "action";
   min-height: 100dvh;
   /* Hard cap to the visible viewport on iOS Safari so a wider child
      (e.g. the bench scroller's natural content width) can't push the
@@ -176,55 +175,6 @@ button, select, input, [role="button"] {
   padding: 2px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.02);
-}
-
-/* Ko-fi tip link in the header. Uses Ko-fi's signature red as a subtle
-   accent, sized like a tab chip so it reads as visible support-the-dev
-   affordance without competing with the primary New Game button. */
-.kofi-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 94, 91, 0.55);
-  background: rgba(255, 94, 91, 0.12);
-  color: #ffb7b5;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  text-decoration: none;
-  line-height: 1;
-  /* Push to the far right of the controls row so Ko-fi reads as a separate
-     support affordance, not part of the deck-setup cluster. */
-  margin-left: auto;
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, transform 0.08s ease;
-}
-.kofi-link:hover {
-  background: #ff5e5b;
-  border-color: #ff5e5b;
-  color: #fff;
-  transform: translateY(-1px);
-}
-.kofi-link:focus-visible { outline: 2px solid #ff5e5b; outline-offset: 2px; }
-
-/* Centered footer placement — sits in its own grid row beneath the action
-   bar so it's visible without overlaying any board content. */
-.tip-footer {
-  grid-area: tip;
-  display: flex;
-  justify-content: center;
-  padding-top: 2px;
-}
-.tip-footer .kofi-link { margin-left: 0; }
-.kofi-cup {
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  background-color: currentColor;
-  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M3 10h14a3 3 0 0 1 0 6h-1.1A5 5 0 0 1 11 19H8a5 5 0 0 1-5-5V10zm14 5a1 1 0 0 0 0-3h-1v3h1zM8 5c.8-1 1.8-1 2 0s-1.2 1-1 2 1.8 1 2 0-1.2-1-1-2zm4 0c.8-1 1.8-1 2 0s-1.2 1-1 2 1.8 1 2 0-1.2-1-1-2z' fill='black'/></svg>") no-repeat center / contain;
-          mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M3 10h14a3 3 0 0 1 0 6h-1.1A5 5 0 0 1 11 19H8a5 5 0 0 1-5-5V10zm14 5a1 1 0 0 0 0-3h-1v3h1zM8 5c.8-1 1.8-1 2 0s-1.2 1-1 2 1.8 1 2 0-1.2-1-1-2zm4 0c.8-1 1.8-1 2 0s-1.2 1-1 2 1.8 1 2 0-1.2-1-1-2z' fill='black'/></svg>") no-repeat center / contain;
-  flex: 0 0 auto;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1362,7 +1312,6 @@ button.secondary:hover:not(:disabled) {
   .header .meta { font-size: 10px; }
   .header .controls-row { gap: 6px; width: 100%; }
   .header select { font-size: 11px; padding: 2px 3px; max-width: 110px; }
-  .kofi-link { padding: 4px 8px; font-size: var(--text-xs); }
 
   .side {
     gap: 6px;
@@ -1476,7 +1425,6 @@ button.secondary:hover:not(:disabled) {
    the vertical-stack reflow from the ≤640px breakpoint. */
 @media (max-width: 480px) {
   .header h1 { font-size: 12px; }
-  .kofi-link { padding: 4px 6px; font-size: 10px; }
 }
 
 /* Extra small (≤360px): further tightening. */
@@ -2062,6 +2010,30 @@ button.secondary:hover:not(:disabled) {
   border-radius: 4px;
   margin: 2px 0 6px;
   border-left: 3px solid var(--accent);
+}
+.pick-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 4px 0 6px;
+}
+.pick-tab {
+  flex: 1;
+  background: var(--panel-2);
+  border: 1px solid transparent;
+  color: var(--muted);
+  padding: 6px 10px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+}
+.pick-tab:hover { color: var(--text); }
+.pick-tab.active {
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--accent);
 }
 .pick-modal .pick-counter {
   font-size: 11px;

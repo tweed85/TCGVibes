@@ -1721,6 +1721,34 @@ export function estimateAttackDamage(
         d += e.bonus * p;
         break;
       }
+      case "perCountersOnFilteredBench": {
+        // Mirror effects.ts perCountersOnFilteredBench runtime: count damage
+        // counters across friendly bench Pokémon matching the filter, then
+        // multiply by perCount. Without this case, Cynthia's Spiritomb's
+        // Raging Curse projects 0 damage and the AI never plays Spiritomb
+        // as a finisher.
+        const matchFilter = (p: PokemonInPlay): boolean => {
+          const f = e.filter;
+          switch (f.kind) {
+            case "any": return true;
+            case "namePart":
+              return p.card.name.toLowerCase().includes(f.namePart.toLowerCase());
+            case "type": return p.card.types.includes(f.energyType);
+            case "subtype": return (p.card.subtypes ?? []).includes(f.subtype);
+            case "hasAttackNamed":
+              return p.card.attacks.some((a) =>
+                a.name.toLowerCase() === f.attackName.toLowerCase(),
+              );
+          }
+        };
+        const matched = atkPl.bench.filter(matchFilter);
+        const totalCounters = matched.reduce(
+          (s, p) => s + Math.floor(p.damage / 10),
+          0,
+        );
+        d += e.perCount * totalCounters;
+        break;
+      }
       case "conditionalDamage": {
         // Mirror the runtime: fizzleIfNot zeros damage when predicate fails;
         // bonus mode adds when predicate succeeds. Without this case, attacks

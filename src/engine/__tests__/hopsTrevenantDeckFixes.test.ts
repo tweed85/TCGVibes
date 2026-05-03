@@ -311,6 +311,28 @@ describe("Latias ex Skyliner — applies to all your Basics, INCLUDING self when
     // My Pikachu still pays its full retreat cost — opp's Skyliner doesn't help us.
     expect(effectiveRetreatCost(myActive, state)).toEqual(["Colorless", "Colorless"]);
   });
+
+  it("retreat() action honors Skyliner — bench-wide ability discount actually applies at retreat time", async () => {
+    // Regression: actions.ts retreat() was calling effectiveRetreatCost(p)
+    // without `state`, so bench-wide ability scans (Skyliner / Metal Bridge /
+    // Secret Forest Path) silently no-op'd at the actual action — the
+    // engine charged the raw retreat cost even though the unit-level helper
+    // returned 0 when called with state.
+    const { retreat } = await import("../actions");
+    const state = bootGameToMain(11306);
+    const activeBasic = makePokemonInPlay({
+      ...mkBasic("a", { name: "Snorlax" }),
+      retreatCost: ["Colorless", "Colorless"],
+    } as PokemonCard);
+    const latias = makePokemonInPlay(mkLatias());
+    state.players.p1.active = activeBasic;
+    state.players.p1.bench = [latias];
+    // No energy attached — without Skyliner this would fail "Not enough Energy".
+    const r = retreat(state, "p1", 0);
+    expect(r.ok).toBe(true);
+    expect(state.players.p1.discard.length).toBe(0);
+    expect(state.players.p1.active!.card.name).toBe("Latias ex");
+  });
 });
 
 describe("Hop's Choice Band -1 Colorless cost reduction", () => {

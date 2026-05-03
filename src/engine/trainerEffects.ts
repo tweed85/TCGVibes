@@ -12,7 +12,7 @@
 
 import { applyEvolveSideEffects, endTurn as endTurnRule, enforceSpecialEnergyAttachRules, isPlayersFirstTurn, logEvent, makePokemonInPlay, newInstanceId, passTurn, setPendingPromote, takePrizes } from "./rules";
 import { clearAllStatuses } from "./rules";
-import { benchDamageBlocked, benchDamageBlockedByFlowerCurtain } from "./ongoingEffects";
+import { benchDamageBlocked, benchDamageBlockedByFlowerCurtain, maxBenchSize } from "./ongoingEffects";
 import {
   fireTriggeredOnEvolve,
   fireTriggeredOnMoveToActive,
@@ -953,6 +953,16 @@ export function precheckTrainerEffect(
     return "No Active Pokémon to attach Energy to.";
   }
 
+  // Night Stretcher — needs a Pokémon or basic Energy in your discard.
+  // Without this gate the Item gets played and discarded for no effect.
+  if (id === "nightStretcher") {
+    const isEligible = (c: Card): boolean =>
+      c.supertype === "Pokémon" || isBasicEnergy(c);
+    if (!pl.discard.some(isEligible)) {
+      return "No Pokémon or basic Energy in your discard.";
+    }
+  }
+
   // Lana's Aid — needs at least one eligible card in your discard.
   if (id === "recoverFromDiscardLana") {
     const isEligible = (c: Card): boolean =>
@@ -1113,7 +1123,7 @@ export function applyTrainerEffect(
       }
       return;
     case "searchBasicPokemon2Poffin":
-      if (pl.bench.length >= 5) {
+      if (pl.bench.length >= maxBenchSize(state, pl.bench, pl.active)) {
         logEvent(state, player, "bench is full — Poffin has no effect.");
         return;
       }
@@ -3161,19 +3171,34 @@ export function applyTrainerEffect(
 
     case "larrySkillDiscardSearch": {
       // Discard hand; search a Pokémon, a Supporter, and a Basic Energy.
+      // AI auto-picks first match of each; humans get three chained pickers
+      // so they can choose specifically (mirrors dawnSearchBasicStage1Stage2).
       pl.discard.push(...pl.hand.splice(0));
-      const idxP = pl.deck.findIndex((c) => c.supertype === "Pokémon");
-      if (idxP >= 0) pl.hand.push(pl.deck.splice(idxP, 1)[0]);
-      const idxS = pl.deck.findIndex(
-        (c) => c.supertype === "Trainer" && c.subtypes.includes("Supporter"),
-      );
-      if (idxS >= 0) pl.hand.push(pl.deck.splice(idxS, 1)[0]);
-      const idxE = pl.deck.findIndex(
-        (c) => c.supertype === "Energy" && c.subtypes.includes("Basic"),
-      );
-      if (idxE >= 0) pl.hand.push(pl.deck.splice(idxE, 1)[0]);
-      shuffleDeck(state, player);
       logEvent(state, player, "Larry's Skill: discards hand and searches.");
+      if (pl.isAI) {
+        const idxP = pl.deck.findIndex((c) => c.supertype === "Pokémon");
+        if (idxP >= 0) pl.hand.push(pl.deck.splice(idxP, 1)[0]);
+        const idxS = pl.deck.findIndex(
+          (c) => c.supertype === "Trainer" && c.subtypes.includes("Supporter"),
+        );
+        if (idxS >= 0) pl.hand.push(pl.deck.splice(idxS, 1)[0]);
+        const idxE = pl.deck.findIndex(
+          (c) => c.supertype === "Energy" && c.subtypes.includes("Basic"),
+        );
+        if (idxE >= 0) pl.hand.push(pl.deck.splice(idxE, 1)[0]);
+        shuffleDeck(state, player);
+        return;
+      }
+      // Human path — open the first pick (Pokémon); chain into Supporter,
+      // then Basic Energy via the pendingPick resolver's postResolveChain.
+      const isPokemon = (c: Card) => c.supertype === "Pokémon";
+      if (
+        !setDeckSearchPick(state, player, isPokemon, 1, "Larry's Skill (1 of 3): pick a Pokémon", {
+          postResolveChain: { kind: "larry-skill-supporter" },
+        })
+      ) {
+        logEvent(state, player, "Larry's Skill: no Pokémon in deck.");
+      }
       return;
     }
     case "drawPerAncient": {

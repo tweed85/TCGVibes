@@ -1324,10 +1324,15 @@ export interface PendingPick {
   label: string;
   // Cards the player is choosing from (pulled out of their source zone).
   pool: Card[];
-  min: number; // minimum picks required (0 for "may" effects)
+  min: number; // minimum picks required (0 for "max" effects)
   max: number; // maximum picks allowed
   // If set, only these pool indexes are pickable (rest are shown but disabled).
   eligibleIndexes?: number[];
+  // For deck searches: snapshot of the cards in the deck that did NOT match
+  // the predicate, so the UI's "All" tab can show the entire deck even though
+  // only `pool` cards are pickable. These cards remain in `pl.deck` while the
+  // picker is open — this field is just a stable copy for rendering.
+  nonEligiblePool?: Card[];
   // What to do with unpicked cards once the pick resolves.
   unpicked: PendingPickFallback;
   // Where the pool came from — surfaced in the UI so the user knows Prize
@@ -1366,7 +1371,9 @@ export type DeckSearchChainStep =
   | { kind: "colress-energy" } // Colress's Tenacity: after Stadium, pick basic Energy
   | { kind: "secret-box-tool" } // Secret Box step 2 of 4
   | { kind: "secret-box-supporter" } // Secret Box step 3 of 4
-  | { kind: "secret-box-stadium" }; // Secret Box step 4 of 4
+  | { kind: "secret-box-stadium" } // Secret Box step 4 of 4
+  | { kind: "larry-skill-supporter" } // Larry's Skill: after the Pokémon, pick a Supporter
+  | { kind: "larry-skill-energy" }; // Larry's Skill: after the Supporter, pick a Basic Energy
 
 // Short "hey, heads up" modal shown between chained deck searches when the
 // current stage has no qualifying cards. Lets the player acknowledge the

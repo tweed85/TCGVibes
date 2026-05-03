@@ -1649,20 +1649,6 @@ export default function App() {
         }}
       />
 
-      <div className="tip-footer">
-        <a
-          className="kofi-link"
-          href="https://ko-fi.com/pandabananas/tip"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Support PandaBananasTCG on Ko-fi"
-          aria-label="Support on Ko-fi (opens in new tab)"
-        >
-          <span className="kofi-cup" aria-hidden="true" />
-          Tip
-        </a>
-      </div>
-
       {state.winner && (
         <div className="winner">
           <div className="box">
@@ -2946,6 +2932,10 @@ function PickModal({
   onResolve: (pickedIndexes: number[]) => void;
 }) {
   const [selected, setSelected] = useState<number[]>([]);
+  // Deck searches get an Eligible/All tab toggle. Default to Eligible — the
+  // All view is for verifying what the rest of the deck looks like (deck
+  // search is a key information-gathering tool in the TCG).
+  const [tab, setTab] = useState<"eligible" | "all">("eligible");
   // Chained picks (Dawn Basic → Stage 1 → Stage 2, Hilda Evolution → Energy)
   // reuse the same PickModal mount — React doesn't remount because the
   // outer conditional stays true. Without this reset, `selected` from the
@@ -2955,6 +2945,7 @@ function PickModal({
   // pool identity so each stage starts fresh.
   useEffect(() => {
     setSelected([]);
+    setTab("eligible");
   }, [pick.pool, pick.label]);
   const eligibleSet = pick.eligibleIndexes
     ? new Set(pick.eligibleIndexes)
@@ -2972,6 +2963,13 @@ function PickModal({
 
   const canConfirm = selected.length >= pick.min && selected.length <= pick.max;
   const canSkip = pick.min === 0;
+  // Only deck searches with non-matching cards left in the deck get the All
+  // tab — other sources (deckTop/deckBottom/discard) don't carry a snapshot
+  // and there's no "rest" to show.
+  const restCards = pick.source === "deck" ? pick.nonEligiblePool ?? [] : [];
+  const showTabs = pick.source === "deck" && restCards.length > 0;
+  const totalDeckCount = pick.pool.length + restCards.length;
+  const showingAll = showTabs && tab === "all";
 
   return (
     <div className="modal-backdrop">
@@ -2982,8 +2980,30 @@ function PickModal({
             {selected.length} / {pick.max} picked
           </span>
         </div>
+        {showTabs && (
+          <div className="pick-tabs" role="tablist">
+            <button
+              role="tab"
+              aria-selected={tab === "eligible"}
+              className={`pick-tab${tab === "eligible" ? " active" : ""}`}
+              onClick={() => setTab("eligible")}
+            >
+              Eligible ({pick.pool.length})
+            </button>
+            <button
+              role="tab"
+              aria-selected={tab === "all"}
+              className={`pick-tab${tab === "all" ? " active" : ""}`}
+              onClick={() => setTab("all")}
+            >
+              All ({totalDeckCount})
+            </button>
+          </div>
+        )}
         <div className="pick-source-note">
-          {pick.source === "deck" && `Searching your Deck — ${pick.pool.length} eligible card${pick.pool.length === 1 ? "" : "s"}. Prize cards are locked and not part of this search.`}
+          {pick.source === "deck" && (showingAll
+            ? `Showing all ${totalDeckCount} cards in your Deck. Only the ${pick.pool.length} eligible card${pick.pool.length === 1 ? " is" : "s are"} clickable.`
+            : `Searching your Deck — ${pick.pool.length} eligible card${pick.pool.length === 1 ? "" : "s"}. Prize cards are locked and not part of this search.`)}
           {pick.source === "deckTop" && `Top ${pick.pool.length} cards of your Deck. Prize cards are not shown.`}
           {pick.source === "deckBottom" && `Bottom ${pick.pool.length} cards of your Deck. Prize cards are not shown.`}
           {pick.source === "discard" && `Searching your Discard pile — ${pick.pool.length} eligible card${pick.pool.length === 1 ? "" : "s"}.`}
@@ -2994,7 +3014,7 @@ function PickModal({
             const picked = selected.includes(i);
             return (
               <div
-                key={i}
+                key={`pool-${i}`}
                 className={`pick-card${picked ? " picked" : ""}${eligible ? "" : " ineligible"}`}
                 onClick={() => toggle(i)}
                 title={eligible ? (picked ? "Click to deselect" : "Click to pick") : "Not eligible"}
@@ -3003,6 +3023,15 @@ function PickModal({
               </div>
             );
           })}
+          {showingAll && restCards.map((c, i) => (
+            <div
+              key={`rest-${i}`}
+              className="pick-card ineligible"
+              title="Not eligible for this search"
+            >
+              <CardView card={c} />
+            </div>
+          ))}
         </div>
         <div className="modal-actions">
           {canSkip && (
