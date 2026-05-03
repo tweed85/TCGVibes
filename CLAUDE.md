@@ -23,6 +23,7 @@ Node 18+.
 data/pokemon/                       # Card dataset, lazy-loaded
 data/tournament-replays/            # Real-tournament replay logs
                                     # (Phase 8 opening-book input)
+docs/                               # Detailed companions to this file
 src/
   engine/                           # Pure rule logic, no React
     types.ts          Game-state + card types
@@ -32,9 +33,7 @@ src/
     actions.ts        play/evolve/attach/retreat/attack/playTrainer/promote,
                         attackPreflight, T1_SUPPORTER_EXCEPTIONS
     effects.ts        Attack effect resolver
-    trainerEffects.ts Trainer dispatch (incl. arianaDrawUntilTR,
-                        protonSearchBasicTR, ltSurgeBargain,
-                        raifortPeek5Discard)
+    trainerEffects.ts Trainer dispatch
     abilities.ts      Ability detection + activation + triggered dispatch
     ongoingEffects.ts Passives, energy-pool, damage estimator,
                         abilitiesActiveOn / abilitiesActiveOnInstance
@@ -48,12 +47,14 @@ src/
   data/
     cards.ts          Lazy dynamic import()
     cardMapper.ts     API → engine types
+    cardEquivalence.ts gameplayKey() canonical "same card different art"
     decklistParser.ts PTCGL importer (caps >4 copies at parse time)
-    decks.ts          Curated decks + validateDeckForPlay
+    decks.ts          Curated + community decks + validateDeckForPlay
     persistence.ts    idb-keyval deck storage
     effectPatterns.ts
   ui/CardView.tsx     Card + in-play renderers (memoized)
   ui/DeckBuilderModal.tsx
+  ui/VariantPicker.tsx Modal: pick which printing of a card to use
   App.tsx
   styles.css
   test-setup.ts       Loads dataset + jest-dom matchers
@@ -97,7 +98,29 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
   pre-click rejection (T1 ban + Debut Performance bypass, asleep,
   paralyzed, `cantAttackUntilTurn`, per-attack lock, Power Saver,
   Born to Slack, energy cost). UI calls it per-attack to drive the
-  disabled + tooltip on the attack button.
+  disabled + tooltip on the attack button. The UI's `payable` check
+  uses `effectiveAttackCost` (not raw `move.cost`) so cost-reduction
+  tools (Hop's Choice Band, Counter Gain, Sparkling Crystal) +
+  ability-driven discounts (Bloodmoon Ursaluna ex Seasoned Skill,
+  Veluza Food Prep, Sniper's Eye, Hustle Play) match the engine.
+- **Damage estimator covers `conditionalDamage`** — projected damage
+  on the attack-button label evaluates the attack's predicate via
+  `evaluatePredicate`; fizzleIfNot zeroes the preview when the
+  condition is unmet (Hop's Cramorant Fickle Spitting projects 0 at
+  prizes ∉ {3,4} instead of misleading 120).
+- **Art variants** — `gameplayKey(card)` in [cardEquivalence.ts](src/data/cardEquivalence.ts)
+  produces a canonical signature from every gameplay-relevant field
+  (name + supertype + subtypes + HP + types + retreat + attacks +
+  abilities + weaknesses + resistances + rules text). Excludes
+  printing-specific fields (id, setCode, number, image,
+  regulationMark). Two prints of the SAME card produce the same key;
+  two cards sharing a name but different attacks (e.g. multiple
+  Pikachu prints) produce DIFFERENT keys. DeckBuilderModal groups the
+  grid by gameplayKey, opens VariantPicker on click for multi-print
+  groups, and surfaces a swap-art button on each entry in the right
+  panel. Per-printing identity flows end-to-end through PTCGL parser
+  → IDB persistence → setupGame → in-game render (every CardView
+  reads `card.imageLarge` from the chosen printing).
 - **Supporter T1 gate** — `supporterAllowsFirstTurn(card)` reads
   `T1_SUPPORTER_EXCEPTIONS` (Team Rocket's Proton, Carmine). Mirrors
   the Debut Performance attack-ban exception.
@@ -135,251 +158,6 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
   with prizes.
 - Win conditions: prizes=0, no Pokémon left, can't draw.
 
-## Effect coverage (2,693-card pool)
-
-- **Attacks**: ~70 effect kinds — coin-flip variants, per-energy /
-  per-bench / per-counter scaling, status, heal, snipe, multi-target,
-  draw, locks, retreat manipulation. Bespoke: `distributeDamage`
-  (Phantom Dive / Oil Salvo, interactive picker with "— N left"
-  progress), `placeCountersPerHandCard` (Powerful Hand, W/R bypass),
-  copy-attack pipelines, `discardDefenderEndOfOppNextTurn` (Corrosive
-  Sludge), `bothActiveKnockedOut`, `attachNFromDiscardToBench`
-  (Aura Jab, interactive), **`perPokemonFilter`** (Spidops Rocket
-  Rush — multiplicative "N×" form correctly zeros base damage),
-  `benchSnipe` with `target: "allOpponents"` hits opp Active too
-  (W/R applied) plus bench (no W/R) — Frosmoth Chilling Wings, TR
-  Arbok Spinning Tail.
-- **Abilities**: ~70 activated + triggered-on-evolve / -on-bench /
-  -on-move-to-active / -on-move-to-bench. Highlights: `attachEnergy
-  FromHandThenDraw` (Teal Dance), `moveDamageOwnToOpp` (Adrena-Brain,
-  interactive), `putCountersOnOppThenSelfKO` (Cursed Blast,
-  interactive). Triggered: Jewel Seeker, Psychic Draw, Heave-Ho
-  Catcher, Cast-Off Shell, Multiplying Cocoon, Emergency Evolution,
-  **Brambleghast Prison Panic** (Confused, not Asleep).
-- **Trainers**: 100+ effects. Hilda + Dawn chained pickers,
-  **Colress's Tenacity** (Stadium → Energy chain), **Salvatore**
-  (interactive Evolution via `toEvolve`), **Perrin** (interactive
-  hand-reveal → search same count via `useRevealedCount` postAction),
-  **Team Rocket's Proton** (interactive search up to 3 Basic TR
-  Pokémon; T1-bypassed), **Team Rocket's Ariana** (draw to 5, or 8
-  if all in-play are TR), **Brock's Scouting** (Evolution branch when
-  in-play has matching deck Evo, else 2-Basic search), **Lt. Surge's
-  Bargain** (opp consents only when at 1 prize and would win, else
-  user draws 4), **Raifort** (top-5 peek; pick any to discard, rest
-  back on top — uses new `pickedDestination: "discard"` +
-  `unpicked: "topOfDeck"` plumbing), **Potion / Super Potion**
-  (interactive bench picker for the heal target), Unfair Stamp ACE
-  SPEC, all Standard staples. AI keeps the auto-resolve path on each.
-- **Stadiums**: most passives wired. Activated framework exists;
-  per-Stadium UI buttons partial.
-- **Tools**: ~22 — HP boosters, retreat helpers, damage boosters,
-  berries with auto-discard, KO-triggered (Survival Brace, Lillie's
-  Pearl, Amulet of Hope, **Heavy Baton** — interactive Bench-target
-  picker that fires after the holder's owner promotes). On-damage
-  hooks: Lucky Helmet, Punk Helmet, Deluxe Bomb, TR Hypnotizer,
-  **Handheld Fan** (moves Energy from attacker to attacker's bench).
-  Future-typed: **Future Booster Energy Capsule** (+20 damage, free
-  retreat). Ancient-typed: **Ancient Booster Energy Capsule** (+60
-  HP + status immunity + clears statuses on attach).
-  HP-threshold helpers: **Rescue Board** (-1 retreat, free at HP ≤ 30).
-  Self-discarding TM tools: **Technical Machine: Fluorite** (3-cost
-  attack on holder; discards at end of turn; any tool whose name
-  starts with "Technical Machine" auto-discards in `endTurn`).
-
-## AI
-
-Two AI versions, gated per-player by `PlayerState.aiVersion` (default
-`"v1"`). MCTS is a separate opt-in via `PlayerState.mctsBudgetMs > 0`.
-
-**v1 (always-on):**
-- Greedy step loop + 1-ply lookahead minimax for attack choice (clone
-  via shallow-clone, opp greedy turn, our greedy follow-up, score via
-  `scorePosition`). Damage estimator includes passive bonuses /
-  reductions / Stadium / Tool / turn-scoped modifiers in the same
-  order as `executeAttackHit`.
-- Opp-aware promote selection; `tryDefensiveRetreat` /
-  `tryOffensiveSwitch`.
-
-**v2 heuristics (fast, no extra search):**
-- Archetype awareness (Festival Lead, Arboliva, Alakazam, Mega
-  Lucario, **Rocket Mewtwo, Dragapult-Blaziken, Dragapult-Dudunsparce,
-  Crustle, Cynthia-Garchomp, Grimmsnarl-Froslass, Mega-Starmie-
-  Froslass**): per-archetype bonuses on signature Trainers, Energy-
-  attach targets, bench Basics, abilities. Plus T1-T3 turn-aware
-  playbooks in [aiArchetype.ts](src/engine/aiArchetype.ts). Rocket
-  Mewtwo + Dragapult-Blaziken sourced from the Prague Regional 2026
-  R9 replay; Dragapult-Dudunsparce + Crustle + Cynthia-Garchomp +
-  Grimmsnarl-Froslass + Mega-Starmie-Froslass sourced from the
-  Prague 2026 Day 2 replays (top16/top8/top4/finals). Dragapult-
-  Dudunsparce signature is `Dudunsparce ex` (sig[0]) so detection
-  prefers it over plain Dragapult-Blaziken when Dudunsparce ex is
-  present. Crustle's playbook intentionally inverts aggro: heavy
-  T2-T3 Hero's Cape + Pokémon Center Lady + Colress's Tenacity weight
-  with **no Ascension boost** ("wall first, attack last").
-- Threat-aware `scorePosition`: penalize positions where our Active
-  is in opp OHKO range (scaled by prize at risk); reward symmetric
-  bonus for opp; count "ready bench attackers" (≥cost-1 energy + a
-  payable attack). **Gust insurance**: redundant ready bench
-  attackers (≥2) get a non-linear bonus — converts gust threats into
-  swap-and-attack lines.
-- Smart gust targeting — `bestGustTarget` boosts ramp engines
-  (Bibarel, Dudunsparce, Fan Rotom, Teal Mask Ogerpon ex, Spidops,
-  Blaziken ex) **and un-powered rule-box punchers on bench (TR
-  Mewtwo ex, Dragapult ex, Mega Lucario ex, etc.) — KO before they
-  boot**.
-- **AI coin-flip choice**: v2 chooses to go FIRST when opp's deck
-  contains a T1-supporter exception (Team Rocket's Proton, Carmine,
-  TR Mewtwo signatures) — denying that enabler is worth eating the
-  T1 attack ban. v1 keeps the always-go-second baseline.
-- Non-linear endgame prize weighting (4→6 worth more than 0→2).
-- Endgame solver: when prizes ≤ 2, MCTS budget scales 4×.
-
-**MCTS (opt-in):**
-- Determinized UCT in [mcts.ts](src/engine/mcts.ts) — action-level
-  tree, lazy expansion with progressive widening (top-K=8),
-  per-iteration RNG re-seed.
-- Action space: atomic engine actions.
-- Depth=0 leaf eval (just `scorePosition` — no greedy playout, since
-  per-iteration cost would otherwise drop iterations to 1-2).
-- Time-budgeted; falls back to greedy on exhaustion.
-- `lookaheadActive` re-entrancy guard prevents recursion.
-
-**Measured win rates** (full N=50, 800 games each, 2026-04-28):
-
-| Configuration | Win rate (p1) |
-|---|---:|
-| v1 vs v1 baseline | 53.0% (going-first edge ✓) |
-| v2 heuristics vs v1 | 52.8% (≈ neutral) |
-| **v2 + MCTS vs v1** | **65.5%** (+12.5pp) |
-
-MCTS dominates in mirror matchups + Alakazam-driven games (decisions
-compound). Lucario matchups stay flat — Lucario's plan is prescriptive
-enough that greedy already plays it well.
-
-## Test suite
-
-- **Vitest — 571 tests across 32 files** (+ 3 AI_BENCH-gated).
-  - `src/engine/__tests__/`: abilityDetection, dawnChain, energy,
-    gameFlow, integration, ongoingEffects, presetDeckSmoke,
-    trainerDetection, weakness, undoRng, undoIntegration,
-    phantomDiveHuman, attackPreflight, unspentTurnSlots, mvpPickers,
-    aiScenarios, mcts, aiBenchmark (gated), **teamRocketCards**
-    (Spidops base damage, Ariana conditional draw, Proton T1 bypass
-    + TR-Basic search), **auditFixes** + **auditFixes2** (Carmine T1
-    / Prison Panic Confused / allOpponents Active / Potion + Super
-    Potion pickers / Raifort / Lt. Surge's Bargain / Brock's
-    branching / Future + Ancient Boosters / Rescue Board HP-threshold
-    / TM Fluorite), **pragueReplayUpdates** (Prague R9-derived
-    archetype detection + playbook bonuses + v2 coin-flip T1-denial
-    choice), **pragueDay2Replays** (Day 2 Top 16 → Finals: dragapult-
-    dudunsparce / crustle / cynthia-garchomp / grimmsnarl-froslass /
-    mega-starmie-froslass detection + T1-T3 playbooks; covers the
-    Dragapult disambiguation and Crustle's wall-first inversion).
-  - `src/data/__tests__/`: decklistParser, effectPatterns.
-  - `src/ui/__tests__/`: CardView (energy-pip glyphs), aiPause
-    (modal-pause useEffect under fake timers).
-- **Playwright — 3 e2e tests in `e2e/smoke.spec.ts`.** Headless
-  Chromium against the dev server: boot path, Undo round-trip, mobile
-  viewport (375px) sanity.
-
-DOM tests opt into jsdom via `// @vitest-environment jsdom` per file
-(RTL + jest-dom matchers loaded by `test-setup.ts`); pure-engine tests
-stay in node. `npm run test` / `npm run test:watch` / `npm run e2e`.
-
-## Mobile / iOS / offline
-
-- Capacitor scaffolded; `npx cap add ios` builds `dist/` into a
-  WebView shell.
-- PWA via vite-plugin-pwa: CacheFirst dataset + CDN images,
-  NetworkFirst shell.
-- Deck imports persist to IndexedDB; UI settings to localStorage.
-- Mobile-responsive CSS: floating Stadium overlay, horizontal bench
-  scroll with right-edge fade mask, right-to-left hand scroll with
-  fade + scroll-snap, vertical action bar.
-- Touch + safe-area hardening: `env(safe-area-inset-right)` baked
-  into `.side` padding (clears iPhone X+ landscape notch and iPad
-  Pro rounded corner); `touch-action: manipulation` on every
-  interactive; landscape phones use 40px action-bar button minimum.
-- Side-distinction tinting: opponent has a slightly darker bg + 1px
-  red top accent.
-- Narrow-width tightening (≤360px): pip min-width 14px,
-  HP-badge font 11px; modal padding drops to 10px.
-- Status-message dwell: ≥2.5s before allowing overwrite.
-
-## Open pressure-test findings
-
-Not yet addressed.
-
-**MVP scope cuts (intentional / verified-not-applicable):**
-- Fossils not modeled as 60-HP Basics — pool has 0 fossil-line
-  Pokémon, so wiring the play-as-Basic mechanic gives nothing useful
-  to evolve into. Deferred until pool gets a fossil-line Pokémon.
-- No prize-pick UI (top prize always taken). Only legal-pool card
-  that interacts with specific prizes is Cresselia ("Crescent Purge"
-  +80 if you flip a face-down Prize) — bonus intentionally not
-  modeled (logged but no damage applied).
-
-**High:**
-- `state.log: LogEntry[]` grows unbounded across turns. Real but
-  smaller than originally framed — AI clone strips the log, ~50KB
-  total. Cap to last ~30 entries if you want to be tidy; not urgent.
-- UX — pre-attack confirm on coin-flip-heavy attacks. Debatable: real
-  TCG doesn't allow attack-undo either; current behavior is
-  "successful attack locks the undo stack." Boss's Orders / Counter
-  Catcher / Retreat misclicks are recoverable via per-action Undo.
-
-**Low:**
-- Discard pile `onClick` without keyboard handler (Enter/Space).
-- Mobile bench scroll has no visual overflow hint.
-- No in-game rules glossary / help button.
-- `AiActionBanner` can flash-and-vanish on fast AI steps.
-
-**Test gaps (fix landed but not directly tested):**
-- AI lookahead path through `pendingPromoteQueue`.
-- Mid-queue game-over (queued player has no bench when dequeued).
-- Non-terminal + terminal `pendingPromote` phase mixing.
-- Passive attack/damage abilities firing in real `executeAttackHit`
-  (helpers unit-tested; integration path not).
-
-**Deferred AI work (Phases 2c, 2e, 7-12 of the AI overhaul plan):**
-- **2c. Multi-action reordering** — replace fixed greedy step order
-  with a score-then-pick loop.
-- **2e. Ability scoring tuning** — defaults at 50-65 across ~70 kinds;
-  tune per-impact via Phase 9 self-tuning.
-- **7. Opp modeling** — route opp's MCTS-rollout moves through their
-  detected archetype playbook instead of greedy.
-- **8. Opening book from real tournament data** — *partially seeded*:
-  Prague Regional 2026 R9 logged in `data/tournament-replays/`, with
-  rocket-mewtwo + dragapult-blaziken playbooks already wired into
-  [aiArchetype.ts](src/engine/aiArchetype.ts). Continue feeding via
-  the `tournament-game-analyst` agent.
-- **9. Self-tuning weights** — overnight AI-vs-AI loop that
-  perturbation-searches the 20+ heuristic constants. Game 3 T12
-  "intriguing pass" from Prague R9 is concrete training data for a
-  low `passOnLethalConservatismFactor`.
-- **10. Massive scenario suite** — expand from 12 → 200 handcrafted
-  decision tests.
-- **11. Game-log review pass** — manually read 100 AI-vs-AI logs,
-  encode found mistakes as new heuristic rules / scenarios.
-- **12. Self-play RL pipeline** — only path to genuine tournament-level
-  play. AlphaZero-style policy + value network, millions of self-play
-  games, ~3 months + GPU. Documented as the future ceiling.
-
-## Decks available
-
-`src/data/decks.ts` — 4 curated archetypes (`festival-leads`,
-`arboliva`, `alakazam`, `lucario-ex`). Custom decks via `decklistParser`
-(PTCGL text), persisted to IndexedDB. Parser truncates over-cap entries;
-`validateDeckForPlay` runs at the picker as defense-in-depth and rejects
-≠60-card / zero-Basic decks before they reach `setupGame`.
-
-## Dataset refresh
-
-`.claude/agents/pokemon-tournament-cards.md` refreshes the legal pool.
-WebFetch was truncating ~90 cards/set; current snapshot fetched
-directly from `raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data`.
-2,693 cards, reg marks H/I/J, as of 2026-04-23.
-
 ## Conventions
 
 - Comments explain **why**, not what.
@@ -388,6 +166,17 @@ directly from `raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data`.
 - UI is dumb — all rule decisions live in `src/engine/`.
 - Prefer editing existing files over adding new ones.
 - `npm run typecheck` and `npm run test` must pass before commit.
+
+## Where to look
+
+For task-specific deep dives, read the relevant docs/ companion:
+
+- **Effect coverage** (attacks / abilities / trainers / stadiums / tools, ~70 effect kinds, ~24 tools, special interactions): see [docs/EFFECTS.md](docs/EFFECTS.md)
+- **AI internals** (v1 greedy, v2 archetype-aware heuristics, MCTS, the 12 wired archetype playbooks, measured win rates): see [docs/AI.md](docs/AI.md)
+- **Deck library** (12 curated decks: 4 baseline + 8 Prague Regional 2026 community lists; deck-builder gameplay-equivalence grouping; dataset refresh): see [docs/DECKS.md](docs/DECKS.md)
+- **Test suite** (625 vitest across 37 files + 3 Playwright e2e — full enumeration with what each file covers): see [docs/TESTS.md](docs/TESTS.md)
+- **Mobile / iOS / offline** (Capacitor, PWA, responsive CSS, safe-area hardening): see [docs/MOBILE.md](docs/MOBILE.md)
+- **Open findings + deferred AI work** (MVP scope cuts, pressure-test findings, Phases 2c / 2e / 7-12 of the AI overhaul plan): see [docs/FINDINGS.md](docs/FINDINGS.md)
 
 ## Working branch
 

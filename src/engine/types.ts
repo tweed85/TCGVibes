@@ -185,7 +185,12 @@ export type AttackEffect =
   | { kind: "defenderCantRetreatNextTurn" } // During opp's next turn, Defending can't retreat.
   | { kind: "defenderCantAttackNextTurn" } // During opp's next turn, Defending can't use attacks.
   | { kind: "selfDamageReductionNextTurn"; amount: number } // "takes N less damage next turn"
-  | { kind: "snipeOne"; damage: number } // "This attack also does N damage to 1 of opp's Benched"
+  // "This attack [also] does N damage to 1 of your opponent's [Benched]
+  // Pokémon." If the text says "Benched", the snipe targets bench only
+  // (typically a follow-up after a main attack — Insta-Strike pattern).
+  // If the text omits "Benched" (Fezandipiti ex Cruel Arrow), the player
+  // may target Active or Bench, with W/R applied to the Active target.
+  | { kind: "snipeOne"; damage: number; benchOnly: boolean }
   // "N damage to 1 of your opponent's Pokémon for each <type> Energy
   // attached to this Pokémon." (Genesect Bug's Cannon — N=20×Grass count.)
   // Targets opp Active or Bench (not "Benched only" — covers either). Apply
@@ -1150,6 +1155,17 @@ export interface PlayerState {
   // the opponent's turn that just ended. Consumed by Flip the Script / etc.
   // Cleared at the end of this player's turn.
   yourPokemonKoedLastOppTurn: boolean;
+  // Names of YOUR Pokémon that were KO'd by an ATTACK during the opponent's
+  // last turn. Used by predicates like Hop's Trevenant Horrifying Revenge
+  // ("if any of your Hop's Pokémon were Knocked Out by damage from an attack
+  // during your opponent's last turn"). Distinct from
+  // yourPokemonKoedLastOppTurn because:
+  //   1. KOs from status / recoil / effect damage do NOT populate this list
+  //      (card text requires "by damage from an attack").
+  //   2. Tracks WHICH Pokémon (by name) were KO'd, so name-prefix predicates
+  //      don't false-positive on a sibling-still-in-play heuristic.
+  // Cleared at the end of this player's turn.
+  yourPokemonKoedByAttackLastOppTurnNames: string[];
   // Number of Prize cards this player took during their most recent
   // (already-ended) turn. Used by Okidogi "Settle the Score" — "+60 damage
   // for each Prize card your opponent took during their last turn."

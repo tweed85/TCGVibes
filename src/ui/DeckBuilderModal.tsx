@@ -6,12 +6,14 @@
 
 import { useMemo, useState } from "react";
 import type { Card } from "../engine/types";
-import { allCards } from "../data/cards";
+import { allCards, cardsByName } from "../data/cards";
 import {
   buildDeckFromEntries,
   type DeckListEntry,
 } from "../data/decklistParser";
+import { gameplayKey, variantsOf } from "../data/cardEquivalence";
 import { CardView, triggerCardZoom } from "./CardView";
+import { VariantPicker } from "./VariantPicker";
 
 // Inverse of the LIMITLESS_TO_SET_CODE map inside decklistParser; exported
 // entries use the limitless codes so a decklist round-trips legibly.
@@ -72,6 +74,16 @@ export default function DeckBuilderModal({
   });
   const [selected, setSelected] = useState<Map<string, number>>(new Map());
   const [showCount, setShowCount] = useState(80);
+  // Variant picker state. When non-null, a modal pops over the deck-builder
+  // listing every gameplay-equivalent printing. The variants array carries
+  // the actual cards to render so the picker isn't recomputing equivalence
+  // on every render. `mode` controls whether the pick adds a new copy or
+  // swaps an existing entry's printing.
+  const [variantPicker, setVariantPicker] = useState<
+    | { mode: "add"; variants: Card[] }
+    | { mode: "swap"; variants: Card[]; currentId: string }
+    | null
+  >(null);
   // Phone-only tab toggle: "browse" shows the search grid, "selected" shows
   // the picked-list. Hidden on tablet/desktop where both panes fit side-by-
   // side. The CSS `.mobile-tab--<active>` class on `.builder-body` flips
@@ -122,6 +134,7 @@ export default function DeckBuilderModal({
     };
   }, [selectedCards]);
 
+  // Step 1: filter the full pool. One pass per printing — same as before.
   const filteredCards = useMemo(() => {
     const q = filter.search.trim().toLowerCase();
     const out: Card[] = [];
@@ -147,7 +160,34 @@ export default function DeckBuilderModal({
     return out;
   }, [filter]);
 
-  const displayCards = filteredCards.slice(0, showCount);
+  // Step 2: collapse to one tile per **gameplay-equivalent** group. Cards
+  // that share a name but have different attacks (e.g. multiple Pikachu
+  // printings, each with a different moveset) are NOT grouped — they're
+  // mechanically distinct and must be picked separately. The grouping key
+  // is the full gameplay signature; printing-specific fields (id, setCode,
+  // number, image) are excluded.
+  const groupedCards = useMemo(() => {
+    const byKey = new Map<string, Card[]>();
+    for (const c of filteredCards) {
+      const k = gameplayKey(c);
+      const list = byKey.get(k);
+      if (list) list.push(c);
+      else byKey.set(k, [c]);
+    }
+    const out: Array<{ representative: Card; variants: Card[]; key: string }> = [];
+    for (const [key, variants] of byKey.entries()) {
+      // Stable representative: lex-min id printing. This keeps the tile
+      // image stable across re-renders even if the dataset reshuffles.
+      const sorted = variants.slice().sort((a, b) => a.id.localeCompare(b.id));
+      out.push({ representative: sorted[0], variants: sorted, key });
+    }
+    // Preserve filteredCards' ordering by representative position.
+    const order = new Map(filteredCards.map((c, i) => [c.id, i] as const));
+    out.sort((a, b) => (order.get(a.representative.id)! - order.get(b.representative.id)!));
+    return out;
+  }, [filteredCards]);
+
+  const displayCards = groupedCards.slice(0, showCount);
 
   function nameExists(n: string): boolean {
     return existingNames.some((e) => e.toLowerCase() === n.trim().toLowerCase());
@@ -160,6 +200,23 @@ export default function DeckBuilderModal({
       const target = Math.max(0, cur + delta);
       if (target === 0) next.delete(cardId);
       else next.set(cardId, target);
+      return next;
+    });
+  }
+
+  // Swap a single copy of fromId to toId. The two ids must share the same
+  // card name (the picker only surfaces same-name printings, so this is
+  // defensively checked but should never violate). Decrements fromId by 1
+  // and increments toId by 1, leaving other copies unchanged.
+  function swapPrinting(fromId: string, toId: string) {
+    if (fromId === toId) return;
+    setSelected((prev) => {
+      const next = new Map(prev);
+      const fromCount = next.get(fromId) ?? 0;
+      if (fromCount <= 0) return prev;
+      if (fromCount === 1) next.delete(fromId);
+      else next.set(fromId, fromCount - 1);
+      next.set(toId, (next.get(toId) ?? 0) + 1);
       return next;
     });
   }
@@ -275,46 +332,65 @@ export default function DeckBuilderModal({
         <div className={`builder-body mobile-tab--${mobileTab}`}>
           <div className="builder-results">
             <div className="builder-results-meta">
-              Showing {displayCards.length} of {filteredCards.length} matching ·
+              Showing {displayCards.length} of {groupedCards.length} cards ·
               <span style={{ marginLeft: 6, opacity: 0.7 }}>click to add · right-click to zoom</span>
             </div>
             <div className="builder-grid">
-              {displayCards.map((c) => {
-                const count = selected.get(c.id) ?? 0;
+              {displayCards.map(({ representative: c, variants }) => {
+                // Total copies across ALL printings of this name (rule-of-4 is
+                // by name, not per-printing; basic Energy is exempt).
                 const nameCount = copiesByName.get(c.name) ?? 0;
                 const isBasicEnergy =
                   c.supertype === "Energy" && (c.subtypes ?? []).includes("Basic");
                 const atFourCap = !isBasicEnergy && nameCount >= 4;
+                const variantCount = variants.length;
                 return (
                   <div
-                    key={c.id}
-                    className={`builder-card${count > 0 ? " picked" : ""}${atFourCap && count === 0 ? " capped" : ""}`}
+                    key={c.name}
+                    className={`builder-card${nameCount > 0 ? " picked" : ""}${atFourCap ? " capped" : ""}`}
                     onClick={(ev) => {
                       if (ev.shiftKey || ev.metaKey) {
                         triggerCardZoom(c);
                         return;
                       }
                       if (atFourCap) return;
-                      changeCount(c.id, 1);
+                      // Single printing → add inline. Multi-printing → open
+                      // the variant picker so the user can choose which art.
+                      if (variantCount === 1) {
+                        changeCount(c.id, 1);
+                      } else {
+                        setVariantPicker({ mode: "add", variants });
+                      }
                     }}
                     onContextMenu={(ev) => {
                       ev.preventDefault();
                       triggerCardZoom(c);
                     }}
-                    title={atFourCap ? `Already 4× ${c.name} · right-click to zoom` : `Add ${c.name} · right-click to zoom`}
+                    title={
+                      atFourCap
+                        ? `Already 4× ${c.name} · right-click to zoom`
+                        : variantCount > 1
+                          ? `${c.name} (${variantCount} arts) · click to pick · right-click to zoom`
+                          : `Add ${c.name} · right-click to zoom`
+                    }
                   >
                     <CardView card={c} />
-                    {count > 0 && <span className="builder-count">×{count}</span>}
+                    {nameCount > 0 && <span className="builder-count">×{nameCount}</span>}
+                    {variantCount > 1 && (
+                      <span className="builder-variant-badge" title={`${variantCount} different prints in pool`}>
+                        {variantCount} arts
+                      </span>
+                    )}
                   </div>
                 );
               })}
             </div>
-            {showCount < filteredCards.length && (
+            {showCount < groupedCards.length && (
               <button
                 className="secondary builder-more"
                 onClick={() => setShowCount((n) => n + 80)}
               >
-                Show {Math.min(80, filteredCards.length - showCount)} more
+                Show {Math.min(80, groupedCards.length - showCount)} more
               </button>
             )}
           </div>
@@ -327,23 +403,49 @@ export default function DeckBuilderModal({
               </div>
             ) : (
               <ul className="builder-selected-list">
-                {selectedCards.map(({ card, count }) => (
-                  <li key={card.id}>
-                    <span className="bsel-count">{count}×</span>
-                    <span className="bsel-name" title={card.name}>{card.name}</span>
-                    <span className="bsel-printing">{toLimitlessCode(card.setCode)} {card.number}</span>
-                    <button
-                      className="bsel-btn"
-                      onClick={() => changeCount(card.id, -1)}
-                      title="Remove one"
-                    >−</button>
-                    <button
-                      className="bsel-btn"
-                      onClick={() => changeCount(card.id, 1)}
-                      title="Add one"
-                    >+</button>
-                  </li>
-                ))}
+                {selectedCards.map(({ card, count }) => {
+                  // Variants are GAMEPLAY-equivalent printings of this exact
+                  // card (not just same-name) — different attacks would be
+                  // different cards mechanically and shouldn't be offered as
+                  // an art swap. Filter the same-name pool by gameplay key.
+                  const sameName = cardsByName.get(card.name) ?? [];
+                  const variants = variantsOf(card, sameName);
+                  const variantCount = variants.length;
+                  return (
+                    <li key={card.id}>
+                      <span className="bsel-count">{count}×</span>
+                      <span className="bsel-name" title={card.name}>{card.name}</span>
+                      <button
+                        type="button"
+                        className={`bsel-printing${variantCount > 1 ? " swappable" : ""}`}
+                        onClick={() => {
+                          if (variantCount > 1) {
+                            setVariantPicker({ mode: "swap", variants, currentId: card.id });
+                          }
+                        }}
+                        disabled={variantCount <= 1}
+                        title={
+                          variantCount > 1
+                            ? `Click to swap art (${variantCount} prints)`
+                            : "Only one print of this card"
+                        }
+                      >
+                        {toLimitlessCode(card.setCode)} {card.number}
+                        {variantCount > 1 && <span className="bsel-printing-arts"> · {variantCount} arts</span>}
+                      </button>
+                      <button
+                        className="bsel-btn"
+                        onClick={() => changeCount(card.id, -1)}
+                        title="Remove one"
+                      >−</button>
+                      <button
+                        className="bsel-btn"
+                        onClick={() => changeCount(card.id, 1)}
+                        title="Add one"
+                      >+</button>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
@@ -368,6 +470,21 @@ export default function DeckBuilderModal({
           </button>
         </div>
       </div>
+      {variantPicker && (
+        <VariantPicker
+          variants={variantPicker.variants}
+          currentId={variantPicker.mode === "swap" ? variantPicker.currentId : null}
+          onPick={(card) => {
+            if (variantPicker.mode === "add") {
+              changeCount(card.id, 1);
+            } else {
+              swapPrinting(variantPicker.currentId, card.id);
+            }
+            setVariantPicker(null);
+          }}
+          onClose={() => setVariantPicker(null)}
+        />
+      )}
     </div>
   );
 }

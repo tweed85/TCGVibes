@@ -94,6 +94,7 @@ export function createPlayer(
     lastDitchUsedThisTurn: false,
     lastSupporterNameThisTurn: null,
     yourPokemonKoedLastOppTurn: false,
+    yourPokemonKoedByAttackLastOppTurnNames: [],
     lastTurnPrizesTaken: 0,
     legacyEnergyUsed: false,
     isAI,
@@ -1127,6 +1128,7 @@ export function endTurn(state: GameState): void {
   // turn" flag applies during their UPCOMING turn. Clear the ending player's
   // own flag here (they've had their chance to consume it).
   prev.yourPokemonKoedLastOppTurn = false;
+  prev.yourPokemonKoedByAttackLastOppTurnNames = [];
   // Turn-scoped attack bonuses (Black Belt's Training, Premium Power Pro,
   // Kieran's boost branch) reset at end of the player's turn.
   prev.thisTurnAttackBonuses = [];

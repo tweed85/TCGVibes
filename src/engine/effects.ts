@@ -182,16 +182,18 @@ export function evaluatePredicate(
     case "anyBenchHasDamage":
       return state.players[ctx.attackerOwner].bench.some((p) => p.damage > 0);
     case "yourNamedPokemonKoedLastOppTurn": {
-      // No fine-grained tracking of WHICH ally was KO'd; we approximate by
-      // checking that any ally was KO'd last opp turn AND at least one of
-      // your in-play Pokémon currently matches the name (a same-named
-      // sibling is still in play). Imperfect but covers common cases like
-      // Hop's Trevenant where the deck runs many Hop's-named Pokémon.
+      // Card text: "If any of your <named> Pokémon were Knocked Out by
+      // damage from an attack during your opponent's last turn..." We
+      // track the names of attack-KO'd Pokémon in
+      // `yourPokemonKoedByAttackLastOppTurnNames` (populated only inside
+      // executeAttackHit's snapshot diff, so status/recoil KOs correctly
+      // don't trigger). Match the namePart against the ACTUAL KO'd names
+      // — not against an in-play sibling heuristic.
       const pl = state.players[ctx.attackerOwner];
-      if (!pl.yourPokemonKoedLastOppTurn) return false;
       const part = pred.namePart.toLowerCase();
-      const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
-      return allies.some((p) => p.card.name.toLowerCase().includes(part));
+      return pl.yourPokemonKoedByAttackLastOppTurnNames.some((n) =>
+        n.toLowerCase().includes(part),
+      );
     }
     case "supporterPlayedThisTurnNameContains": {
       const last = state.players[ctx.attackerOwner].lastSupporterNameThisTurn;
@@ -1321,30 +1323,90 @@ export function resolveAttackEffects(
       case "snipeOne": {
         postHooks.push(() => {
           const opp = state.players[ctx.defenderOwner];
-          if (opp.bench.length === 0) return;
-          // Use the UI-supplied override index if present; otherwise fall
-          // back to the "most-damaged" heuristic (useful for the AI and for
-          // the auto-pick branch of the player modal).
-          let target: typeof opp.bench[number];
+          // Branch on benchOnly: when text says "Benched", the snipe is a
+          // bench-only follow-up (Insta-Strike pattern). When text omits
+          // "Benched" (Fezandipiti ex Cruel Arrow), the player may target
+          // Active or Bench, with W/R applied to the Active target.
+          if (e.benchOnly) {
+            if (opp.bench.length === 0) return;
+            let target: typeof opp.bench[number];
+            if (
+              state.snipeTargetOverride !== null &&
+              state.snipeTargetOverride >= 0 &&
+              state.snipeTargetOverride < opp.bench.length
+            ) {
+              target = opp.bench[state.snipeTargetOverride];
+            } else {
+              target = opp.bench.slice().sort((a, b) => b.damage - a.damage)[0];
+            }
+            if (benchDamageBlockedByFlowerCurtain(state, ctx.defenderOwner, target)) {
+              logEvent(state, "system", `Flower Curtain protects ${target.card.name}.`);
+              return;
+            }
+            if (teraBenchImmunity(state, target)) {
+              logEvent(state, "system", `${target.card.name} (Tera) is immune to bench damage.`);
+              return;
+            }
+            target.damage += e.damage;
+            logEvent(state, "system", `${target.card.name} takes ${e.damage} damage (snipe).`);
+            return;
+          }
+          // Free-pick mode: target Active or Bench. snipeTargetOverride uses
+          // the same convention as the per-energy variant — non-negative
+          // index into opp.bench picks a bench target; otherwise we default
+          // to the Active when present, then most-damaged bench.
+          let chosen: { p: import("./types").PokemonInPlay; isActive: boolean } | null = null;
           if (
             state.snipeTargetOverride !== null &&
             state.snipeTargetOverride >= 0 &&
             state.snipeTargetOverride < opp.bench.length
           ) {
-            target = opp.bench[state.snipeTargetOverride];
-          } else {
-            target = opp.bench.slice().sort((a, b) => b.damage - a.damage)[0];
+            chosen = { p: opp.bench[state.snipeTargetOverride], isActive: false };
+          } else if (opp.active) {
+            chosen = { p: opp.active, isActive: true };
+          } else if (opp.bench.length > 0) {
+            chosen = {
+              p: opp.bench.slice().sort((a, b) => b.damage - a.damage)[0],
+              isActive: false,
+            };
           }
-          if (benchDamageBlockedByFlowerCurtain(state, ctx.defenderOwner, target)) {
-            logEvent(state, "system", `Flower Curtain protects ${target.card.name}.`);
+          if (!chosen) return;
+          if (!chosen.isActive) {
+            if (benchDamageBlocked(state)) {
+              logEvent(state, "system", `Battle Cage protects ${chosen.p.card.name}.`);
+              return;
+            }
+            if (benchDamageBlockedByFlowerCurtain(state, ctx.defenderOwner, chosen.p)) {
+              logEvent(state, "system", `Flower Curtain protects ${chosen.p.card.name}.`);
+              return;
+            }
+            if (teraBenchImmunity(state, chosen.p)) {
+              logEvent(state, "system", `${chosen.p.card.name} (Tera) is immune to bench damage.`);
+              return;
+            }
+            chosen.p.damage += e.damage;
+            logEvent(state, "system", `${chosen.p.card.name} takes ${e.damage} damage.`);
             return;
           }
-          if (teraBenchImmunity(state, target)) {
-            logEvent(state, "system", `${target.card.name} (Tera) is immune to bench damage.`);
-            return;
+          // Active target — apply W/R + Resistance.
+          let dmg = e.damage;
+          const atkType = ctx.attacker.card.types[0];
+          const weak = effectiveWeaknesses(chosen.p, state).find((w) => w.type === atkType);
+          const res = chosen.p.card.resistances?.find((r) => r.type === atkType);
+          const ignoresWeakness =
+            chosen.p.noWeaknessUntilTurn !== undefined && state.turn <= chosen.p.noWeaknessUntilTurn;
+          if (!ignoresWeakness && weak && weak.value.startsWith("×")) {
+            const mult = parseInt(weak.value.slice(1), 10) || 2;
+            dmg *= mult;
+            logEvent(state, "system", `Weakness: ${chosen.p.card.name} takes ×${mult} from ${atkType}.`);
           }
-          target.damage += e.damage;
-          logEvent(state, "system", `${target.card.name} takes ${e.damage} damage (snipe).`);
+          if (res && res.value.startsWith("-")) {
+            const red = parseInt(res.value.slice(1), 10) || 30;
+            dmg = Math.max(0, dmg - red);
+            logEvent(state, "system", `Resistance: ${chosen.p.card.name} reduces ${atkType} damage by ${red}.`);
+          }
+          chosen.p.damage += dmg;
+          logEvent(state, "system", `${chosen.p.card.name} takes ${dmg} damage.`);
         });
         break;
       }

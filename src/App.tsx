@@ -35,7 +35,7 @@ import {
   setupGame,
   unspentTurnSlots,
 } from "./engine/rules";
-import { effectiveAttacks, effectiveMaxHp, energyPoolForCost, estimateAttackDamage } from "./engine/ongoingEffects";
+import { effectiveAttackCost, effectiveAttacks, effectiveMaxHp, energyPoolForCost, estimateAttackDamage } from "./engine/ongoingEffects";
 import type { ActionResult } from "./engine/actions";
 import type { Ability, Card, GameState, PlayerId, PokemonInPlay } from "./engine/types";
 import { buildDeck, validateDeckForPlay, validatedDeckSpecs } from "./data/decks";
@@ -928,13 +928,19 @@ export default function App() {
       // attack() runs internally — single source of truth, can't drift.
       const pre = attackPreflight(state, viewingPlayer, i);
       const blockedReason = pre.ok ? null : pre.reason;
+      // payable must use the EFFECTIVE attack cost (which reflects tools like
+      // Hop's Choice Band reducing 1 Colorless, ability-driven discounts like
+      // Bloodmoon Ursaluna ex Seasoned Skill, etc.). Using raw `a.cost` here
+      // would disable the attack button when the engine actually considers
+      // the attack legal — preflight uses effective cost via attackPreflight.
+      const effectiveCost = effectiveAttackCost(state, me.active!, a.cost, a.name);
       return {
         index: i,
         name: a.name,
         damage: a.damage,
         damageText: a.damageText,
-        cost: a.cost,
-        payable: canPayCost(provided, a.cost),
+        cost: effectiveCost,
+        payable: canPayCost(provided, effectiveCost),
         blockedReason,
         estimated: estimateAttackDamage(state, viewingPlayer, me.active!, a),
       };

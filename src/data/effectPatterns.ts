@@ -737,11 +737,20 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
     }
   }
 
-  // ---- Snipe one benched Pokémon --------------------------------------------
+  // ---- Snipe one Pokémon (bench-only OR free-pick) --------------------------
+  // "This attack [also] does N damage to 1 of your opponent's [Benched] Pokémon."
+  // The "Benched" word distinguishes:
+  //   present → bench-only (typically a follow-up snipe after a main attack)
+  //   absent  → may target Active or Bench (Fezandipiti ex Cruel Arrow,
+  //             where this IS the main damage; W/R applies on Active).
   {
-    const m = text.match(/(\d+) damage to 1 of your opponent'?s (?:benched )?pok[eé]mon/i);
+    const m = text.match(/(\d+) damage to 1 of your opponent'?s (benched )?pok[eé]mon/i);
     if (m && !/each of/i.test(text) && !snipePerEnergyMatched) {
-      effects.push({ kind: "snipeOne", damage: parseInt(m[1], 10) });
+      effects.push({
+        kind: "snipeOne",
+        damage: parseInt(m[1], 10),
+        benchOnly: Boolean(m[2]),
+      });
     }
   }
   // ---- Multi-target damage (2-or-3 picks) ---------------------------------

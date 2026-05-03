@@ -222,14 +222,25 @@ describe("disruption effects", () => {
     });
   });
 
-  it("single-target bench snipe", () => {
+  it("single-target bench snipe — 'Benched' present → benchOnly:true", () => {
     const e = extractEffects(
       mkAttack({
         damage: "20",
         text: "This attack also does 20 damage to 1 of your opponent's Benched Pokémon.",
       }),
     );
-    expect(e.effects).toContainEqual({ kind: "snipeOne", damage: 20 });
+    expect(e.effects).toContainEqual({ kind: "snipeOne", damage: 20, benchOnly: true });
+  });
+
+  it("single-target free-pick snipe — 'Benched' absent → benchOnly:false", () => {
+    // Fezandipiti ex Cruel Arrow targets Active OR Bench.
+    const e = extractEffects(
+      mkAttack({
+        damage: "",
+        text: "This attack does 100 damage to 1 of your opponent's Pokémon. (Don't apply Weakness and Resistance for Benched Pokémon.)",
+      }),
+    );
+    expect(e.effects).toContainEqual({ kind: "snipeOne", damage: 100, benchOnly: false });
   });
 
   it("switch out opp's Active", () => {

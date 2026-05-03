@@ -2518,9 +2518,13 @@ export function applyTrainerEffect(
         logEvent(state, player, "bench is full — Hop's Bag has no effect.");
         return;
       }
+      // Clamp `max` to remaining bench slots so the picker can't offer 2
+      // when only 1 will fit. Without this, a human could pick 2 and the
+      // second placement would silently drop on the bench-full check.
+      const slots = Math.min(2, 5 - pl.bench.length);
       const pred = (c: Card) =>
         c.supertype === "Pokémon" && c.subtypes.includes("Basic") && c.name.startsWith("Hop's ");
-      if (!setDeckSearchPick(state, player, pred, 2, "Hop's Bag: pick up to 2 Basic Hop's Pokémon to Bench", { toBench: true })) {
+      if (!setDeckSearchPick(state, player, pred, slots, `Hop's Bag: pick up to ${slots} Basic Hop's Pokémon to Bench`, { toBench: true })) {
         logEvent(state, player, "finds no Basic Hop's Pokémon.");
       }
       return;

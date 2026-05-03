@@ -676,6 +676,18 @@ function executeAttackHit(
     logEvent(state, "system", `${def.card.name} is shielded — ${move.name} has no effect.`);
     return;
   }
+  // Snapshot the defender's in-play Pokémon names BEFORE this attack so we
+  // can record which ones get KO'd "by damage from an attack". Used by
+  // predicates like Hop's Trevenant Horrifying Revenge that check
+  // `yourPokemonKoedByAttackLastOppTurnNames`. Status/recoil/effect KOs
+  // happen outside this snapshot window, so they correctly don't get
+  // counted as attack-KOs.
+  const defInPlayBefore: Array<{ instanceId: string; name: string }> = [];
+  {
+    const dp = state.players[defOwner];
+    if (dp.active) defInPlayBefore.push({ instanceId: dp.active.instanceId, name: dp.active.card.name });
+    for (const b of dp.bench) defInPlayBefore.push({ instanceId: b.instanceId, name: b.card.name });
+  }
   // Damage pipeline — order matters per TCG rules:
   //   1. Base damage from the attack
   //   2. Attacker-side additions (Stadium / Tool / ability passives, turn
@@ -945,6 +957,24 @@ function executeAttackHit(
   }
   if ((state.phase as string) !== "gameOver" && pl.active && pl.active.damage >= effectiveMaxHp(pl.active, state)) {
     knockOut(state, player);
+  }
+  // Diff defender's in-play before/after to record which of THEIR Pokémon
+  // got KO'd specifically by this attack (i.e. damage from this attack
+  // resolved into a KO somewhere in the chain above). Names go onto the
+  // defender's `yourPokemonKoedByAttackLastOppTurnNames`. Predicates like
+  // Hop's Trevenant Horrifying Revenge consume this list on the defender's
+  // NEXT turn (they're now the attacker; the field still holds the names
+  // from the prior opp turn until end-of-turn cleanup clears it).
+  {
+    const dp = state.players[defOwner];
+    const stillInPlay = new Set<string>();
+    if (dp.active) stillInPlay.add(dp.active.instanceId);
+    for (const b of dp.bench) stillInPlay.add(b.instanceId);
+    for (const before of defInPlayBefore) {
+      if (!stillInPlay.has(before.instanceId)) {
+        dp.yourPokemonKoedByAttackLastOppTurnNames.push(before.name);
+      }
+    }
   }
 }
 

@@ -16,6 +16,10 @@ import type {
 } from "./types";
 import { getAttackEffects } from "../data/effectPatterns";
 import { effectiveEnergyProvides } from "./rules";
+// Cyclic import: effects.ts → ongoingEffects.ts. Safe because evaluatePredicate
+// is only CALLED inside estimateAttackDamage (runtime), not used at module
+// init. ES modules resolve function bindings lazily.
+import { evaluatePredicate } from "./effects";
 
 const hasSubtype = (c: PokemonCard, s: string) => (c.subtypes ?? []).includes(s);
 const hasType = (c: PokemonCard, t: EnergyType) => c.types.includes(t);
@@ -1532,12 +1536,17 @@ export function effectiveAttackCost(
   }
   if (reduce === 0) return rawCost;
   const out = rawCost.slice();
-  while (reduce > 0 && out.length > 0) {
+  // Positive reduction = "costs Colorless less" — strip Colorless slots
+  // only. Once the cost has no Colorless left, stop reducing rather than
+  // popping a typed energy slot (the previous fallback was wrong: tools
+  // that reduce Colorless cost should NEVER strip typed energy slots).
+  while (reduce > 0) {
     const i = out.lastIndexOf("Colorless");
-    if (i >= 0) out.splice(i, 1);
-    else out.pop();
+    if (i < 0) break;
+    out.splice(i, 1);
     reduce--;
   }
+  // Negative reduction = "costs N more" — append Colorless slots (kept).
   while (reduce < 0) { out.push("Colorless"); reduce++; }
   return out;
 }
@@ -1707,6 +1716,27 @@ export function estimateAttackDamage(
       case "flipAllHeadsBonus": {
         const p = 1 / Math.pow(2, e.coins);
         d += e.bonus * p;
+        break;
+      }
+      case "conditionalDamage": {
+        // Mirror the runtime: fizzleIfNot zeros damage when predicate fails;
+        // bonus mode adds when predicate succeeds. Without this case, attacks
+        // like Hop's Cramorant Fickle Spitting (fizzles unless opp has 3-4
+        // prizes) would always show their full 120-damage preview, even when
+        // the attack would currently do 0.
+        const ok = evaluatePredicate(
+          state,
+          { attacker, attackerOwner, defender: def, defenderOwner: defOwner, move, damage: d },
+          e.predicate,
+        );
+        if (e.mode === "bonus") {
+          if (ok) d += e.bonus;
+        } else {
+          // fizzleIfNot
+          if (!ok) {
+            d = 0;
+          }
+        }
         break;
       }
     }
