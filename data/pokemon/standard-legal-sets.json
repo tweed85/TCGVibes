@@ -5,8 +5,15 @@
   "governing_body": "Play! Pokemon (The Pokemon Company International)",
   "rotation_effective_date_in_person": "2026-04-10",
   "rotation_effective_date_tcg_live": "2026-03-26",
-  "legal_regulation_marks": ["H", "I", "J"],
-  "rotated_out_regulation_marks": ["F", "G"],
+  "legal_regulation_marks": [
+    "H",
+    "I",
+    "J"
+  ],
+  "rotated_out_regulation_marks": [
+    "F",
+    "G"
+  ],
   "legal_sets": [
     {
       "code": "sv4pt5",
@@ -143,6 +150,15 @@
       "total": 124,
       "regulation_mark": "J",
       "notes": "First set to contain J-mark cards. Became Standard legal on 2026-04-10."
+    },
+    {
+      "code": "me4",
+      "name": "Mega Evolution—Chaos Rising",
+      "series": "Mega Evolution",
+      "release_date": "2026-05-22",
+      "printed_total": 83,
+      "total": 83,
+      "regulation_mark": "J"
     },
     {
       "code": "svp",

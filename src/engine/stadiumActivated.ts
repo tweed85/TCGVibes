@@ -330,6 +330,26 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
       logEvent(state, player, `Team Rocket's Factory: draws ${drawn}.`);
     },
   },
+
+  // me4 Prism Tower — once per turn, each player may discard 2 cards from
+  // their hand to draw 1.
+  "Prism Tower": {
+    precheck: (state, player) => {
+      const pl = state.players[player];
+      if (pl.hand.length < 2) return "Need 2 cards in hand to discard.";
+      if (pl.deck.length === 0) return "Deck is empty.";
+      return null;
+    },
+    run: (state, player) => {
+      const pl = state.players[player];
+      // Auto-discard the first 2 (UI picker is a future improvement).
+      const [a, b] = pl.hand.splice(0, 2);
+      pl.discard.push(a, b);
+      const drawn = pl.deck.shift();
+      if (drawn) pl.hand.push(drawn);
+      logEvent(state, player, `Prism Tower: discards 2, draws 1.`);
+    },
+  },
 };
 
 // Activate the current Stadium's effect for `player`. Enforces once-per-turn

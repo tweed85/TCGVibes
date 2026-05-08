@@ -805,7 +805,50 @@ export type AttackEffect =
   // At the end of opp's NEXT turn, discard the Defending Pokémon and all
   // attached cards (treated as a KO — prizes are taken). (Team Rocket's
   // Grimer sv10-123 Corrosive Sludge.)
-  | { kind: "discardDefenderEndOfOppNextTurn" };
+  | { kind: "discardDefenderEndOfOppNextTurn" }
+  // me4 (Chaos Rising) additions ---------------------------------------------
+  // Mega Floette ex "Gentle Light" — heal N from each Pokémon on both sides.
+  | { kind: "healEachInPlayBothSides"; amount: number }
+  // Delphox "Energized Storm" / Xerneas "Geostorm" — N damage per Energy
+  // attached to all Pokémon (or all of your Pokémon).
+  | { kind: "perEnergyAcrossInPlay"; perCount: number; energyType?: EnergyType; side: "friendly" | "both" }
+  // Mega Greninja ex "Ninja Spinner" — return one typed Energy to hand for
+  // a damage bonus.
+  | { kind: "optionalSelfTypedEnergyToHandForBonus"; energyType: EnergyType; bonus: number }
+  // Metagross "Metallic Hammer" — discard N typed Energy from self for a
+  // damage bonus.
+  | { kind: "optionalDiscardSelfEnergyForBonus"; count: number; energyType?: EnergyType; bonus: number }
+  // Trevenant "Cursed Root" — defender can't have Energy attached from opp's
+  // hand during opp's next turn.
+  | { kind: "defenderCantBeAttachedNextTurn" }
+  // Gourgeist ex "Horror Rondo" — N more per friendly bench Pokémon that
+  // has any damage counters on it.
+  | { kind: "perDamagedFriendlyBench"; perCount: number }
+  // Mega Dragalge ex "Corrosive Liquid" — discard ALL Tools and ALL Special
+  // Energy from EVERY one of opp's Pokémon (Active + Bench).
+  | { kind: "discardAllOppToolsAndSpecialEnergyAll" }
+  // Mega Dragalge ex "Pernicious Poison" — Poison + heavy poison strength
+  // (N damage counters per Checkup instead of 1).
+  | { kind: "applyHeavyPoison"; counters: number }
+  // Golisopod "Vital Slash" — set self shield next turn iff this attack
+  // KO'd the defender.
+  | { kind: "shieldNextTurnIfKoThisAttack" }
+  // Golbat "Covert Flight" — shield next turn against attackers with a
+  // specific subtype only.
+  | { kind: "selfShieldNextTurnFromSubtype"; subtype: string }
+  // Deoxys "Psy Protect" — shield next turn against attackers that have
+  // any Abilities.
+  | { kind: "selfShieldNextTurnFromAbility" }
+  // Watchog "Snipe Check" — flip N coins; for each heads, peek opp hand
+  // and pick a card to put on top of opp deck. Auto-resolved as a hand
+  // disruption (cards land on top, then opp shuffles).
+  | { kind: "multiCoinPickFromOppHandToTopDeck"; coins: number }
+  // Tauros "Target Together" — flip 1 coin per friendly Pokémon whose
+  // name includes <namePart>; deal `damagePerHeads` damage to a chosen
+  // opp target per heads.
+  | { kind: "perNamedAllyCoinDamageChosen"; namePart: string; damagePerHeads: number }
+  // Deoxys "Psy Spear" — also-snipe-bench gated by self extra energy.
+  | { kind: "conditionalSnipeBench"; extraEnergy: number; damage: number };
 
 export type PokemonFilter =
   | { kind: "any" }
@@ -927,7 +970,10 @@ export type AttackPredicate =
   | { kind: "oppBenchAtLeast"; count: number }
   // "If 1 of your other <Subtype> Pokémon used an attack during your last
   // turn, ..." (Koraidon — gates on the team's last-turn activity)
-  | { kind: "anyAllyOfSubtypeUsedAttackLastTurn"; subtype: string };
+  | { kind: "anyAllyOfSubtypeUsedAttackLastTurn"; subtype: string }
+  // "If you played <NamedItem> from your hand during this turn, ..." (Espurr
+  // me4 Buddy Attack — references Tomes of Transformation by name.)
+  | { kind: "playedNamedItemThisTurn"; namePart: string };
 
 export type StatusCondition = "asleep" | "burned" | "confused" | "paralyzed" | "poisoned";
 
@@ -1012,7 +1058,17 @@ export type AbilityEffect =
   | { kind: "moveBasicEnergyAnywhere"; energyType: EnergyType }
   // "As often as you like during your turn, attach a Basic <Type> Energy
   // card from your hand to 1 of your <NamePart> Pokémon." (Iono's Bellibolt Electric Streamer)
-  | { kind: "attachEnergyFromHandToNamedAsOften"; energyType: EnergyType; namePrefix: string };
+  | { kind: "attachEnergyFromHandToNamedAsOften"; energyType: EnergyType; namePrefix: string }
+  // me4 (Chaos Rising) -------------------------------------------------------
+  // Delphox "Flaring Magic" — discard a basic <type> Energy from HAND, then
+  // draw cards until you have N cards in your hand.
+  | { kind: "discardHandEnergyDrawToN"; energyType: EnergyType; targetHand: number; oncePerTurn: true; activeOnly?: boolean }
+  // Mega Greninja ex "Mortal Shuriken" — Active-only; discard a basic
+  // <type> Energy from HAND, place N damage counters on 1 opp Pokémon.
+  | { kind: "discardHandEnergyPlaceCountersOnOpp"; energyType: EnergyType; counters: number; oncePerTurn: true; activeOnly: true }
+  // Crobat "Nighttime Maneuvers" — Active-only; search deck for any card,
+  // shuffle deck, put that card on top.
+  | { kind: "searchDeckAnyCardToTopdeck"; oncePerTurn: true; activeOnly: true };
 
 // Conditional gates evaluated at activation time. If the condition fails,
 // the button is disabled (or the activation blocked with a reason).
@@ -1166,6 +1222,11 @@ export interface PlayerState {
   //      don't false-positive on a sibling-still-in-play heuristic.
   // Cleared at the end of this player's turn.
   yourPokemonKoedByAttackLastOppTurnNames: string[];
+  // Names of Item cards (Trainer subtype "Item") this player has played
+  // from hand this turn. Used by predicates like Espurr "Buddy Attack"
+  // (Chaos Rising) — "if you played Tomes of Transformation from your hand
+  // during this turn". Cleared at the end of this player's turn.
+  itemsPlayedThisTurn?: string[];
   // Number of Prize cards this player took during their most recent
   // (already-ended) turn. Used by Okidogi "Settle the Score" — "+60 damage
   // for each Prize card your opponent took during their last turn."

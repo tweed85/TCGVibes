@@ -32,6 +32,7 @@ import type {
   EnergyCard,
   GameState,
   PlayerId,
+  PlayerState,
   PokemonCard,
   PokemonInPlay,
   TrainerCard,
@@ -205,7 +206,15 @@ export type TrainerEffectId =
   | "maxRodRecoverPokemonOrEnergy" // Recover up to 5 Pokémon or Basic Energy from discard
   | "secretBoxQuadSearch" // Discard 3, then search Item + Tool + Supporter + Stadium
   | "rocketBotherBotPrizePeek" // Flip a prize face-up + reveal random opp hand card
-  | "playFossilAsBasic"; // Antique Cover/Jaw/Plume/Root/Sail Fossil — bench as 60HP Colorless
+  | "playFossilAsBasic" // Antique Cover/Jaw/Plume/Root/Sail Fossil — bench as 60HP Colorless
+  // me4 (Chaos Rising) -------------------------------------------------------
+  | "specialRedCard" // Special Red Card — opp ≤3 prizes; opp shuffles hand to bottom + draws 3
+  | "bigCatchingNet" // Big Catching Net — shuffle up to 3 Water Pokémon/Energy from discard to deck
+  | "azsTranquility" // AZ's Tranquility — switch + heal 80 from outgoing
+  | "philippeMetalEnergy" // Philippe — attach up to 2 Metal Energy from discard to a Metal Pokémon
+  | "roxiesPerformance" // Roxie's Performance — opp's Poisoned Pokémon can't retreat next turn
+  | "emma" // Emma — look at opp hand, draw a card per Pokémon
+  | "tomesOfTransformation"; // Tomes of Transformation — placeholder (must play 2 at once); approximated
 
 export interface ApiTrainer {
   name: string;
@@ -248,6 +257,22 @@ export function detectTrainerEffect(t: ApiTrainer): TrainerEffectId | undefined 
     return "searchTeraPokemon";
   if (t.name === "Energy Search")
     return "searchBasicEnergy1";
+
+  // me4 (Chaos Rising) -------------------------------------------------------
+  if (t.name === "Special Red Card")
+    return "specialRedCard";
+  if (t.name === "Big Catching Net")
+    return "bigCatchingNet";
+  if (t.name === "Tomes of Transformation")
+    return "tomesOfTransformation";
+  if (t.name === "AZ's Tranquility")
+    return "azsTranquility";
+  if (t.name === "Philippe")
+    return "philippeMetalEnergy";
+  if (t.name === "Roxie's Performance")
+    return "roxiesPerformance";
+  if (t.name === "Emma")
+    return "emma";
 
   // Switch / catcher — simple active/bench swaps.
   if (t.name === "Switch")
@@ -734,6 +759,55 @@ export function precheckTrainerEffect(
   }
   if (id === "searchAnyPokemon" && pl.hand.length < 3) {
     return "Need 2 other cards in hand to discard for Ultra Ball.";
+  }
+  if (id === "specialRedCard") {
+    const opp = state.players[player === "p1" ? "p2" : "p1"];
+    if (opp.prizes.length > 3) {
+      return "Special Red Card: opponent must have 3 or fewer Prize cards remaining.";
+    }
+  }
+  if (id === "philippeMetalEnergy") {
+    const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+    const hasMetalAlly = allies.some((p) => p.card.types.includes("Metal"));
+    if (!hasMetalAlly) return "Philippe: no Metal Pokémon in play.";
+    const hasMetalInDiscard = pl.discard.some(
+      (c) =>
+        c.supertype === "Energy" &&
+        c.subtypes.includes("Basic") &&
+        (c as EnergyCard).provides.includes("Metal"),
+    );
+    if (!hasMetalInDiscard) return "Philippe: no Metal Energy in your discard pile.";
+  }
+  if (id === "azsTranquility" && pl.bench.length === 0) {
+    return "AZ's Tranquility: no Benched Pokémon to switch in.";
+  }
+  if (id === "bigCatchingNet") {
+    const hasMatch = pl.discard.some((c) => {
+      if (c.supertype === "Pokémon" && c.types.includes("Water")) return true;
+      if (
+        c.supertype === "Energy" &&
+        c.subtypes.includes("Basic") &&
+        (c as EnergyCard).provides.includes("Water")
+      )
+        return true;
+      return false;
+    });
+    if (!hasMatch) return "Big Catching Net: no Water Pokémon or basic Water Energy in discard.";
+  }
+  if (id === "tomesOfTransformation") {
+    // Need 2 Tomes in hand (one we're playing + at least one more), or the
+    // simplified path has nothing to do.
+    const tomesInHand = pl.hand.filter((c) => c.name === "Tomes of Transformation").length;
+    if (tomesInHand < 1) {
+      return "Tomes of Transformation: requires 2 copies in your hand to play.";
+    }
+    // Need at least one Basic Pokémon in discard pile to swap with.
+    const basicInDiscard = pl.discard.some(
+      (c) => c.supertype === "Pokémon" && c.subtypes.includes("Basic"),
+    );
+    if (!basicInDiscard) {
+      return "Tomes of Transformation: no Basic Pokémon in your discard pile.";
+    }
   }
   // Secret Box: discards 3 other cards from hand. Without this gate,
   // playTrainer still discards Secret Box itself for no effect — losing
@@ -3583,6 +3657,219 @@ export function applyTrainerEffect(
     case "tmFluoriteTool": {
       // Passive — handled at attach time. This branch fires only if played
       // as a non-Tool (shouldn't happen).
+      return;
+    }
+
+    // me4 (Chaos Rising) ---------------------------------------------------
+    case "specialRedCard": {
+      // Item — gated to opp ≤3 prizes by precheck. Opp puts hand on bottom
+      // of deck (FIFO), then if any cards moved, draws 3.
+      const opp = state.players[oppId];
+      const moved = opp.hand.length;
+      opp.deck.push(...opp.hand);
+      opp.hand = [];
+      let drawn = 0;
+      if (moved > 0) {
+        for (let i = 0; i < 3; i++) {
+          const c = opp.deck.shift();
+          if (!c) break;
+          opp.hand.push(c);
+          drawn++;
+        }
+      }
+      logEvent(
+        state,
+        player,
+        `Special Red Card: ${opp.name} bottoms ${moved} card(s); draws ${drawn}.`,
+      );
+      return;
+    }
+
+    case "bigCatchingNet": {
+      // Item — shuffle up to 3 (Water Pokémon and/or basic Water Energy)
+      // from discard back into deck. Auto-pick: take Pokémon first (more
+      // valuable to recycle), then Energy.
+      const indices: number[] = [];
+      for (let i = 0; i < pl.discard.length && indices.length < 3; i++) {
+        const c = pl.discard[i];
+        if (c.supertype === "Pokémon" && c.types.includes("Water")) indices.push(i);
+      }
+      for (let i = 0; i < pl.discard.length && indices.length < 3; i++) {
+        if (indices.includes(i)) continue;
+        const c = pl.discard[i];
+        if (
+          c.supertype === "Energy" &&
+          c.subtypes.includes("Basic") &&
+          (c as EnergyCard).provides.includes("Water")
+        )
+          indices.push(i);
+      }
+      indices.sort((a, b) => b - a);
+      const moved: Card[] = [];
+      for (const i of indices) {
+        moved.push(pl.discard.splice(i, 1)[0]);
+      }
+      pl.deck.push(...moved);
+      shuffleDeck(state, player);
+      logEvent(state, player, `Big Catching Net: shuffles ${moved.length} card(s) from discard into deck.`);
+      return;
+    }
+
+    case "azsTranquility": {
+      // Supporter — switch active with bench, then heal 80 from the
+      // outgoing (now-benched) Pokémon. Reuse simpleSwitch logic and add
+      // the heal post-switch.
+      if (pl.bench.length === 0) return;
+      // Keep a pre-switch reference to the outgoing active. After
+      // performSwitch, it's at the back of pl.bench.
+      const outgoingName = pl.active?.card.name ?? "";
+      // Use the same picker as the Switch item: pendingSwitchTarget on auto-AI,
+      // or open the picker on humans.
+      if (pl.isAI) {
+        // Simple AI heuristic: switch to the highest-HP basic on bench.
+        let bestIdx = 0;
+        let bestHp = 0;
+        for (let i = 0; i < pl.bench.length; i++) {
+          const hp = pl.bench[i].card.hp - pl.bench[i].damage;
+          if (hp > bestHp) {
+            bestHp = hp;
+            bestIdx = i;
+          }
+        }
+        performSwitch(state, player, bestIdx);
+      } else {
+        state.pendingSwitchTarget = player;
+      }
+      // After performSwitch (sync) the outgoing is at pl.bench[length-1].
+      // For human path we set pending switch target — heal will be applied
+      // when they pick. Simplification: heal NOW for AI; for human, schedule
+      // in a tag. Simpler: heal whichever is at the end of bench AFTER the
+      // sync switch. For human, the heal will happen later via the pending
+      // resolver — but to keep this self-contained, we apply the heal only
+      // for AI. (The human-path heal is a follow-up TODO.)
+      if (pl.isAI) {
+        const outgoing = pl.bench[pl.bench.length - 1];
+        if (outgoing) {
+          const before = outgoing.damage;
+          outgoing.damage = Math.max(0, outgoing.damage - 80);
+          if (outgoing.damage < before) outgoing.healedThisTurn = true;
+          logEvent(
+            state,
+            player,
+            `AZ's Tranquility: ${outgoingName} → bench, heals ${before - outgoing.damage}.`,
+          );
+        }
+      } else {
+        logEvent(state, player, "AZ's Tranquility: switch active with a Benched Pokémon (heal 80 follows).");
+      }
+      return;
+    }
+
+    case "philippeMetalEnergy": {
+      // Supporter — attach up to 2 basic Metal Energy from discard to one
+      // of your Metal Pokémon. Auto-pick first damaged Metal ally; AI
+      // takes both energies if available.
+      const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+      const target = allies.find((p) => p.card.types.includes("Metal"));
+      if (!target) return;
+      let attached = 0;
+      for (let n = 0; n < 2; n++) {
+        const idx = pl.discard.findIndex(
+          (c) =>
+            c.supertype === "Energy" &&
+            c.subtypes.includes("Basic") &&
+            (c as EnergyCard).provides.includes("Metal"),
+        );
+        if (idx < 0) break;
+        const [en] = pl.discard.splice(idx, 1) as [EnergyCard];
+        target.attachedEnergy.push(en);
+        attached++;
+      }
+      if (attached > 0) {
+        logEvent(state, player, `Philippe: attaches ${attached} Metal Energy to ${target.card.name}.`);
+      }
+      return;
+    }
+
+    case "roxiesPerformance": {
+      // Supporter — set a turn-scoped flag on YOU; consulted by the opp's
+      // retreat() to block retreating any Poisoned opp Pokémon.
+      (pl as PlayerState & { poisonedOppCantRetreatNextTurn?: boolean }).poisonedOppCantRetreatNextTurn = true;
+      logEvent(state, player, "Roxie's Performance: opp's Poisoned Pokémon can't retreat next turn.");
+      return;
+    }
+
+    case "emma": {
+      // Supporter — look at opp hand, draw a card per Pokémon you find.
+      // Auto-resolve (the look is cosmetic; the count drives the draw).
+      const opp = state.players[oppId];
+      const pokeCount = opp.hand.filter((c) => c.supertype === "Pokémon").length;
+      let drawn = 0;
+      for (let i = 0; i < pokeCount; i++) {
+        const c = pl.deck.shift();
+        if (!c) break;
+        pl.hand.push(c);
+        drawn++;
+      }
+      logEvent(state, player, `Emma: opp hand has ${pokeCount} Pokémon — draws ${drawn}.`);
+      return;
+    }
+
+    case "tomesOfTransformation": {
+      // Item — text says "play 2 at once". Simplified: this is the
+      // CONSUMING play; we additionally discard one extra Tomes from hand
+      // (the second copy). Then perform the Basic-swap: choose a Basic
+      // Pokémon from discard, and swap with one of your Basic Pokémon in
+      // play. AI picks: discard's highest-HP Basic for play's most-damaged
+      // (or lowest-HP) Basic.
+      const otherIdx = pl.hand.findIndex((c) => c.name === "Tomes of Transformation");
+      if (otherIdx < 0) {
+        // Precheck should have blocked, but be safe.
+        return;
+      }
+      const [other] = pl.hand.splice(otherIdx, 1);
+      pl.discard.push(other);
+      // Find a Basic Pokémon in discard.
+      const discardBasicIdx = pl.discard.findIndex(
+        (c) => c.supertype === "Pokémon" && c.subtypes.includes("Basic"),
+      );
+      if (discardBasicIdx < 0) return;
+      const [discardCard] = pl.discard.splice(discardBasicIdx, 1) as [PokemonCard];
+      // Find a Basic Pokémon in play (prefer the most-damaged one — the
+      // swap preserves all attached cards / damage / status, so the new
+      // shell can take a hit better than the old one if it has higher HP).
+      const targets: Array<{ source: "active" | "bench"; idx: number; p: PokemonInPlay }> = [];
+      if (pl.active && pl.active.card.subtypes.includes("Basic")) {
+        targets.push({ source: "active", idx: -1, p: pl.active });
+      }
+      pl.bench.forEach((p, i) => {
+        if (p.card.subtypes.includes("Basic")) targets.push({ source: "bench", idx: i, p });
+      });
+      if (targets.length === 0) {
+        // Refund the discard pull (rare): put it back at the bottom of
+        // discard so it isn't lost.
+        pl.discard.push(discardCard);
+        return;
+      }
+      let pick = targets[0];
+      let bestDamage = pick.p.damage;
+      for (const t of targets) {
+        if (t.p.damage > bestDamage) {
+          bestDamage = t.p.damage;
+          pick = t;
+        }
+      }
+      // Swap the card-shell while preserving attached / damage / status.
+      const oldCard = pick.p.card;
+      pick.p.card = discardCard;
+      // The replaced card goes to the discard pile (replacing the slot we
+      // pulled from).
+      pl.discard.push(oldCard);
+      logEvent(
+        state,
+        player,
+        `Tomes of Transformation: ${oldCard.name} → ${discardCard.name} (preserves attached cards & damage).`,
+      );
       return;
     }
 

@@ -99,9 +99,14 @@
       "kept": 16,
       "skipped_reg": 0,
       "total": 16
+    },
+    "me4": {
+      "kept": 83,
+      "skipped_reg": 0,
+      "total": 83
     }
   },
-  "total_legal_cards_written": 2693,
+  "total_legal_cards_written": 2776,
   "cards": [
     {
       "id": "me1-1",
@@ -119715,6 +119720,3522 @@
       "resistances": [],
       "retreat_cost": [],
       "rules": []
+    },
+    {
+      "id": "me4-1",
+      "name": "Weedle",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "1",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "50",
+      "types": [
+        "Grass"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Surprise Attack",
+          "cost": [
+            "Grass"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "30",
+          "text": "Flip a coin. If tails, this attack does nothing."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Fire",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-2",
+      "name": "Kakuna",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1"
+      ],
+      "number": "2",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "80",
+      "types": [
+        "Grass"
+      ],
+      "evolves_from": "Weedle",
+      "attacks": [
+        {
+          "name": "Hang Down",
+          "cost": [
+            "Grass"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "20",
+          "text": ""
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Exoskeleton",
+          "type": "Ability",
+          "text": "This Pokémon takes 20 less damage from your opponent's Pokémon's attacks."
+        }
+      ],
+      "weaknesses": [
+        {
+          "type": "Fire",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-3",
+      "name": "Beedrill ex",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 2",
+        "ex"
+      ],
+      "number": "3",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "310",
+      "types": [
+        "Grass"
+      ],
+      "evolves_from": "Kakuna",
+      "attacks": [
+        {
+          "name": "Rumbling Bees",
+          "cost": [
+            "Grass"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "110×",
+          "text": "This attack does 110 damage for each of your Beedrill and Beedrill ex in play."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Fire",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": [
+        "Pokémon ex rule: When your Pokémon ex is Knocked Out, your opponent takes 2 Prize cards."
+      ]
+    },
+    {
+      "id": "me4-4",
+      "name": "Carnivine",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "4",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "110",
+      "types": [
+        "Grass"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Bite Whole",
+          "cost": [
+            "Colorless",
+            "Colorless",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 3,
+          "damage": "80+",
+          "text": "This attack does 80 more damage for each Colorless Energy in your opponent's Active Pokémon's Retreat Cost."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Fire",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-5",
+      "name": "Chespin",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "5",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "70",
+      "types": [
+        "Grass"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Beat",
+          "cost": [
+            "Grass"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "10",
+          "text": ""
+        },
+        {
+          "name": "Spike Sting",
+          "cost": [
+            "Grass",
+            "Grass"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "30",
+          "text": ""
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Fire",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-6",
+      "name": "Quilladin",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1"
+      ],
+      "number": "6",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "100",
+      "types": [
+        "Grass"
+      ],
+      "evolves_from": "Chespin",
+      "attacks": [
+        {
+          "name": "Leaf Charge",
+          "cost": [
+            "Grass"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "20",
+          "text": "Search your deck for a basic Grass Energy card and attach it to this Pokémon. Then, shuffle your deck."
+        },
+        {
+          "name": "Vine Whip",
+          "cost": [
+            "Grass",
+            "Grass",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 3,
+          "damage": "80",
+          "text": ""
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Fire",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-7",
+      "name": "Chesnaught",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 2"
+      ],
+      "number": "7",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "180",
+      "types": [
+        "Grass"
+      ],
+      "evolves_from": "Quilladin",
+      "attacks": [
+        {
+          "name": "Impound",
+          "cost": [
+            "Grass",
+            "Grass",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 3,
+          "damage": "160",
+          "text": "During your opponent's next turn, the Defending Pokémon can't retreat."
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Needle Armor",
+          "type": "Ability",
+          "text": "If this Pokémon is in the Active Spot and is damaged by an attack from your opponent's Pokémon (even if this Pokémon is Knocked Out), place 3 damage counters on the Attacking Pokémon for each Grass Energy attached to this Pokémon."
+        }
+      ],
+      "weaknesses": [
+        {
+          "type": "Fire",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless",
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-8",
+      "name": "Vulpix",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "8",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "70",
+      "types": [
+        "Fire"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Singe",
+          "cost": [
+            "Fire"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "",
+          "text": "Your opponent's Active Pokémon is now Burned."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Water",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-9",
+      "name": "Ninetales",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1"
+      ],
+      "number": "9",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "120",
+      "types": [
+        "Fire"
+      ],
+      "evolves_from": "Vulpix",
+      "attacks": [
+        {
+          "name": "Nine-Tailed Reflection",
+          "cost": [
+            "Fire"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "",
+          "text": "Move all damage counters from 1 of your Benched Pokémon to your opponent's Active Pokémon."
+        },
+        {
+          "name": "Will-O-Wisp",
+          "cost": [
+            "Fire",
+            "Fire"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "70",
+          "text": ""
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Water",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-10",
+      "name": "Ho-Oh",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "10",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "130",
+      "types": [
+        "Fire"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Revival Flame",
+          "cost": [
+            "Fire"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "",
+          "text": "Put up to 3 Basic Pokémon from your discard pile onto your Bench."
+        },
+        {
+          "name": "Bright Wing",
+          "cost": [
+            "Fire",
+            "Fire",
+            "Fire"
+          ],
+          "convertedEnergyCost": 3,
+          "damage": "130",
+          "text": "Discard an Energy from this Pokémon."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Water",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-11",
+      "name": "Fennekin",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "11",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "70",
+      "types": [
+        "Fire"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Call for Family",
+          "cost": [
+            "Colorless"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "",
+          "text": "Search your deck for up to 2 Basic Pokémon and put them onto your Bench. Then, shuffle your deck."
+        },
+        {
+          "name": "Steady Firebreathing",
+          "cost": [
+            "Fire"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "10",
+          "text": ""
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Water",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-12",
+      "name": "Braixen",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1"
+      ],
+      "number": "12",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "100",
+      "types": [
+        "Fire"
+      ],
+      "evolves_from": "Fennekin",
+      "attacks": [
+        {
+          "name": "Flamethrower",
+          "cost": [
+            "Fire",
+            "Fire"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "80",
+          "text": "Discard an Energy from this Pokémon."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Water",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-13",
+      "name": "Delphox",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 2"
+      ],
+      "number": "13",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "160",
+      "types": [
+        "Fire"
+      ],
+      "evolves_from": "Braixen",
+      "attacks": [
+        {
+          "name": "Energized Storm",
+          "cost": [
+            "Fire",
+            "Fire"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "30×",
+          "text": "This attack does 30 damage for each Energy attached to all Pokémon."
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Flaring Magic",
+          "type": "Ability",
+          "text": "Once during your turn, you may discard a Basic Fire Energy card from your hand in order to use this Ability. Draw cards until you have 7 cards in your hand."
+        }
+      ],
+      "weaknesses": [
+        {
+          "type": "Water",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-14",
+      "name": "Litleo",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "14",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "70",
+      "types": [
+        "Fire"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Tackle",
+          "cost": [
+            "Colorless"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "10",
+          "text": ""
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Water",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-15",
+      "name": "Mega Pyroar ex",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1",
+        "MEGA",
+        "ex"
+      ],
+      "number": "15",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "340",
+      "types": [
+        "Fire"
+      ],
+      "evolves_from": "Litleo",
+      "attacks": [
+        {
+          "name": "Ferocious Bellow",
+          "cost": [
+            "Fire",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "80",
+          "text": "During your opponent's next turn, attacks used by the Defending Pokémon do 50 less damage."
+        },
+        {
+          "name": "Fiery Big Bang",
+          "cost": [
+            "Fire",
+            "Fire",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 3,
+          "damage": "290-",
+          "text": "This attack does 10 less damage for each damage counter on this Pokémon."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Water",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": [
+        "Mega Evolution ex Rule: When your Mega Evolution Pokémon ex is Knocked Out, your opponent takes 3 Prize cards."
+      ]
+    },
+    {
+      "id": "me4-16",
+      "name": "Remoraid",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "16",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "70",
+      "types": [
+        "Water"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Sharp Fin",
+          "cost": [
+            "Water"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "20",
+          "text": ""
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Lightning",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-17",
+      "name": "Octillery",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1"
+      ],
+      "number": "17",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "110",
+      "types": [
+        "Water"
+      ],
+      "evolves_from": "Remoraid",
+      "attacks": [
+        {
+          "name": "Ink Jet",
+          "cost": [
+            "Water"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "30",
+          "text": "During your opponent's next turn, if the Defending Pokémon tries to use an attack, your opponent flips 2 coins. If either of them is tails, that attack doesn't happen."
+        },
+        {
+          "name": "Tantrum",
+          "cost": [
+            "Water",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "120",
+          "text": "This Pokémon is now Confused."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Lightning",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-18",
+      "name": "Delibird",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "18",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "90",
+      "types": [
+        "Water"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Happy Present",
+          "cost": [
+            "Colorless"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "",
+          "text": "Each player may attach up to 3 Basic Energy cards from their hand to their Pokémon in any way they like. (Your opponent does this first.)"
+        },
+        {
+          "name": "Flap",
+          "cost": [
+            "Colorless",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "40",
+          "text": ""
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Metal",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-19",
+      "name": "Keldeo",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "19",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "110",
+      "types": [
+        "Water"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Shoot Through",
+          "cost": [
+            "Water"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "20",
+          "text": "This attack also does 20 damage to 1 of your opponent's Benched Pokémon."
+        },
+        {
+          "name": "Reflect Energy",
+          "cost": [
+            "Water",
+            "Water"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "70",
+          "text": "Move an Energy from this Pokémon to 1 of your Benched Pokémon."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Lightning",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-20",
+      "name": "Froakie",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "20",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "70",
+      "types": [
+        "Water"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Collect",
+          "cost": [
+            "Colorless"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "",
+          "text": "Draw a card."
+        },
+        {
+          "name": "Water Gun",
+          "cost": [
+            "Water"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "10",
+          "text": ""
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Lightning",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-21",
+      "name": "Frogadier",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1"
+      ],
+      "number": "21",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "100",
+      "types": [
+        "Water"
+      ],
+      "evolves_from": "Froakie",
+      "attacks": [
+        {
+          "name": "Summoning Jutsu",
+          "cost": [
+            "Water"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "",
+          "text": "Search your deck for up to 3 Pokémon, reveal them, and put them into your hand. Then, shuffle your deck."
+        },
+        {
+          "name": "Aqua Edge",
+          "cost": [
+            "Water",
+            "Water"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "50",
+          "text": ""
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Lightning",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-22",
+      "name": "Mega Greninja ex",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 2",
+        "MEGA",
+        "ex"
+      ],
+      "number": "22",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "350",
+      "types": [
+        "Water"
+      ],
+      "evolves_from": "Frogadier",
+      "attacks": [
+        {
+          "name": "Ninja Spinner",
+          "cost": [
+            "Water",
+            "Water"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "120+",
+          "text": "You may put a Water Energy attached to this Pokémon into your hand. If you do, this attack does 80 more damage."
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Mortal Shuriken",
+          "type": "Ability",
+          "text": "Once during your turn, if this Pokémon is in the Active Spot, you may discard a basic Water Energy from your hand. If you do, put 6 damage counters on 1 of your opponent's Pokémon."
+        }
+      ],
+      "weaknesses": [
+        {
+          "type": "Lightning",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": [
+        "Mega Evolution ex Rule: When your Mega Evolution Pokémon ex is Knocked Out, your opponent takes 3 Prize cards."
+      ]
+    },
+    {
+      "id": "me4-23",
+      "name": "Bergmite",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "23",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "80",
+      "types": [
+        "Water"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Chill",
+          "cost": [
+            "Water"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "10",
+          "text": ""
+        },
+        {
+          "name": "Icy Breath",
+          "cost": [
+            "Water",
+            "Colorless",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 3,
+          "damage": "50",
+          "text": ""
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Metal",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-24",
+      "name": "Avalugg",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1"
+      ],
+      "number": "24",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "160",
+      "types": [
+        "Water"
+      ],
+      "evolves_from": "Bergmite",
+      "attacks": [
+        {
+          "name": "Glacier Crush",
+          "cost": [
+            "Water"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "60×",
+          "text": "Discard the top 6 cards of your deck. This attack does 60 damage for each basic Water Energy you discarded this way."
+        },
+        {
+          "name": "Frost Stamp",
+          "cost": [
+            "Water",
+            "Water",
+            "Colorless",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 4,
+          "damage": "160",
+          "text": ""
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Metal",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless",
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-25",
+      "name": "Wimpod",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "25",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "70",
+      "types": [
+        "Water"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Bite",
+          "cost": [
+            "Water"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "10",
+          "text": ""
+        },
+        {
+          "name": "Beat",
+          "cost": [
+            "Colorless",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "20",
+          "text": ""
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Lightning",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-26",
+      "name": "Golisopod",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1"
+      ],
+      "number": "26",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "140",
+      "types": [
+        "Water"
+      ],
+      "evolves_from": "Wimpod",
+      "attacks": [
+        {
+          "name": "Vital Slash",
+          "cost": [
+            "Water"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "30",
+          "text": "If your opponent's Pokémon is Knocked Out by damage from this attack, during your opponent's next turn, this Pokémon takes no damage or effects from attacks."
+        },
+        {
+          "name": "Hidden Power",
+          "cost": [
+            "Colorless",
+            "Colorless",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 3,
+          "damage": "150",
+          "text": "During your next turn, this Pokémon can't attack."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Lightning",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-27",
+      "name": "Mareep",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "27",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "70",
+      "types": [
+        "Lightning"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Thunder Wave",
+          "cost": [
+            "Lightning",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "20",
+          "text": "Flip a coin. If heads, your opponent's Active Pokémon is now Paralyzed."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Fighting",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-28",
+      "name": "Flaaffy",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1"
+      ],
+      "number": "28",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "90",
+      "types": [
+        "Lightning"
+      ],
+      "evolves_from": "Mareep",
+      "attacks": [
+        {
+          "name": "Disconnect",
+          "cost": [
+            "Lightning",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "40",
+          "text": "Your opponent can't play any Item cards from their hand during their next turn."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Fighting",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-29",
+      "name": "Ampharos",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 2"
+      ],
+      "number": "29",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "160",
+      "types": [
+        "Lightning"
+      ],
+      "evolves_from": "Flaaffy",
+      "attacks": [
+        {
+          "name": "Flash Bolt",
+          "cost": [
+            "Lightning",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "140",
+          "text": "During your next turn, this Pokémon can't use Flash Bolt."
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Synchro Pulse",
+          "type": "Ability",
+          "text": "If your hand and your opponent's hand have the same number of cards, this Pokémon's attacks do 80 more damage to your opponent's Active Pokémon."
+        }
+      ],
+      "weaknesses": [
+        {
+          "type": "Fighting",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-30",
+      "name": "Emolga",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "30",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "70",
+      "types": [
+        "Lightning"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Little Errand",
+          "cost": [
+            "Colorless"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "",
+          "text": "Search your deck for up to 2 basic Energy cards, reveal them, and put them into your hand. Then, shuffle your deck."
+        },
+        {
+          "name": "Sky Return",
+          "cost": [
+            "Lightning"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "30",
+          "text": "Return this Pokémon and all attached cards to your hand."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Fighting",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-31",
+      "name": "Deoxys",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "31",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "110",
+      "types": [
+        "Psychic"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Genome Charge",
+          "cost": [
+            "Colorless"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "",
+          "text": "Search your deck for up to 2 basic Psychic Energy cards and attach them to this Pokémon. Then, shuffle your deck."
+        },
+        {
+          "name": "Psychic",
+          "cost": [
+            "Psychic",
+            "Psychic",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 3,
+          "damage": "80+",
+          "text": "This attack does 20 more damage for each Energy attached to your opponent's Active Pokémon."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Darkness",
+          "value": "×2"
+        }
+      ],
+      "resistances": [
+        {
+          "type": "Fighting",
+          "value": "-30"
+        }
+      ],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-32",
+      "name": "Deoxys",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "32",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "120",
+      "types": [
+        "Psychic"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Psy Spear",
+          "cost": [
+            "Psychic",
+            "Psychic",
+            "Psychic"
+          ],
+          "convertedEnergyCost": 3,
+          "damage": "120",
+          "text": "If this Pokémon has at least 2 extra Energy attached (in addition to this attack's cost), this attack also does 120 damage to 1 of your opponent's Benched Pokémon. (Don't apply Weakness and Resistance for Benched Pokémon.)"
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Darkness",
+          "value": "×2"
+        }
+      ],
+      "resistances": [
+        {
+          "type": "Fighting",
+          "value": "-30"
+        }
+      ],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-33",
+      "name": "Deoxys",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "33",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "130",
+      "types": [
+        "Psychic"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Psy Protect",
+          "cost": [
+            "Psychic",
+            "Psychic",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 3,
+          "damage": "80",
+          "text": "During your opponent's next turn, this Pokémon takes no damage from attacks from your opponent's Pokémon that have any Abilities."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Darkness",
+          "value": "×2"
+        }
+      ],
+      "resistances": [
+        {
+          "type": "Fighting",
+          "value": "-30"
+        }
+      ],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-34",
+      "name": "Deoxys",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "34",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "100",
+      "types": [
+        "Psychic"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Psy Speed",
+          "cost": [
+            "Psychic"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "30",
+          "text": "You may draw cards until you have 5 cards in your hand."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Darkness",
+          "value": "×2"
+        }
+      ],
+      "resistances": [
+        {
+          "type": "Fighting",
+          "value": "-30"
+        }
+      ],
+      "retreat_cost": [],
+      "rules": []
+    },
+    {
+      "id": "me4-35",
+      "name": "Mega Floette ex",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1",
+        "MEGA",
+        "ex"
+      ],
+      "number": "35",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "250",
+      "types": [
+        "Psychic"
+      ],
+      "evolves_from": "Flabébé",
+      "attacks": [
+        {
+          "name": "Gentle Light",
+          "cost": [
+            "Psychic"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "",
+          "text": "Heal 30 damage from each Pokémon (both yours and your opponent's)."
+        },
+        {
+          "name": "Eternity Bloom",
+          "cost": [
+            "Psychic",
+            "Psychic",
+            "Psychic"
+          ],
+          "convertedEnergyCost": 3,
+          "damage": "200",
+          "text": "Search your deck for up to 4 basic Psychic Energy cards and attach them to your Benched Pokémon in any way you like. Then, shuffle your deck."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Metal",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": [
+        "Mega Evolution ex Rule: When your Mega Evolution Pokémon ex is Knocked Out, your opponent takes 3 Prize cards."
+      ]
+    },
+    {
+      "id": "me4-36",
+      "name": "Espurr",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "36",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "60",
+      "types": [
+        "Psychic"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Buddy Attack",
+          "cost": [
+            "Psychic"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "10+",
+          "text": "If you played Tomes of Transformation from your hand during this turn, this attack does 60 more damage."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Darkness",
+          "value": "×2"
+        }
+      ],
+      "resistances": [
+        {
+          "type": "Fighting",
+          "value": "-30"
+        }
+      ],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-37",
+      "name": "Meowstic",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1"
+      ],
+      "number": "37",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "100",
+      "types": [
+        "Psychic"
+      ],
+      "evolves_from": "Espurr",
+      "attacks": [
+        {
+          "name": "Trick Step",
+          "cost": [
+            "Psychic",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "80",
+          "text": "You may move an Energy from your opponent's Active Pokémon to 1 of their Benched Pokémon."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Darkness",
+          "value": "×2"
+        }
+      ],
+      "resistances": [
+        {
+          "type": "Fighting",
+          "value": "-30"
+        }
+      ],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-38",
+      "name": "Phantump",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "38",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "70",
+      "types": [
+        "Psychic"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Mumble",
+          "cost": [
+            "Psychic"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "10",
+          "text": ""
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Grudgeful Evolution",
+          "type": "Ability",
+          "text": "Once during your turn, you may put a Pokémon that evolves from this Pokémon from your hand onto this Pokémon to evolve it. If you do, put 2 damage counters on the evolved Pokémon. (You can't use this Ability during your first turn.)"
+        }
+      ],
+      "weaknesses": [
+        {
+          "type": "Darkness",
+          "value": "×2"
+        }
+      ],
+      "resistances": [
+        {
+          "type": "Fighting",
+          "value": "-30"
+        }
+      ],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-39",
+      "name": "Trevenant",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1"
+      ],
+      "number": "39",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "130",
+      "types": [
+        "Psychic"
+      ],
+      "evolves_from": "Phantump",
+      "attacks": [
+        {
+          "name": "Cursed Root",
+          "cost": [
+            "Psychic"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "30",
+          "text": "During your opponent's next turn, the Defending Pokémon can't have Energy attached to it from your opponent's hand."
+        },
+        {
+          "name": "Overpain",
+          "cost": [
+            "Psychic",
+            "Psychic"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "60+",
+          "text": "This attack does 10 more damage for each damage counter on all of your opponent's Pokémon."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Darkness",
+          "value": "×2"
+        }
+      ],
+      "resistances": [
+        {
+          "type": "Fighting",
+          "value": "-30"
+        }
+      ],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-40",
+      "name": "Pumpkaboo",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "40",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "60",
+      "types": [
+        "Psychic"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Stomp",
+          "cost": [
+            "Psychic"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "20",
+          "text": ""
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Darkness",
+          "value": "×2"
+        }
+      ],
+      "resistances": [
+        {
+          "type": "Fighting",
+          "value": "-30"
+        }
+      ],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-41",
+      "name": "Gourgeist ex",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1",
+        "ex"
+      ],
+      "number": "41",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "270",
+      "types": [
+        "Psychic"
+      ],
+      "evolves_from": "Pumpkaboo",
+      "attacks": [
+        {
+          "name": "Horror Rondo",
+          "cost": [
+            "Psychic"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "30+",
+          "text": "This attack does 50 more damage for each of your Benched Pokémon that has any damage counters on it."
+        },
+        {
+          "name": "Ghost Touch",
+          "cost": [
+            "Psychic",
+            "Psychic"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "140",
+          "text": "Discard a random card from your opponent's hand."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Darkness",
+          "value": "×2"
+        }
+      ],
+      "resistances": [
+        {
+          "type": "Fighting",
+          "value": "-30"
+        }
+      ],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": [
+        "Pokémon ex rule: When your Pokémon ex is Knocked Out, your opponent takes 2 Prize cards."
+      ]
+    },
+    {
+      "id": "me4-42",
+      "name": "Xerneas",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "42",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "130",
+      "types": [
+        "Psychic"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Geostorm",
+          "cost": [
+            "Psychic",
+            "Psychic",
+            "Psychic"
+          ],
+          "convertedEnergyCost": 3,
+          "damage": "30×",
+          "text": "This attack does 30 damage for each Psychic Energy attached to all of your Pokémon."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Metal",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-43",
+      "name": "Sudowoodo",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "43",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "110",
+      "types": [
+        "Fighting"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Trials and Trip-ulations",
+          "cost": [
+            "Colorless"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "",
+          "text": "Search your deck for up to 2 Tomes of Transformation cards, reveal them, and put them into your hand. Then, shuffle your deck."
+        },
+        {
+          "name": "Rock Hurl",
+          "cost": [
+            "Fighting"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "30",
+          "text": "This attack's damage isn't affected by Resistance."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Grass",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-44",
+      "name": "Phanpy",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "44",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "80",
+      "types": [
+        "Fighting"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Mud-Slap",
+          "cost": [
+            "Fighting"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "10",
+          "text": ""
+        },
+        {
+          "name": "Rollout",
+          "cost": [
+            "Colorless",
+            "Colorless",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 3,
+          "damage": "40",
+          "text": ""
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Grass",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-45",
+      "name": "Donphan",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1"
+      ],
+      "number": "45",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "150",
+      "types": [
+        "Fighting"
+      ],
+      "evolves_from": "Phanpy",
+      "attacks": [
+        {
+          "name": "No Reprieve",
+          "cost": [
+            "Fighting"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "20",
+          "text": "During your next turn, attacks used by this Pokémon do 120 more damage to your opponent's Active Pokémon."
+        },
+        {
+          "name": "Smashing Headbutt",
+          "cost": [
+            "Fighting",
+            "Colorless",
+            "Colorless",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 4,
+          "damage": "180",
+          "text": "Discard 2 Energy from this Pokémon."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Grass",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-46",
+      "name": "Baltoy",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "46",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "70",
+      "types": [
+        "Fighting"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Continuous Spin",
+          "cost": [
+            "Fighting"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "30+",
+          "text": "Flip a coin until you get tails. This attack does 30 damage for each heads."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Grass",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-47",
+      "name": "Claydol",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 2"
+      ],
+      "number": "47",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "120",
+      "types": [
+        "Fighting"
+      ],
+      "evolves_from": "Baltoy",
+      "attacks": [
+        {
+          "name": "Devolution Ray",
+          "cost": [
+            "Fighting"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "50",
+          "text": "If your opponent's Active Pokémon is an evolved Pokémon, devolve it by putting the highest Stage Evolution card on it into your opponent's hand."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Grass",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-48",
+      "name": "Zubat",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "48",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "40",
+      "types": [
+        "Darkness"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Supersonic",
+          "cost": [
+            "Darkness"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "",
+          "text": "Your opponent's Active Pokémon is now Confused."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Lightning",
+          "value": "×2"
+        }
+      ],
+      "resistances": [
+        {
+          "type": "Fighting",
+          "value": "-30"
+        }
+      ],
+      "retreat_cost": [],
+      "rules": []
+    },
+    {
+      "id": "me4-49",
+      "name": "Golbat",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1"
+      ],
+      "number": "49",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "80",
+      "types": [
+        "Darkness"
+      ],
+      "evolves_from": "Zubat",
+      "attacks": [
+        {
+          "name": "Covert Flight",
+          "cost": [
+            "Darkness"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "30",
+          "text": "During your opponent's next turn, prevent all damage done to this Pokémon by attacks from Basic Pokémon."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Lightning",
+          "value": "×2"
+        }
+      ],
+      "resistances": [
+        {
+          "type": "Fighting",
+          "value": "-30"
+        }
+      ],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-50",
+      "name": "Crobat",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 2"
+      ],
+      "number": "50",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "130",
+      "types": [
+        "Darkness"
+      ],
+      "evolves_from": "Golbat",
+      "attacks": [
+        {
+          "name": "Poison Sound Wave",
+          "cost": [
+            "Darkness"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "80",
+          "text": "Your opponent's Active Pokémon is now Confused and Poisoned."
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Nighttime Maneuvers",
+          "type": "Ability",
+          "text": "Once during your turn, if this Pokémon is in the Active Spot, you may use this Ability. Search your deck for a card. Shuffle your deck, then put that card on top of it."
+        }
+      ],
+      "weaknesses": [
+        {
+          "type": "Lightning",
+          "value": "×2"
+        }
+      ],
+      "resistances": [
+        {
+          "type": "Fighting",
+          "value": "-30"
+        }
+      ],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-51",
+      "name": "Qwilfish",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "51",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "90",
+      "types": [
+        "Darkness"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Venoshock",
+          "cost": [
+            "Darkness"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "30+",
+          "text": "If your opponent's Active Pokémon is Poisoned, this attack does 50 more damage."
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Poison Point",
+          "type": "Ability",
+          "text": "If this Pokémon is in the Active Spot and is damaged by an attack from your opponent's Pokémon (even if this Pokémon is Knocked Out), the Attacking Pokémon is now Poisoned."
+        }
+      ],
+      "weaknesses": [
+        {
+          "type": "Fighting",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-52",
+      "name": "Stunky",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "52",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "70",
+      "types": [
+        "Darkness"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Scratch",
+          "cost": [
+            "Darkness"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "20",
+          "text": ""
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Fighting",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-53",
+      "name": "Skuntank",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1"
+      ],
+      "number": "53",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "110",
+      "types": [
+        "Darkness"
+      ],
+      "evolves_from": "Stunky",
+      "attacks": [
+        {
+          "name": "Rear Kick",
+          "cost": [
+            "Darkness"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "40",
+          "text": ""
+        },
+        {
+          "name": "Smash Turn",
+          "cost": [
+            "Darkness",
+            "Darkness",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 3,
+          "damage": "100",
+          "text": "Switch this Pokémon with 1 of your Benched Pokémon."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Fighting",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-54",
+      "name": "Trubbish",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "54",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "70",
+      "types": [
+        "Darkness"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Acid Spray",
+          "cost": [
+            "Darkness"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "10",
+          "text": "Flip a coin. If heads, discard an Energy from your opponent's Active Pokémon."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Fighting",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-55",
+      "name": "Garbodor",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1"
+      ],
+      "number": "55",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "140",
+      "types": [
+        "Darkness"
+      ],
+      "evolves_from": "Trubbish",
+      "attacks": [
+        {
+          "name": "Sludge Bomb",
+          "cost": [
+            "Darkness",
+            "Darkness",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 3,
+          "damage": "100",
+          "text": ""
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Trash Downer",
+          "type": "Ability",
+          "text": "Attacks used by your opponent's Active Pokémon that has a Pokémon Tool attached do 20 less damage (before applying Weakness and Resistance)."
+        }
+      ],
+      "weaknesses": [
+        {
+          "type": "Fighting",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-56",
+      "name": "Skrelp",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "56",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "70",
+      "types": [
+        "Darkness"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Hook",
+          "cost": [
+            "Colorless"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "10",
+          "text": ""
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Fighting",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-57",
+      "name": "Beldum",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "57",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "70",
+      "types": [
+        "Metal"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Headbutt",
+          "cost": [
+            "Metal"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "10",
+          "text": ""
+        },
+        {
+          "name": "Beam",
+          "cost": [
+            "Metal",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "20",
+          "text": ""
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Fire",
+          "value": "×2"
+        }
+      ],
+      "resistances": [
+        {
+          "type": "Grass",
+          "value": "-30"
+        }
+      ],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-58",
+      "name": "Metang",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1"
+      ],
+      "number": "58",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "100",
+      "types": [
+        "Metal"
+      ],
+      "evolves_from": "Beldum",
+      "attacks": [
+        {
+          "name": "Metal Claw",
+          "cost": [
+            "Metal"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "30",
+          "text": ""
+        },
+        {
+          "name": "Guard Press",
+          "cost": [
+            "Metal",
+            "Metal",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 3,
+          "damage": "70",
+          "text": "During your opponent's next turn, this Pokémon takes 30 less damage from attacks."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Fire",
+          "value": "×2"
+        }
+      ],
+      "resistances": [
+        {
+          "type": "Grass",
+          "value": "-30"
+        }
+      ],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-59",
+      "name": "Metagross",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 2"
+      ],
+      "number": "59",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "180",
+      "types": [
+        "Metal"
+      ],
+      "evolves_from": "Metang",
+      "attacks": [
+        {
+          "name": "Bounce Back",
+          "cost": [
+            "Metal"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "60",
+          "text": "Switch out your opponent's Active Pokémon to the Bench. (Your opponent chooses the new Active Pokémon.)"
+        },
+        {
+          "name": "Metallic Hammer",
+          "cost": [
+            "Metal",
+            "Metal",
+            "Metal",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 4,
+          "damage": "150+",
+          "text": "You may discard 3 Metal Energy from this Pokémon. If you do, this attack does 150 more damage."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Fire",
+          "value": "×2"
+        }
+      ],
+      "resistances": [
+        {
+          "type": "Grass",
+          "value": "-30"
+        }
+      ],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-60",
+      "name": "Ferroseed",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "60",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "70",
+      "types": [
+        "Metal"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Rolling Tackle",
+          "cost": [
+            "Metal",
+            "Metal"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "40",
+          "text": ""
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Fire",
+          "value": "×2"
+        }
+      ],
+      "resistances": [
+        {
+          "type": "Grass",
+          "value": "-30"
+        }
+      ],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-61",
+      "name": "Ferrothorn",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 2"
+      ],
+      "number": "61",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "130",
+      "types": [
+        "Metal"
+      ],
+      "evolves_from": "Ferroseed",
+      "attacks": [
+        {
+          "name": "Special Whip",
+          "cost": [
+            "Metal",
+            "Metal"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "70+",
+          "text": "If this Pokémon has any Special Energy attached, this attack does 70 more damage."
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Startling Drop",
+          "type": "Ability",
+          "text": "During your opponent's turn, if this Pokémon is discarded from your deck by an effect of an attack or Ability from your opponent's Pokémon, or by an effect of your opponent's Item or Supporter cards, discard the top 8 cards of your opponent's deck."
+        }
+      ],
+      "weaknesses": [
+        {
+          "type": "Fire",
+          "value": "×2"
+        }
+      ],
+      "resistances": [
+        {
+          "type": "Grass",
+          "value": "-30"
+        }
+      ],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-62",
+      "name": "Cobalion ex",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic",
+        "ex"
+      ],
+      "number": "62",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "210",
+      "types": [
+        "Metal"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Power Tackle",
+          "cost": [
+            "Metal",
+            "Metal",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 3,
+          "damage": "200",
+          "text": "During your next turn, this Pokémon can't attack."
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Metal Road",
+          "type": "Ability",
+          "text": "Once during your turn, when this Pokémon moves from your Bench to the Active Spot, you may use this Ability. Move any amount of Metal Energy from your other Pokémon to this Pokémon."
+        }
+      ],
+      "weaknesses": [
+        {
+          "type": "Fire",
+          "value": "×2"
+        }
+      ],
+      "resistances": [
+        {
+          "type": "Grass",
+          "value": "-30"
+        }
+      ],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": [
+        "Pokémon ex rule: When your Pokémon ex is Knocked Out, your opponent takes 2 Prize cards."
+      ]
+    },
+    {
+      "id": "me4-63",
+      "name": "Mega Dragalge ex",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1",
+        "MEGA",
+        "ex"
+      ],
+      "number": "63",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "330",
+      "types": [
+        "Dragon"
+      ],
+      "evolves_from": "Skrelp",
+      "attacks": [
+        {
+          "name": "Corrosive Liquid",
+          "cost": [
+            "Colorless",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "",
+          "text": "Discard all Pokémon Tools and Special Energy from all of your opponent's Pokémon."
+        },
+        {
+          "name": "Pernicious Poison",
+          "cost": [
+            "Water",
+            "Darkness"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "",
+          "text": "Your opponent's Active Pokémon is now Poisoned. During Pokémon Checkup, place 16 damage counters on that Pokémon instead of 1."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": [
+        "Mega Evolution ex Rule: When your Mega Evolution Pokémon ex is Knocked Out, your opponent takes 3 Prize cards."
+      ]
+    },
+    {
+      "id": "me4-64",
+      "name": "Goomy",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "64",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "60",
+      "types": [
+        "Dragon"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Water Absorb",
+          "cost": [
+            "Water"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "30",
+          "text": "Heal 30 damage from this Pokémon."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-65",
+      "name": "Sliggoo",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1"
+      ],
+      "number": "65",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "90",
+      "types": [
+        "Dragon"
+      ],
+      "evolves_from": "Goomy",
+      "attacks": [
+        {
+          "name": "Slap",
+          "cost": [
+            "Water"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "70",
+          "text": ""
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-66",
+      "name": "Goodra",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 2"
+      ],
+      "number": "66",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "160",
+      "types": [
+        "Dragon"
+      ],
+      "evolves_from": "Sliggoo",
+      "attacks": [
+        {
+          "name": "Dragon Pulse",
+          "cost": [
+            "Water",
+            "Psychic"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "160",
+          "text": "Discard the top card of your deck."
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Super Slippery Slope",
+          "type": "Ability",
+          "text": "Whenever your opponent's Active Pokémon retreats, your opponent flips a coin. If tails, their Active Pokémon doesn't retreat and the Energy for the Retreat Cost doesn't get discarded. This Ability doesn't stack."
+        }
+      ],
+      "weaknesses": [],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-67",
+      "name": "Tauros",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "67",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "130",
+      "types": [
+        "Colorless"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Target Together",
+          "cost": [
+            "Colorless",
+            "Colorless"
+          ],
+          "convertedEnergyCost": 2,
+          "damage": "",
+          "text": "Choose 1 of your opponent's Pokémon, and flip a coin for each of your Pokémon that has Tauros in its name. This attack does 50 damage to the Pokémon you chose for each heads."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Fighting",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-68",
+      "name": "Patrat",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "68",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "70",
+      "types": [
+        "Colorless"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Bite",
+          "cost": [
+            "Colorless"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "10",
+          "text": ""
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Watchful Eyes",
+          "type": "Ability",
+          "text": "Damage counters on a Pokémon (yours or your opponent's) cannot be moved to another Pokémon."
+        }
+      ],
+      "weaknesses": [
+        {
+          "type": "Fighting",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless",
+        "Colorless",
+        "Colorless",
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-69",
+      "name": "Watchog",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1"
+      ],
+      "number": "69",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "100",
+      "types": [
+        "Colorless"
+      ],
+      "evolves_from": "Patrat",
+      "attacks": [
+        {
+          "name": "Snipe Check",
+          "cost": [
+            "Colorless"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "",
+          "text": "Flip 3 coins. For each heads, look at your opponent's hand, choose a card, and put it on top of your opponent's deck. Then, your opponent shuffles their deck."
+        },
+        {
+          "name": "Low Kick",
+          "cost": [
+            "Colorless"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "50",
+          "text": ""
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Fighting",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-70",
+      "name": "Minccino",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Basic"
+      ],
+      "number": "70",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "70",
+      "types": [
+        "Colorless"
+      ],
+      "evolves_from": null,
+      "attacks": [
+        {
+          "name": "Take Down",
+          "cost": [
+            "Colorless"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "30",
+          "text": "This Pokémon also does 10 damage to itself."
+        }
+      ],
+      "abilities": [],
+      "weaknesses": [
+        {
+          "type": "Fighting",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [
+        "Colorless"
+      ],
+      "rules": []
+    },
+    {
+      "id": "me4-71",
+      "name": "Cinccino ex",
+      "supertype": "Pokémon",
+      "subtypes": [
+        "Stage 1",
+        "ex"
+      ],
+      "number": "71",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "hp": "240",
+      "types": [
+        "Colorless"
+      ],
+      "evolves_from": "Minccino",
+      "attacks": [
+        {
+          "name": "Energy Slap",
+          "cost": [
+            "Colorless"
+          ],
+          "convertedEnergyCost": 1,
+          "damage": "40×",
+          "text": "This attack does 40 damage for each Energy attached to this Pokémon."
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Smooth Coat",
+          "type": "Ability",
+          "text": "If any damage is done to this Pokémon by an attack, flip a coin. If heads, prevent that damage."
+        }
+      ],
+      "weaknesses": [
+        {
+          "type": "Fighting",
+          "value": "×2"
+        }
+      ],
+      "resistances": [],
+      "retreat_cost": [],
+      "rules": [
+        "Pokémon ex rule: When your Pokémon ex is Knocked Out, your opponent takes 2 Prize cards."
+      ]
+    },
+    {
+      "id": "me4-72",
+      "name": "Special Red Card",
+      "supertype": "Trainer",
+      "subtypes": [
+        "Item"
+      ],
+      "number": "72",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "rules": [
+        "You may use this card only if your opponent has 3 Prize cards or fewer remaining. Your opponent shuffles their hand and puts it on the bottom of their deck. If your opponent put any cards on the bottom of their deck this way, they draw 3 cards."
+      ]
+    },
+    {
+      "id": "me4-73",
+      "name": "Big Catching Net",
+      "supertype": "Trainer",
+      "subtypes": [
+        "Item"
+      ],
+      "number": "73",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "rules": [
+        "Shuffle up to 3 in any combination of Water Pokémon and Basic Water Energy from your discard pile into your deck."
+      ]
+    },
+    {
+      "id": "me4-74",
+      "name": "Tomes of Transformation",
+      "supertype": "Trainer",
+      "subtypes": [
+        "Item"
+      ],
+      "number": "74",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "rules": [
+        "You must play 2 Tomes of Transformation at once (only apply the effect once). Choose a Basic Pokémon in your discard and switch it with 1 of your Basic Pokémon in play. Any attached cards, damage counters, Special Conditions, and any other effects remain on the new Pokémon."
+      ]
+    },
+    {
+      "id": "me4-75",
+      "name": "AZ's Tranquility",
+      "supertype": "Trainer",
+      "subtypes": [
+        "Supporter"
+      ],
+      "number": "75",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "rules": [
+        "Switch your Active Pokémon with 1 of your Benched Pokémon. If you moved a Pokémon to your Bench in this way, heal 80 damage from that Pokémon.",
+        "You may play only 1 Supporter card during your turn."
+      ]
+    },
+    {
+      "id": "me4-76",
+      "name": "Philippe",
+      "supertype": "Trainer",
+      "subtypes": [
+        "Supporter"
+      ],
+      "number": "76",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "rules": [
+        "Attach up to 2 Metal Energy from your discard pile to 1 of your Metal Pokémon.",
+        "You may play only 1 Supporter card during your turn."
+      ]
+    },
+    {
+      "id": "me4-77",
+      "name": "Roxie's Performance",
+      "supertype": "Trainer",
+      "subtypes": [
+        "Supporter"
+      ],
+      "number": "77",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "rules": [
+        "During your opponent's next turn, their Poisoned Pokémon can't retreat (this includes newly Poisoned Pokémon).",
+        "You may play only 1 Supporter card during your turn."
+      ]
+    },
+    {
+      "id": "me4-78",
+      "name": "Emma",
+      "supertype": "Trainer",
+      "subtypes": [
+        "Supporter"
+      ],
+      "number": "78",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "rules": [
+        "Look at your opponent's hand. Draw a card for each Pokémon you find there.",
+        "You may play only 1 Supporter card during your turn."
+      ]
+    },
+    {
+      "id": "me4-79",
+      "name": "Ange Floette",
+      "supertype": "Trainer",
+      "subtypes": [
+        "Stadium"
+      ],
+      "number": "79",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "rules": [
+        "You can play this card only if you discard the Prism Tower in play, and it can be played in the same turn you played Prism Tower.",
+        "The maximum HP of Mega Floette ex in play is increased by 150.",
+        "You may play only 1 Stadium card during your turn. Put it next to the Active Spot, and discard it if another Stadium comes into play. A Stadium with the same name can't be played."
+      ]
+    },
+    {
+      "id": "me4-80",
+      "name": "Prism Tower",
+      "supertype": "Trainer",
+      "subtypes": [
+        "Stadium"
+      ],
+      "number": "80",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "rules": [
+        "Once per turn, each player may discard 2 cards from their hand. If they do, they can draw 1 card.",
+        "You may play only 1 Stadium card during your turn. Put it next to the Active Spot, and discard it if another Stadium comes into play. A Stadium with the same name can't be played."
+      ]
+    },
+    {
+      "id": "me4-81",
+      "name": "Nitro Fire Energy",
+      "supertype": "Energy",
+      "subtypes": [
+        "Special"
+      ],
+      "number": "81",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "rules": [
+        "While attached to a Pokémon, this card provides 1 Fire Energy.",
+        "If this card gets discarded with the effect of an attack used by the Fire Pokémon this card is attached to, put this card into your hand after applying damage and effects of that attack.",
+        "Doesn't count as a basic Energy card."
+      ]
+    },
+    {
+      "id": "me4-82",
+      "name": "Bubble Water Energy",
+      "supertype": "Energy",
+      "subtypes": [
+        "Special"
+      ],
+      "number": "82",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "rules": [
+        "The Water Pokémon this card is attached to cannot be inflicted with any Special Condition.",
+        "Doesn't count as a basic Energy card."
+      ]
+    },
+    {
+      "id": "me4-83",
+      "name": "Magnet Metal Energy",
+      "supertype": "Energy",
+      "subtypes": [
+        "Special"
+      ],
+      "number": "83",
+      "regulation_mark": "J",
+      "set_code": "me4",
+      "rules": [
+        "The Metal Pokémon this card is attached to has no Retreat Cost.",
+        "Doesn't count as a basic Energy card."
+      ]
     }
   ]
 }

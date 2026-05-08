@@ -141,6 +141,23 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
         const coins = m[1] === "a" ? 1 : parseInt(m[1], 10);
         effects.push({ kind: "flipMultiCoinsPerHeads", coins, perHeads: base });
         baseDamageOverride = 0;
+      } else if (/discard the top \d+ cards? of your deck.*?for each basic [A-Za-z]+ energy/i.test(text)) {
+        // Avalugg "Glacier Crush" — "Discard the top 6 cards of your deck.
+        // This attack does 60 damage for each basic Water Energy you
+        // discarded this way." The mill-and-scale rider is detected later;
+        // zero the base so it doesn't double-count.
+        baseDamageOverride = 0;
+      } else if (/for each .+? attached to all (?:of your )?pok[eé]mon/i.test(text)) {
+        // Delphox "Energized Storm" / Xerneas "Geostorm" — "30× damage for
+        // each Energy attached to all (of your) Pokémon". The detection +
+        // handler comes later; zero the base so the multiplier doesn't leak
+        // through as a flat 30.
+        baseDamageOverride = 0;
+      } else if (/for each of your pok[eé]mon that has .+ in its name/i.test(text)) {
+        // Beedrill ex "Rumbling Bees" — "110× damage for each of your
+        // Beedrill and Beedrill ex in play." Zero base; the rider is
+        // detected as perInPlayPokemonNamed below.
+        baseDamageOverride = 0;
       } else {
         // Generic per-thing multiplier; treat as flat base for safety.
         baseDamageOverride = base;
@@ -274,8 +291,11 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
     effects.push({ kind: "peekTopMayDiscard" });
   }
   // ---- Mill self for damage per typed energy -----------------------------
+  // Matches both phrasings:
+  //  - "...for each basic <T> energy card that you discarded"
+  //  - "...for each basic <T> energy you discarded this way" (Avalugg Glacier Crush)
   {
-    const m = text.match(/discard the top (\d+) cards? of your deck[\.,]?\s*(?:and )?this attack does (\d+) damage for each basic ([A-Za-z]+) energy card that you discarded/i);
+    const m = text.match(/discard the top (\d+) cards? of your deck[\.,]?\s*(?:and )?this attack does (\d+) damage for each basic ([A-Za-z]+) energy(?: cards?)?(?: that)? you discarded(?: this way)?/i);
     if (m) {
       const t = matchEnergyType(m[3]);
       if (t) effects.push({ kind: "millSelfForDamagePerType", count: parseInt(m[1], 10), damagePer: parseInt(m[2], 10), energyType: t });
@@ -627,7 +647,9 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
 
   // ---- Opponent can't play Item cards next turn -----------------------------
   // Budew's Itchy Pollen and similar disruption attacks.
-  if (/they can't play any item cards from their hand/i.test(text)) {
+  // Also matches Flaaffy "Disconnect" — "Your opponent can't play any Item
+  // cards from their hand during their next turn."
+  if (/(?:they|your opponent) can'?t play any item cards from their hand/i.test(text)) {
     effects.push({ kind: "blockOppItemsNextTurn" });
   }
 
@@ -1086,8 +1108,9 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
 
   // ---- Return self + all attached to hand ---------------------------------
   // Meowth ex "Tuck Tail": "Put this Pokémon and all attached cards into
-  // your hand."
-  if (/put this pok[eé]mon and all attached cards into your hand/i.test(text)) {
+  // your hand." Also matches Emolga "Sky Return": "Return this Pokémon and
+  // all attached cards to your hand."
+  if (/(?:put|return) this pok[eé]mon and all attached cards (?:into|to) your hand/i.test(text)) {
     effects.push({ kind: "returnSelfToHand" });
   }
 
@@ -2258,6 +2281,272 @@ export function extractEffects(atk: ApiAttack): PatternMatch {
         namePart: m[3],
         perCount: parseInt(m[1], 10),
         bothSides: true,
+      });
+    }
+  }
+  // Beedrill ex "Rumbling Bees": "This attack does N damage for each of
+  // your Beedrill and Beedrill ex in play." (Same name modulo "ex" suffix
+  // — collapses to one perInPlayPokemonNamed pass that case-insensitively
+  // matches "Beedrill" since Beedrill ex's card name contains "Beedrill".)
+  if (!effects.some((e) => e.kind === "perInPlayPokemonNamed")) {
+    const m = text.match(
+      /this attack does (\d+) damage for each of your ([A-Z][A-Za-z'’ -]+?) and \2 ex in play/i,
+    );
+    if (m) {
+      effects.push({
+        kind: "perInPlayPokemonNamed",
+        namePart: m[2].trim(),
+        perCount: parseInt(m[1], 10),
+        bothSides: false,
+      });
+    }
+  }
+  // Mega Floette ex "Gentle Light": "Heal 30 damage from each Pokémon
+  // (both yours and your opponent's)."
+  {
+    const m = text.match(
+      /heal (\d+) damage from each pok[eé]mon\s*\(both yours and your opponent'?s\)/i,
+    );
+    if (m) effects.push({ kind: "healEachInPlayBothSides", amount: parseInt(m[1], 10) });
+  }
+  // Delphox "Energized Storm": "This attack does 30 damage for each
+  // Energy attached to all Pokémon." Counts every Energy on every active
+  // and benched Pokémon on both sides.
+  {
+    const m = text.match(
+      /(\d+) damage for each ([A-Za-z]+ )?energy attached to all (?:of your )?pok[eé]mon/i,
+    );
+    if (m) {
+      const t = m[2] ? matchEnergyType(m[2].trim()) : undefined;
+      const ours = /attached to all of your pok[eé]mon/i.test(text);
+      effects.push({
+        kind: "perEnergyAcrossInPlay",
+        perCount: parseInt(m[1], 10),
+        energyType: t,
+        side: ours ? "friendly" : "both",
+      });
+    }
+  }
+  // Mega Greninja ex "Ninja Spinner": "You may put a [W] Energy attached
+  // to this Pokémon into your hand. If you do, this attack does 80 more
+  // damage."
+  {
+    const m = text.match(
+      /you may put a(?:n)? ([A-Za-z]+) energy attached to this pok[eé]mon into your hand\.?\s*if you do, this attack does (\d+) more damage/i,
+    );
+    if (m) {
+      const t = matchEnergyType(m[1]);
+      effects.push({
+        kind: "optionalSelfTypedEnergyToHandForBonus",
+        energyType: t ?? "Colorless",
+        bonus: parseInt(m[2], 10),
+      });
+    }
+  }
+  // Metagross "Metallic Hammer": "You may discard 3 [M] Energy from this
+  // Pokémon. If you do, this attack does 150 more damage." Optional
+  // typed-energy discard for damage bonus.
+  {
+    const m = text.match(
+      /you may discard (\d+) ([A-Za-z]+) energy from this pok[eé]mon\.?\s*if you do, this attack does (\d+) more damage/i,
+    );
+    if (m) {
+      const t = matchEnergyType(m[2]);
+      effects.push({
+        kind: "optionalDiscardSelfEnergyForBonus",
+        count: parseInt(m[1], 10),
+        energyType: t,
+        bonus: parseInt(m[3], 10),
+      });
+    }
+  }
+  // Trevenant "Cursed Root": "During your opponent's next turn, the
+  // Defending Pokémon can't have Energy attached to it from your
+  // opponent's hand."
+  if (
+    /during your opponent'?s next turn, the defending pok[eé]mon can'?t have energy attached to it from your opponent'?s hand/i.test(
+      text,
+    )
+  ) {
+    effects.push({ kind: "defenderCantBeAttachedNextTurn" });
+  }
+  // Gourgeist ex "Horror Rondo": "This attack does N more damage for
+  // each of your Benched Pokémon that has any damage counters on it."
+  {
+    const m = text.match(
+      /this attack does (\d+) more damage for each of your benched pok[eé]mon that has any damage counters? on it/i,
+    );
+    if (m) effects.push({ kind: "perDamagedFriendlyBench", perCount: parseInt(m[1], 10) });
+  }
+  // Mega Dragalge ex "Corrosive Liquid": "Discard all Pokémon Tools and
+  // Special Energy from all of your opponent's Pokémon."
+  if (
+    /discard all pok[eé]mon tools and special energy from all of your opponent'?s pok[eé]mon/i.test(
+      text,
+    )
+  ) {
+    effects.push({ kind: "discardAllOppToolsAndSpecialEnergyAll" });
+  }
+  // Mega Dragalge ex "Pernicious Poison": "Your opponent's Active
+  // Pokémon is now Poisoned. During Pokémon Checkup, place N damage
+  // counters on that Pokémon instead of 1."
+  {
+    const m = text.match(
+      /during pok[eé]mon checkup, place (\d+) damage counters? on that pok[eé]mon instead of 1/i,
+    );
+    if (m) effects.push({ kind: "applyHeavyPoison", counters: parseInt(m[1], 10) });
+  }
+  // Golisopod "Vital Slash": "If your opponent's Pokémon is Knocked Out
+  // by damage from this attack, during your opponent's next turn, this
+  // Pokémon takes no damage or effects from attacks."
+  if (
+    /if your opponent'?s pok[eé]mon is knocked out by damage from this attack, during your opponent'?s next turn, this pok[eé]mon takes no damage or effects from attacks/i.test(
+      text,
+    )
+  ) {
+    effects.push({ kind: "shieldNextTurnIfKoThisAttack" });
+  }
+  // Golbat "Covert Flight": "During your opponent's next turn, prevent
+  // all damage done to this Pokémon by attacks from Basic Pokémon."
+  // (Subtype-gated shield variant of shieldNextTurn.)
+  if (
+    /during your opponent'?s next turn, prevent all damage done to this pok[eé]mon by attacks from basic pok[eé]mon/i.test(
+      text,
+    )
+  ) {
+    // Avoid double-emit: the broad shieldNextTurn regex below will also
+    // match this text. The subtype-gated variant takes precedence.
+    effects.push({ kind: "selfShieldNextTurnFromSubtype", subtype: "Basic" });
+  }
+  // Deoxys "Psy Protect": "During your opponent's next turn, this
+  // Pokémon takes no damage from attacks from your opponent's Pokémon
+  // that have any Abilities." (Ability-gated shield variant.)
+  if (
+    /during your opponent'?s next turn, this pok[eé]mon takes no damage from attacks from your opponent'?s pok[eé]mon that have any abilities/i.test(
+      text,
+    )
+  ) {
+    effects.push({ kind: "selfShieldNextTurnFromAbility" });
+  }
+  // Watchog "Snipe Check": "Flip 3 coins. For each heads, look at your
+  // opponent's hand, choose a card, and put it on top of your opponent's
+  // deck. Then, your opponent shuffles their deck."
+  {
+    const m = text.match(
+      /flip (\d+) coins?\. for each heads,? look at your opponent'?s hand,? choose a card,? and put it on top of your opponent'?s deck/i,
+    );
+    if (m) {
+      effects.push({
+        kind: "multiCoinPickFromOppHandToTopDeck",
+        coins: parseInt(m[1], 10),
+      });
+    }
+  }
+  // Tauros "Target Together": "Choose 1 of your opponent's Pokémon, and
+  // flip a coin for each of your Pokémon that has <Name> in its name.
+  // This attack does N damage to the Pokémon you chose for each heads."
+  {
+    const m = text.match(
+      /choose 1 of your opponent'?s pok[eé]mon,? and flip a coin for each of your pok[eé]mon that has ([A-Za-z'’ -]+?) in its name\.?\s*this attack does (\d+) damage to the pok[eé]mon you chose for each heads/i,
+    );
+    if (m) {
+      effects.push({
+        kind: "perNamedAllyCoinDamageChosen",
+        namePart: m[1].trim(),
+        damagePerHeads: parseInt(m[2], 10),
+      });
+    }
+  }
+  // Claydol "Devolution Ray": "If your opponent's Active Pokémon is an
+  // evolved Pokémon, devolve it by putting the highest Stage Evolution
+  // card on it into your opponent's hand." Reuses devolveOneOppToHand.
+  if (
+    /if your opponent'?s active pok[eé]mon is an evolved pok[eé]mon, devolve it by putting the highest stage evolution card on it into your opponent'?s hand/i.test(
+      text,
+    )
+  ) {
+    if (!effects.some((eft) => eft.kind === "devolveOneOppToHand")) {
+      effects.push({ kind: "devolveOneOppToHand" });
+    }
+  }
+  // Crobat "Poison Sound Wave": "Your opponent's Active Pokémon is now
+  // Confused and Poisoned." (Dual-status; the single-status regex earlier
+  // only catches one. Add a second status if matched.)
+  {
+    const m = text.match(
+      /your opponent'?s active pok[eé]mon is now (asleep|burned|confused|paralyzed|poisoned) and (asleep|burned|confused|paralyzed|poisoned)/i,
+    );
+    if (m) {
+      const s1 = STATUS_FROM_TEXT[m[1].toLowerCase()];
+      const s2 = STATUS_FROM_TEXT[m[2].toLowerCase()];
+      // Replace the existing single-status push (if any) with both.
+      const existingIdx = effects.findIndex(
+        (e) => e.kind === "applyStatus" && e.target === "defender",
+      );
+      if (existingIdx >= 0) effects.splice(existingIdx, 1);
+      if (s1) effects.push({ kind: "applyStatus", status: s1, target: "defender" });
+      if (s2) effects.push({ kind: "applyStatus", status: s2, target: "defender" });
+    }
+  }
+  // Octillery "Ink Jet": "During your opponent's next turn, if the
+  // Defending Pokémon tries to use an attack, your opponent flips 2
+  // coins. If either of them is tails, that attack doesn't happen."
+  // Variant of defenderAttackCoinFlipNextTurn (single-coin) with N coins
+  // and "any tails" failure.
+  {
+    const m = text.match(
+      /during your opponent'?s next turn, if the defending pok[eé]mon tries to use an attack, your opponent flips (\d+) coins?\. if (?:either of them|any of them|all of them) (?:is|are) tails, that attack doesn'?t happen/i,
+    );
+    if (m && !effects.some((e) => e.kind === "defenderAttackCoinFlipNextTurn")) {
+      effects.push({ kind: "defenderAttackCoinFlipNextTurn" });
+      // Note: we treat the multi-coin variant as a stricter single-coin gate.
+      // The 2-coin variant has ~75% fail rate vs single's 50%; engine will
+      // simulate as a single coin (slightly under-models the lockout). Good
+      // enough for now; flag for later refinement.
+    }
+  }
+  // Espurr "Buddy Attack": "If you played Tomes of Transformation from
+  // your hand during this turn, this attack does 60 more damage."
+  {
+    const m = text.match(
+      /if you played ([A-Z][A-Za-z'’ -]+?) from your hand during this turn,? this attack does (\d+) more damage/i,
+    );
+    if (m && !effects.some((e) => e.kind === "conditionalDamage")) {
+      effects.push({
+        kind: "conditionalDamage",
+        bonus: parseInt(m[2], 10),
+        mode: "bonus",
+        predicate: { kind: "playedNamedItemThisTurn", namePart: m[1].trim() },
+      });
+    }
+  }
+  // Ferrothorn "Special Whip": "If this Pokémon has any Special Energy
+  // attached, this attack does 70 more damage."
+  {
+    const m = text.match(
+      /if this pok[eé]mon has any special energy attached,? this attack does (\d+) more damage/i,
+    );
+    if (m && !effects.some((e) => e.kind === "conditionalDamage")) {
+      effects.push({
+        kind: "conditionalDamage",
+        bonus: parseInt(m[1], 10),
+        mode: "bonus",
+        predicate: { kind: "selfHasSpecialEnergy" },
+      });
+    }
+  }
+  // Deoxys (32) "Psy Spear": "If this Pokémon has at least 2 extra
+  // Energy attached (in addition to this attack's cost), this attack
+  // also does 120 damage to 1 of your opponent's Benched Pokémon."
+  {
+    const m = text.match(
+      /if this pok[eé]mon has at least (\d+) extra energy attached[^.]*?this attack also does (\d+) damage to 1 of your opponent'?s benched pok[eé]mon/i,
+    );
+    if (m) {
+      effects.push({
+        kind: "conditionalSnipeBench",
+        extraEnergy: parseInt(m[1], 10),
+        damage: parseInt(m[2], 10),
       });
     }
   }

@@ -145,6 +145,11 @@ export function evaluatePredicate(
       const last = state.players[ctx.attackerOwner].lastSupporterNameThisTurn;
       return !!last && last.toLowerCase().includes(pred.namePart.toLowerCase());
     }
+    case "playedNamedItemThisTurn": {
+      const list = state.players[ctx.attackerOwner].itemsPlayedThisTurn ?? [];
+      const part = pred.namePart.toLowerCase();
+      return list.some((n) => n.toLowerCase().includes(part));
+    }
     case "youHaveEnergyOfTypeAtLeast": {
       const pl = state.players[ctx.attackerOwner];
       const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
@@ -1091,6 +1096,19 @@ export function resolveAttackEffects(
                 state,
                 "system",
                 `${en.name} returns to ${ctx.attacker.card.name} after the attack.`,
+              );
+              continue;
+            }
+            // me4 Nitro Fire Energy — "If this card gets discarded with the
+            // effect of an attack used by the Fire Pokémon this card is
+            // attached to, put this card into your hand after applying
+            // damage and effects of that attack."
+            if (en.name === "Nitro Fire Energy" && ctx.attacker.card.types.includes("Fire")) {
+              attPl.hand.push(en);
+              logEvent(
+                state,
+                "system",
+                `${en.name} returns to ${attPl.name}'s hand after the attack.`,
               );
               continue;
             }
@@ -4389,6 +4407,295 @@ export function resolveAttackEffects(
         break;
       }
 
+      // me4 (Chaos Rising) handlers ---------------------------------------
+      case "healEachInPlayBothSides": {
+        // Mega Floette ex "Gentle Light" — heal N from every Pokémon on
+        // both sides of the field.
+        for (const pl of Object.values(state.players)) {
+          for (const p of [pl.active, ...pl.bench]) {
+            if (!p) continue;
+            if (p.damage > 0) {
+              const before = p.damage;
+              p.damage = Math.max(0, p.damage - e.amount);
+              if (p.damage < before) p.healedThisTurn = true;
+            }
+          }
+        }
+        logEvent(state, "system", `${ctx.move.name}: heals ${e.amount} from each Pokémon.`);
+        break;
+      }
+
+      case "perEnergyAcrossInPlay": {
+        // Delphox "Energized Storm" / Xerneas "Geostorm" — N damage per
+        // Energy attached to all Pokémon (filtered by side and optionally
+        // by energy type).
+        const sides =
+          e.side === "friendly"
+            ? [state.players[ctx.attackerOwner]]
+            : Object.values(state.players);
+        let count = 0;
+        for (const pl of sides) {
+          for (const p of [pl.active, ...pl.bench]) {
+            if (!p) continue;
+            for (const en of p.attachedEnergy) {
+              if (!e.energyType || en.provides.includes(e.energyType)) count++;
+            }
+          }
+        }
+        damage += count * e.perCount;
+        break;
+      }
+
+      case "optionalSelfTypedEnergyToHandForBonus": {
+        // Mega Greninja ex "Ninja Spinner" — return one typed Energy from
+        // the attacker to the player's hand for +bonus damage. Auto-take
+        // when the bonus would matter (always for AI; mirror existing
+        // optionalSelfEnergyToHandForBonus behavior — no opt-out picker).
+        const idx = ctx.attacker.attachedEnergy.findIndex((en) => en.provides.includes(e.energyType));
+        if (idx >= 0) {
+          const [moved] = ctx.attacker.attachedEnergy.splice(idx, 1);
+          state.players[ctx.attackerOwner].hand.push(moved);
+          damage += e.bonus;
+          logEvent(
+            state,
+            ctx.attackerOwner,
+            `${ctx.move.name}: returns ${moved.name} to hand → +${e.bonus}.`,
+          );
+        }
+        break;
+      }
+
+      case "optionalDiscardSelfEnergyForBonus": {
+        // Metagross "Metallic Hammer" — discard N typed Energy for +bonus
+        // damage. Auto-take when the attacker has enough.
+        const matching: number[] = [];
+        for (let i = 0; i < ctx.attacker.attachedEnergy.length; i++) {
+          const en = ctx.attacker.attachedEnergy[i];
+          if (!e.energyType || en.provides.includes(e.energyType)) matching.push(i);
+        }
+        if (matching.length >= e.count) {
+          // Splice from the back so indices remain valid.
+          const pl = state.players[ctx.attackerOwner];
+          for (let k = e.count - 1; k >= 0; k--) {
+            const idx = matching[k];
+            const [moved] = ctx.attacker.attachedEnergy.splice(idx, 1);
+            pl.discard.push(moved);
+          }
+          damage += e.bonus;
+          logEvent(
+            state,
+            ctx.attackerOwner,
+            `${ctx.move.name}: discards ${e.count} ${e.energyType ?? ""} Energy → +${e.bonus}.`,
+          );
+        }
+        break;
+      }
+
+      case "defenderCantBeAttachedNextTurn": {
+        // Trevenant "Cursed Root" — defender can't have Energy attached
+        // from opp's hand during opp's next turn.
+        if (ctx.defender) {
+          (ctx.defender as PokemonInPlay & { cantAttachEnergyFromHandUntilTurn?: number }).cantAttachEnergyFromHandUntilTurn =
+            state.turn + 1;
+        }
+        break;
+      }
+
+      case "perDamagedFriendlyBench": {
+        // Gourgeist ex "Horror Rondo" — +N per friendly bench Pokémon
+        // that has any damage counters.
+        const pl = state.players[ctx.attackerOwner];
+        const count = pl.bench.filter((p) => p.damage > 0).length;
+        damage += count * e.perCount;
+        break;
+      }
+
+      case "discardAllOppToolsAndSpecialEnergyAll": {
+        // Mega Dragalge ex "Corrosive Liquid" — discard ALL Tools and ALL
+        // Special Energy from every one of opp's Pokémon.
+        const opp = state.players[ctx.defenderOwner];
+        const allies = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+        let toolsDiscarded = 0;
+        let specialDiscarded = 0;
+        for (const p of allies) {
+          for (const t of p.tools) opp.discard.push(t);
+          toolsDiscarded += p.tools.length;
+          p.tools = [];
+          const remaining: import("./types").EnergyCard[] = [];
+          for (const en of p.attachedEnergy) {
+            if (en.subtypes.includes("Special")) {
+              opp.discard.push(en);
+              specialDiscarded++;
+            } else {
+              remaining.push(en);
+            }
+          }
+          p.attachedEnergy = remaining;
+        }
+        if (toolsDiscarded || specialDiscarded) {
+          logEvent(
+            state,
+            "system",
+            `${ctx.move.name}: discards ${toolsDiscarded} Tool(s) and ${specialDiscarded} Special Energy from opp's Pokémon.`,
+          );
+        }
+        break;
+      }
+
+      case "applyHeavyPoison": {
+        // Mega Dragalge ex "Pernicious Poison" — apply Poisoned and tag
+        // the defender for heavier per-Checkup poison strength.
+        if (ctx.defender) {
+          (ctx.defender as PokemonInPlay & { heavyPoisonCounters?: number }).heavyPoisonCounters = e.counters;
+        }
+        break;
+      }
+
+      case "shieldNextTurnIfKoThisAttack": {
+        // Golisopod "Vital Slash" — if this attack KO'd the defender,
+        // grant the attacker shield for opp's next turn. Resolved in a
+        // postHook so it fires after damage settles and prizes are taken.
+        postHooks.push(() => {
+          if (ctx.defender && ctx.defender.damage >= effectiveMaxHp(ctx.defender, state)) {
+            ctx.attacker.shieldedUntilTurn = state.turn + 1;
+            logEvent(
+              state,
+              "system",
+              `${ctx.move.name}: ${ctx.attacker.card.name} is shielded next turn.`,
+            );
+          }
+        });
+        break;
+      }
+
+      case "selfShieldNextTurnFromSubtype": {
+        // Golbat "Covert Flight" — shield only against attacks from
+        // attackers with the named subtype.
+        (ctx.attacker as PokemonInPlay & {
+          shieldNextTurnFromSubtype?: { turn: number; subtype: string };
+        }).shieldNextTurnFromSubtype = { turn: state.turn + 1, subtype: e.subtype };
+        break;
+      }
+
+      case "selfShieldNextTurnFromAbility": {
+        // Deoxys "Psy Protect" — shield only against attacks from
+        // attackers that have any Abilities.
+        (ctx.attacker as PokemonInPlay & {
+          shieldNextTurnFromAbility?: number;
+        }).shieldNextTurnFromAbility = state.turn + 1;
+        break;
+      }
+
+      case "multiCoinPickFromOppHandToTopDeck": {
+        // Watchog "Snipe Check" — flip N coins, for each heads pick a
+        // card from opp's hand and put it on top of opp's deck. Then opp
+        // shuffles. Net effect: cards revealed land in deck shuffled.
+        // Auto-resolved (AI-only path; humans get the same auto-flow for
+        // simplicity since the post-shuffle makes targeting cosmetic).
+        let heads = 0;
+        for (let i = 0; i < e.coins; i++) if (flipCoin(state, ctx.move.name)) heads++;
+        const opp = state.players[ctx.defenderOwner];
+        const moved: import("./types").Card[] = [];
+        for (let i = 0; i < heads && opp.hand.length > 0; i++) {
+          // Auto-pick: prefer Supporters, then Pokémon, then Items.
+          let bestIdx = 0;
+          let bestRank = -1;
+          for (let j = 0; j < opp.hand.length; j++) {
+            const c = opp.hand[j];
+            const rank =
+              c.supertype === "Trainer" && c.subtypes.includes("Supporter")
+                ? 3
+                : c.supertype === "Pokémon"
+                ? 2
+                : c.supertype === "Trainer"
+                ? 1
+                : 0;
+            if (rank > bestRank) {
+              bestRank = rank;
+              bestIdx = j;
+            }
+          }
+          const [picked] = opp.hand.splice(bestIdx, 1);
+          moved.push(picked);
+        }
+        if (moved.length > 0) {
+          opp.deck.unshift(...moved);
+          shuffleArr(state, opp.deck);
+          logEvent(
+            state,
+            "system",
+            `${ctx.move.name}: ${heads}/${e.coins} heads → ${moved.length} card(s) shuffled into opp deck.`,
+          );
+        }
+        break;
+      }
+
+      case "perNamedAllyCoinDamageChosen": {
+        // Tauros "Target Together" — flip 1 coin per friendly Pokémon
+        // whose name includes <namePart>, then deal `damagePerHeads` to a
+        // chosen opp target per heads. Auto-target the lowest-HP opp.
+        const pl = state.players[ctx.attackerOwner];
+        const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+        const matchingAllies = allies.filter((a) =>
+          a.card.name.toLowerCase().includes(e.namePart.toLowerCase()),
+        );
+        let heads = 0;
+        for (let i = 0; i < matchingAllies.length; i++) {
+          if (flipCoin(state, ctx.move.name)) heads++;
+        }
+        if (heads === 0) break;
+        const opp = state.players[ctx.defenderOwner];
+        const targets = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+        if (targets.length === 0) break;
+        // Pick the most-fragile (lowest HP remaining).
+        let target = targets[0];
+        let bestRemaining = effectiveMaxHp(target, state) - target.damage;
+        for (const t of targets) {
+          const rem = effectiveMaxHp(t, state) - t.damage;
+          if (rem < bestRemaining) {
+            bestRemaining = rem;
+            target = t;
+          }
+        }
+        const dealt = heads * e.damagePerHeads;
+        target.damage += dealt;
+        logEvent(
+          state,
+          "system",
+          `${ctx.move.name}: ${heads} heads → ${dealt} to ${target.card.name}.`,
+        );
+        break;
+      }
+
+      case "conditionalSnipeBench": {
+        // Deoxys "Psy Spear" — also-snipe-bench iff the attacker has at
+        // least N extra Energy (in addition to attack cost).
+        const cost = ctx.move.cost.length;
+        const attached = ctx.attacker.attachedEnergy.length;
+        if (attached - cost >= e.extraEnergy) {
+          const opp = state.players[ctx.defenderOwner];
+          if (opp.bench.length > 0) {
+            // Pick the most-fragile bench target.
+            let target = opp.bench[0];
+            let bestRem = effectiveMaxHp(target, state) - target.damage;
+            for (const t of opp.bench) {
+              const rem = effectiveMaxHp(t, state) - t.damage;
+              if (rem < bestRem) {
+                bestRem = rem;
+                target = t;
+              }
+            }
+            target.damage += e.damage;
+            logEvent(
+              state,
+              "system",
+              `${ctx.move.name}: snipes ${e.damage} to ${target.card.name}.`,
+            );
+          }
+        }
+        break;
+      }
+
       case "topNAttachAnyEnergyToOwn": {
         postHooks.push(() => {
           const pl = state.players[ctx.attackerOwner];
@@ -5686,6 +5993,38 @@ export function describeEffects(effects: AttackEffect[] | undefined): string {
           return `move ${e.count} energy → bench`;
         case "moveOppEnergyToBench":
           return `move ${e.count} opp energy → bench`;
+        case "discardTopOfOwnDeckUseSupporterEffect":
+          return "deck-top supporter copy";
+        case "discardDefenderEndOfOppNextTurn":
+          return "discard defender end of opp turn";
+        case "healEachInPlayBothSides":
+          return `heal ${e.amount} each (both)`;
+        case "perEnergyAcrossInPlay":
+          return `+${e.perCount} per ${e.energyType ?? "energy"} (${e.side})`;
+        case "optionalSelfTypedEnergyToHandForBonus":
+          return `↑hand ${e.energyType} → +${e.bonus}`;
+        case "optionalDiscardSelfEnergyForBonus":
+          return `discard ${e.count} ${e.energyType ?? "any"} → +${e.bonus}`;
+        case "defenderCantBeAttachedNextTurn":
+          return "defender no-attach next turn";
+        case "perDamagedFriendlyBench":
+          return `+${e.perCount} per damaged own bench`;
+        case "discardAllOppToolsAndSpecialEnergyAll":
+          return "discard all opp Tools+SE (all)";
+        case "applyHeavyPoison":
+          return `heavy poison ×${e.counters}`;
+        case "shieldNextTurnIfKoThisAttack":
+          return "shield next turn if KO";
+        case "selfShieldNextTurnFromSubtype":
+          return `shield vs ${e.subtype} next turn`;
+        case "selfShieldNextTurnFromAbility":
+          return "shield vs ability attackers";
+        case "multiCoinPickFromOppHandToTopDeck":
+          return `flip ${e.coins} → opp hand to top`;
+        case "perNamedAllyCoinDamageChosen":
+          return `coin per ${e.namePart} → ${e.damagePerHeads} chosen`;
+        case "conditionalSnipeBench":
+          return `extra→snipe ${e.damage}`;
       }
     })
     .join(", ");

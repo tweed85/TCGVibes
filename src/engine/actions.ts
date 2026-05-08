@@ -4,6 +4,7 @@ import type {
   EnergyType,
   GameState,
   PlayerId,
+  PlayerState,
   PokemonCard,
   PokemonInPlay,
   TrainerCard,
@@ -283,6 +284,17 @@ export function attachEnergy(
   if (card.name === "Team Rocket's Energy" && !target.card.name.startsWith("Team Rocket's ")) {
     return fail("Team Rocket's Energy can only be attached to a Team Rocket's Pokémon.");
   }
+  // Trevenant "Cursed Root" — defender can't have Energy attached from
+  // opp's hand during opp's next turn. The flag is set on the defender at
+  // attack-time; the gate clears with end-of-turn cleanup as the turn
+  // counter advances past `cantAttachEnergyFromHandUntilTurn`.
+  {
+    const lockedUntil = (target as typeof target & { cantAttachEnergyFromHandUntilTurn?: number })
+      .cantAttachEnergyFromHandUntilTurn;
+    if (lockedUntil !== undefined && state.turn <= lockedUntil) {
+      return fail(`${target.card.name} can't have Energy attached from your hand this turn.`);
+    }
+  }
   pl.hand.splice(handIndex, 1);
   target.attachedEnergy.push(card as EnergyCard);
   pl.energyAttachedThisTurn = true;
@@ -513,6 +525,10 @@ export function playTrainer(
     pl.supporterPlayedThisTurn = true;
     pl.lastSupporterNameThisTurn = t.name;
   }
+  if (t.subtypes.includes("Item")) {
+    if (!pl.itemsPlayedThisTurn) pl.itemsPlayedThisTurn = [];
+    pl.itemsPlayedThisTurn.push(t.name);
+  }
   // Antique Fossils transform into Bench Pokémon — the card itself rides
   // along on the new PokemonInPlay (its TrainerCard surfaces in p.card via
   // the synthesized Pokémon). It must NOT also go to the discard pile, or
@@ -556,6 +572,18 @@ export function retreat(
   // Antique Fossils — "This card can't retreat."
   if ((pl.active.card.subtypes ?? []).includes("Fossil")) {
     return fail("Fossil Pokémon can't retreat.");
+  }
+  // Roxie's Performance — opp set this turn-scoped flag during their last
+  // turn; opp's Poisoned Pokémon can't retreat during this turn (the
+  // flag is on the opp's PlayerState, gating OUR retreat when we're
+  // poisoned). Cleared in endTurn cleanup.
+  {
+    const oppId: PlayerId = player === "p1" ? "p2" : "p1";
+    const opp = state.players[oppId];
+    const flag = (opp as PlayerState & { poisonedOppCantRetreatNextTurn?: boolean }).poisonedOppCantRetreatNextTurn;
+    if (flag && hasStatus(pl.active, "poisoned")) {
+      return fail("Roxie's Performance: Poisoned Pokémon can't retreat this turn.");
+    }
   }
   if (benchIndex < 0 || benchIndex >= pl.bench.length)
     return fail("Invalid bench slot.");
@@ -682,6 +710,40 @@ function executeAttackHit(
     logEvent(state, "system", `${def.card.name} is shielded — ${move.name} has no effect.`);
     return;
   }
+  // Subtype-gated shield (Golbat "Covert Flight" — only blocks Basic
+  // attackers).
+  if (def) {
+    const sub = (def as typeof def & {
+      shieldNextTurnFromSubtype?: { turn: number; subtype: string };
+    }).shieldNextTurnFromSubtype;
+    if (sub && state.turn <= sub.turn && atk.card.subtypes.includes(sub.subtype)) {
+      logEvent(
+        state,
+        "system",
+        `${def.card.name} is shielded vs ${sub.subtype} — ${move.name} has no effect.`,
+      );
+      return;
+    }
+  }
+  // Ability-gated shield (Deoxys "Psy Protect" — only blocks attackers
+  // that have any Abilities).
+  if (def) {
+    const abilityShield = (def as typeof def & {
+      shieldNextTurnFromAbility?: number;
+    }).shieldNextTurnFromAbility;
+    if (
+      abilityShield !== undefined &&
+      state.turn <= abilityShield &&
+      (atk.card.abilities ?? []).length > 0
+    ) {
+      logEvent(
+        state,
+        "system",
+        `${def.card.name} is shielded vs ability attackers — ${move.name} has no effect.`,
+      );
+      return;
+    }
+  }
   // Snapshot the defender's in-play Pokémon names BEFORE this attack so we
   // can record which ones get KO'd "by damage from an attack". Used by
   // predicates like Hop's Trevenant Horrifying Revenge that check
@@ -724,6 +786,18 @@ function executeAttackHit(
     const slot = bag.nextTurnAttackBonuses?.[move.name];
     if (slot && state.turn <= slot.turn) {
       damage += slot.amount;
+    }
+  }
+  // "During your next turn, attacks used by this Pokémon do +N damage to
+  // your opponent's Active Pokémon." (Kilowattrel Wind Power Charge,
+  // Donphan No Reprieve.) Set by selfNextTurnAllAttacksBonus the previous
+  // turn — applies broadly to ALL attacks during this turn.
+  {
+    const bag = atk as typeof atk & {
+      allAttackBonusUntilTurn?: { turn: number; bonus: number };
+    };
+    if (bag.allAttackBonusUntilTurn && state.turn <= bag.allAttackBonusUntilTurn.turn) {
+      damage += bag.allAttackBonusUntilTurn.bonus;
     }
   }
   const result = resolveAttackEffects(state, {
@@ -826,6 +900,14 @@ function executeAttackHit(
       } else if (a.name === "Counterattack" || a.name === "Counterattack Quills" || a.name === "Automated Combat") {
         atk.damage += 30;
         logEvent(state, "system", `${a.name}: ${atk.card.name} takes 30 counter damage.`);
+      } else if (a.name === "Needle Armor") {
+        // me4 Chesnaught — place 3 damage counters on the Attacking Pokémon
+        // for each Grass Energy attached to this Pokémon.
+        const grass = def.attachedEnergy.filter((e) => e.provides.includes("Grass")).length;
+        if (grass > 0) {
+          atk.damage += grass * 30;
+          logEvent(state, "system", `Needle Armor: ${atk.card.name} takes ${grass * 30} counter damage.`);
+        }
       } else if (a.name === "Exploding Needles") {
         // Only fires when this Active is KO'd by the incoming damage.
         if (def.damage >= effectiveMaxHp(def, state)) {

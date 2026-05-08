@@ -252,6 +252,14 @@ export function canBeAfflictedBy(
   ) {
     return false;
   }
+  // me4 Bubble Water Energy — the Water Pokémon this card is attached to
+  // cannot be inflicted with any Special Condition.
+  if (
+    hasType(p.card, "Water") &&
+    p.attachedEnergy.some((e) => e.name === "Bubble Water Energy")
+  ) {
+    return false;
+  }
   if (!abilitiesActiveOn(state, p.card)) return true;
   const abilities = p.card.abilities ?? [];
   for (const ab of abilities) {
@@ -466,6 +474,9 @@ function stadiumHpDelta(stadium: TrainerCard, card: PokemonCard): number {
       return hasSubtype(card, "Basic") ? 30 : 0;
     case "Gravity Mountain":
       return hasSubtype(card, "Stage 2") ? -30 : 0;
+    case "Ange Floette":
+      // me4 Stadium — Mega Floette ex in play has its max HP increased by 150.
+      return card.name === "Mega Floette ex" ? 150 : 0;
     default:
       return 0;
   }
@@ -718,6 +729,14 @@ export function effectiveRetreatCost(p: PokemonInPlay, state?: GameState): Energ
         reduce += 99;
       }
     }
+  }
+  // me4 Magnet Metal Energy — the Metal Pokémon this card is attached to
+  // has no Retreat Cost.
+  if (
+    hasType(p.card, "Metal") &&
+    p.attachedEnergy.some((e) => e.name === "Magnet Metal Energy")
+  ) {
+    reduce += 99;
   }
   // Bench-wide free-retreat abilities ("All of your Pokémon with Metal Energy
   // have no Retreat Cost"). Walk the holder's allies to find a matching ability.
@@ -975,6 +994,18 @@ const PASSIVE_ATTACK_BONUSES: Record<string, PassiveAttackBonus> = {
       h.attachedEnergy.some((e) => e.provides.includes("Darkness")),
     bonus: () => 100,
   },
+  "Synchro Pulse": {
+    // me4 Ampharos — if your hand and your opponent's hand have the same
+    // number of cards, this Pokémon's attacks do +80 to opp Active.
+    appliesTo: (a, h, _d, s) => {
+      if (a.instanceId !== h.instanceId) return false;
+      const owner = Object.values(s.players).find((p) => p.active === h || p.bench.includes(h));
+      if (!owner) return false;
+      const opp = Object.values(s.players).find((p) => p !== owner);
+      return !!opp && owner.hand.length === opp.hand.length;
+    },
+    bonus: () => 80,
+  },
 };
 
 // --- Passive damage-reduction abilities ----------------------------------
@@ -1216,6 +1247,34 @@ const PASSIVE_DAMAGE_REDUCTIONS: Record<string, PassiveDamageReduction> = {
   // Coin flip prevent — "If any damage is done to this Pokémon, flip a coin.
   // If heads, prevent that damage." Heuristic: 50% full prevention.
   "Expert Hider": {
+    appliesTo: (d, h, _a, s) =>
+      d.instanceId === h.instanceId && s.rng.next() < 0.5,
+    amount: () => 9999,
+  },
+  // me4 (Chaos Rising) -------------------------------------------------------
+  "Exoskeleton": {
+    // me4 Kakuna — this Pokémon takes 20 less damage from your opponent's
+    // Pokémon's attacks.
+    appliesTo: (d, h) => d.instanceId === h.instanceId,
+    amount: () => 20,
+  },
+  "Trash Downer": {
+    // me4 Garbodor — attacks used by your opponent's Active Pokémon that
+    // has a Pokémon Tool attached do 20 less damage.
+    appliesTo: (_d, _h, a, s) => {
+      // The attacker must be opp's Active and have at least one Tool attached.
+      const attackerOwner = Object.values(s.players).find(
+        (p) => p.active && p.active.instanceId === a.instanceId,
+      );
+      if (!attackerOwner) return false;
+      return a.tools.length > 0;
+    },
+    amount: () => 20,
+  },
+  "Smooth Coat": {
+    // me4 Cinccino ex — if any damage is done to this Pokémon by an attack,
+    // flip a coin. If heads, prevent that damage. Modeled as a 50% full
+    // prevention (mirrors Expert Hider).
     appliesTo: (d, h, _a, s) =>
       d.instanceId === h.instanceId && s.rng.next() < 0.5,
     amount: () => 9999,

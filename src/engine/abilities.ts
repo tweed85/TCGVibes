@@ -111,6 +111,29 @@ const NAMED_ABILITY_EFFECTS: Record<string, AbilityEffect> = {
     kind: "shuffleSelfIntoDeck",
     oncePerTurn: true,
   },
+  // me4 Delphox — discard a basic Fire Energy from hand; draw to 7.
+  "Flaring Magic": {
+    kind: "discardHandEnergyDrawToN",
+    energyType: "Fire",
+    targetHand: 7,
+    oncePerTurn: true,
+  },
+  // me4 Mega Greninja ex — Active-only; discard a basic Water Energy from
+  // hand; place 6 damage counters on 1 of your opponent's Pokémon.
+  "Mortal Shuriken": {
+    kind: "discardHandEnergyPlaceCountersOnOpp",
+    energyType: "Water",
+    counters: 6,
+    oncePerTurn: true,
+    activeOnly: true,
+  },
+  // me4 Crobat — Active-only; search deck for any card, shuffle, put it
+  // on top of deck.
+  "Nighttime Maneuvers": {
+    kind: "searchDeckAnyCardToTopdeck",
+    oncePerTurn: true,
+    activeOnly: true,
+  },
 
   // --- Newly wired ---------------------------------------------------------
 
@@ -1346,6 +1369,93 @@ export function activateAbility(
         drawn++;
       }
       logEvent(state, player, `uses ${ability.name}: discards ${en.name}; draws ${drawn}.`);
+      break;
+    }
+
+    case "discardHandEnergyDrawToN": {
+      // me4 Delphox "Flaring Magic" — discard a basic <type> Energy from
+      // HAND; draw to N cards in hand.
+      const idx = pl.hand.findIndex(
+        (c) =>
+          c.supertype === "Energy" &&
+          c.subtypes.includes("Basic") &&
+          (c as EnergyCard).provides.includes(e.energyType),
+      );
+      if (idx < 0) return { ok: false, reason: `No basic ${e.energyType} Energy in hand.` };
+      if (e.activeOnly && pl.active?.instanceId !== holder.instanceId) {
+        return { ok: false, reason: `${ability.name} requires ${holder.card.name} to be Active.` };
+      }
+      const [en] = pl.hand.splice(idx, 1);
+      pl.discard.push(en);
+      const toDraw = Math.max(0, e.targetHand - pl.hand.length);
+      let drawn = 0;
+      for (let i = 0; i < toDraw; i++) {
+        const c = pl.deck.shift();
+        if (!c) break;
+        pl.hand.push(c);
+        drawn++;
+      }
+      logEvent(state, player, `uses ${ability.name}: discards ${en.name} from hand; draws ${drawn}.`);
+      break;
+    }
+
+    case "discardHandEnergyPlaceCountersOnOpp": {
+      // me4 Mega Greninja ex "Mortal Shuriken" — Active-only; discard a
+      // basic <type> Energy from HAND; place N damage counters on 1 of
+      // opp's Pokémon (auto-target lowest-effective-HP).
+      if (pl.active?.instanceId !== holder.instanceId) {
+        return { ok: false, reason: `${ability.name} requires ${holder.card.name} to be Active.` };
+      }
+      const idx = pl.hand.findIndex(
+        (c) =>
+          c.supertype === "Energy" &&
+          c.subtypes.includes("Basic") &&
+          (c as EnergyCard).provides.includes(e.energyType),
+      );
+      if (idx < 0) return { ok: false, reason: `No basic ${e.energyType} Energy in hand.` };
+      const oppId: PlayerId = player === "p1" ? "p2" : "p1";
+      const opp = state.players[oppId];
+      const targets = [opp.active, ...opp.bench].filter((p): p is PokemonInPlay => !!p);
+      if (targets.length === 0) return { ok: false, reason: "No opponent Pokémon in play." };
+      const [en] = pl.hand.splice(idx, 1);
+      pl.discard.push(en);
+      // Auto-target: prefer the most-fragile (lowest remaining HP).
+      let target = targets[0];
+      let bestRem = effectiveMaxHp(target, state) - target.damage;
+      for (const t of targets) {
+        const rem = effectiveMaxHp(t, state) - t.damage;
+        if (rem < bestRem) {
+          bestRem = rem;
+          target = t;
+        }
+      }
+      target.damage += e.counters * 10;
+      logEvent(
+        state,
+        player,
+        `uses ${ability.name}: discards ${en.name}; places ${e.counters} counters on ${target.card.name}.`,
+      );
+      break;
+    }
+
+    case "searchDeckAnyCardToTopdeck": {
+      // me4 Crobat "Nighttime Maneuvers" — Active-only; search deck for
+      // any card, shuffle deck, put that card on top.
+      if (pl.active?.instanceId !== holder.instanceId) {
+        return { ok: false, reason: `${ability.name} requires ${holder.card.name} to be Active.` };
+      }
+      if (pl.deck.length === 0) return { ok: false, reason: "Empty deck." };
+      // Auto-pick (works for both AI and human path; UI flow can be
+      // refined later to open a deck-search picker).
+      const top = pl.deck[0];
+      pl.deck.splice(0, 1);
+      // Shuffle remaining deck.
+      for (let i = pl.deck.length - 1; i > 0; i--) {
+        const j = state.rng.int(i + 1);
+        [pl.deck[i], pl.deck[j]] = [pl.deck[j], pl.deck[i]];
+      }
+      pl.deck.unshift(top);
+      logEvent(state, player, `uses ${ability.name}: tutors ${top.name} on top of deck.`);
       break;
     }
 
@@ -2588,6 +2698,34 @@ const TRIGGERED_ON_MOVE_TO_ACTIVE: Record<string, TriggeredOnMoveEffect> = {
   // and then we look across all allies for a Latios.
   // (Handled below in fireTriggeredOnMoveToActive: the Mega Latias ex
   // movement reaches into the ally list for a Latios with Lustrous Assist.)
+
+  // me4 Cobalion ex — when this Pokémon moves from Bench to Active, move
+  // any amount of Metal Energy from your other Pokémon to this Pokémon.
+  "Metal Road": {
+    label: "Metal Road: gather Metal Energy",
+    run: (state, player, self) => {
+      const pl = state.players[player];
+      const others = [pl.active, ...pl.bench].filter(
+        (p): p is PokemonInPlay => !!p && p.instanceId !== self.instanceId,
+      );
+      let moved = 0;
+      for (const o of others) {
+        const remaining: EnergyCard[] = [];
+        for (const en of o.attachedEnergy) {
+          if (en.provides.includes("Metal")) {
+            self.attachedEnergy.push(en);
+            moved++;
+          } else {
+            remaining.push(en);
+          }
+        }
+        o.attachedEnergy = remaining;
+      }
+      if (moved > 0) {
+        logEvent(state, player, `Metal Road: moves ${moved} Metal Energy to ${self.card.name}.`);
+      }
+    },
+  },
 };
 
 const TRIGGERED_ON_MOVE_TO_BENCH: Record<string, TriggeredOnMoveEffect> = {

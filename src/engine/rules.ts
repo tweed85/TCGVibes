@@ -356,6 +356,18 @@ export function effectiveEnergyProvides(
       return ["Fighting"];
     case "Telepathic Psychic Energy":
       return ["Psychic"];
+    case "Nitro Fire Energy":
+      // me4 Special Energy — "While attached to a Pokémon, this card
+      // provides 1 Fire Energy."
+      return ["Fire"];
+    case "Bubble Water Energy":
+      // me4 Special Energy — provides Water (the standard Water Special
+      // Energy reading; status-immunity is handled in canBeAfflictedBy).
+      return ["Water"];
+    case "Magnet Metal Energy":
+      // me4 Special Energy — provides Metal (free retreat handled in
+      // effectiveRetreatCost).
+      return ["Metal"];
   }
   // Default: use the static provides (basic energy has its own type; plain
   // special energies default to Colorless).
@@ -566,11 +578,18 @@ export function pokemonCheckup(state: GameState): void {
   }
 
   // 1. Poison damage (Perilous Jungle adds +20 on non-Darkness).
+  // Mega Dragalge ex Pernicious Poison sets `heavyPoisonCounters` on the
+  // defender, replacing the per-Checkup damage with N counters' worth.
   for (const pid of ORDER) {
     const a = state.players[pid].active;
     if (!a || !hasStatus(a, "poisoned")) continue;
-    const extra = poisonExtraCounters(state, a);
-    damageFromStatus(state, pid, a, 10 + extra, extra ? "poison (Perilous Jungle)" : "poison");
+    const heavy = (a as typeof a & { heavyPoisonCounters?: number }).heavyPoisonCounters;
+    if (heavy && heavy > 0) {
+      damageFromStatus(state, pid, a, heavy * 10, "heavy poison");
+    } else {
+      const extra = poisonExtraCounters(state, a);
+      damageFromStatus(state, pid, a, 10 + extra, extra ? "poison (Perilous Jungle)" : "poison");
+    }
     if ((state.phase as string) === "gameOver") return;
   }
 
@@ -1124,6 +1143,12 @@ export function endTurn(state: GameState): void {
   prev.stadiumUsedThisTurn = false;
   prev.lastDitchUsedThisTurn = false;
   prev.lastSupporterNameThisTurn = null;
+  prev.itemsPlayedThisTurn = undefined;
+  // Roxie's Performance — turn-scoped retreat-block on opp Poisoned Pokémon
+  // expires when opp's NEXT turn ends. Setter put it on themselves at the
+  // end of their turn; opp consumed it during their just-ended turn; clear
+  // it now that opp's turn is over.
+  (prev as PlayerState & { poisonedOppCantRetreatNextTurn?: boolean }).poisonedOppCantRetreatNextTurn = undefined;
   // The OPPONENT's "my Pokémon got KO'd during their last (i.e. just-ended)
   // turn" flag applies during their UPCOMING turn. Clear the ending player's
   // own flag here (they've had their chance to consume it).
