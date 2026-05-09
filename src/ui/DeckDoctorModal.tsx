@@ -6,7 +6,7 @@
 // serializeDoctorReport (the disclaimer line lives there, not in the
 // structured report). Lazy-loaded via React.lazy in App.tsx.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { allCards, cardsByName, datasetAsOf } from "../data/cards";
 import { gameplayKey } from "../data/cardEquivalence";
 import {
@@ -19,6 +19,7 @@ import {
   type DeckInput,
   type DoctorContext,
   type Finding,
+  type SerializedMetaSection,
   type Severity,
 } from "../data/deckDoctor";
 import {
@@ -29,6 +30,17 @@ import {
   importDecklist,
   type DeckListEntry,
 } from "../data/decklistParser";
+import { ARCHETYPE_PROFILES, type Archetype } from "../engine/aiArchetype";
+import {
+  loadLatestSnapshotSync,
+  type MetaSnapshot,
+} from "../data/metaSnapshot";
+import {
+  analyzeMeta,
+  STATIC_MATCHUP_DISCLAIMER,
+  type MetaAnalysis,
+} from "../data/metaDoctor";
+import type { MatchupCheck } from "../data/matchupChecks";
 import type { Card } from "../engine/types";
 
 interface SavedDeck {
@@ -52,12 +64,25 @@ const ctx: DoctorContext = {
 };
 
 type InputMode = "preset" | "saved" | "paste";
+type ReportTab = "structure" | "matchups" | "meta";
 
 const SEVERITY_META: Record<Severity, { label: string; icon: string }> = {
   error: { label: "Problems", icon: "⛔" },
   warning: { label: "Risks", icon: "⚠" },
   suggestion: { label: "Suggestions", icon: "💡" },
 };
+
+const META_GRADE_LABEL: Record<MetaAnalysis["metaGrade"], string> = {
+  A: "A",
+  B: "B",
+  C: "C",
+  D: "D",
+  "insufficient-data": "—",
+};
+
+function formatPct(n: number): string {
+  return `${(n * 100).toFixed(0)}%`;
+}
 
 export default function DeckDoctorModal({
   imports,
@@ -74,9 +99,36 @@ export default function DeckDoctorModal({
   );
   const [pasteText, setPasteText] = useState<string>("");
   const [analysis, setAnalysis] = useState<DeckAnalysis | null>(null);
+  const [userDeck, setUserDeck] = useState<Card[]>([]);
+  const [meta, setMeta] = useState<MetaAnalysis | null>(null);
   const [copyHint, setCopyHint] = useState<string>("");
   const [showFallback, setShowFallback] = useState<boolean>(false);
   const [fallbackText, setFallbackText] = useState<string>("");
+  const [tab, setTab] = useState<ReportTab>("structure");
+
+  // Load the freshest non-fixture snapshot. The loader returns null when no
+  // research-quality snapshot is committed — UI handles that gracefully.
+  const snapshot: MetaSnapshot | null = useMemo(
+    () => loadLatestSnapshotSync(),
+    [],
+  );
+
+  // Opponent picker state — populated from snapshot archetypes (sorted by
+  // metaShare) when available, ARCHETYPE_PROFILES keys otherwise.
+  const opponentChoices: Array<Archetype | "unknown"> = useMemo(() => {
+    if (snapshot && snapshot.archetypes.length > 0) {
+      return [...snapshot.archetypes]
+        .sort((a, b) => b.metaShare - a.metaShare)
+        .map((a) => a.id);
+    }
+    return Object.keys(ARCHETYPE_PROFILES) as Archetype[];
+  }, [snapshot]);
+  const [opponent, setOpponent] = useState<Archetype | "unknown">(
+    opponentChoices[0] ?? "unknown",
+  );
+  useEffect(() => {
+    setOpponent(opponentChoices[0] ?? "unknown");
+  }, [opponentChoices]);
 
   // ---- Auto-analyze when initial selection is provided ----
   // (Keeps the manual Analyze button as the v1 trigger; no debounce yet.)
@@ -112,11 +164,24 @@ export default function DeckDoctorModal({
     const input = buildInput();
     if (!input) {
       setAnalysis(null);
+      setMeta(null);
+      setUserDeck([]);
       return;
     }
     const a = analyzeDeck(input, ctx);
     setAnalysis(a);
+    setUserDeck(input.cards);
+    setMeta(analyzeMeta(a, input.cards, snapshot, ctx, opponent));
   }
+
+  // Re-run meta analysis when the opponent picker changes — keeps Matchups
+  // tab live without forcing a full re-analyze.
+  useEffect(() => {
+    if (!analysis) return;
+    setMeta(analyzeMeta(analysis, userDeck, snapshot, ctx, opponent));
+    // intentional: re-derive on opponent change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opponent]);
 
   async function onCopy(): Promise<void> {
     if (!analysis) return;
@@ -125,7 +190,33 @@ export default function DeckDoctorModal({
       datasetAsOf,
       doctorVersion: DOCTOR_VERSION,
     });
-    const text = serializeDoctorReport(report);
+    // Build the Meta-section payload for the serializer when meta analysis
+    // exists and the snapshot is usable.
+    const metaSection: SerializedMetaSection | undefined =
+      meta && meta.snapshot && meta.snapshot.usableForGrades
+        ? {
+            metaGrade: meta.metaGrade,
+            matchupGrade: meta.matchupGrade,
+            matchupGradeAgainst: meta.matchupGradeAgainst,
+            expectedWinRate: meta.expectedWinRate,
+            expectedWinRateRange: meta.expectedWinRateRange,
+            metaConfidence: meta.metaConfidence,
+            fieldCoverage: meta.fieldCoverage,
+            stockMissingCore: meta.stockListFindings
+              .filter((f) => f.id === "stock.missing-core")
+              .map((f) => f.cardName),
+            techMissingClasses: meta.techCoverageFindings.map((f) =>
+              f.title.replace(/^Missing answer:\s*/, ""),
+            ),
+            snapshot: {
+              id: meta.snapshot.id,
+              coversThrough: meta.snapshot.coversThrough,
+              dataAgeDays: meta.snapshot.dataAgeDays,
+              quality: meta.snapshot.quality,
+            },
+          }
+        : undefined;
+    const text = serializeDoctorReport(report, metaSection);
     try {
       await navigator.clipboard.writeText(text);
       setCopyHint("Copied to clipboard.");
@@ -278,18 +369,67 @@ export default function DeckDoctorModal({
             )}
           </div>
 
-          {/* ---- Report pane ---- */}
+          {/* ---- Report pane (3 tabs: Structure / Matchups / Meta) ---- */}
           <div className="dd-report">
             {analysis ? (
-              <DoctorReportView
-                analysis={analysis}
-                errors={errors}
-                warnings={warnings}
-                suggestions={suggestions}
-              />
+              <>
+                <div className="dd-tabs" role="tablist" aria-label="Report sections">
+                  {(["structure", "matchups", "meta"] as ReportTab[]).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      role="tab"
+                      aria-selected={tab === t}
+                      aria-controls={`dd-tabpanel-${t}`}
+                      className={tab === t ? "active" : ""}
+                      onClick={() => setTab(t)}
+                    >
+                      {t === "structure" ? "Structure" : t === "matchups" ? "Matchups" : "Meta"}
+                    </button>
+                  ))}
+                </div>
+                {tab === "structure" && (
+                  <div
+                    id="dd-tabpanel-structure"
+                    role="tabpanel"
+                    aria-label="Structure"
+                  >
+                    <DoctorReportView
+                      analysis={analysis}
+                      errors={errors}
+                      warnings={warnings}
+                      suggestions={suggestions}
+                    />
+                  </div>
+                )}
+                {tab === "matchups" && (
+                  <div
+                    id="dd-tabpanel-matchups"
+                    role="tabpanel"
+                    aria-label="Matchups"
+                  >
+                    <MatchupsTab
+                      meta={meta}
+                      opponent={opponent}
+                      onChangeOpponent={setOpponent}
+                      opponentChoices={opponentChoices}
+                      hasUsableSnapshot={!!snapshot && snapshot.usableForGrades}
+                    />
+                  </div>
+                )}
+                {tab === "meta" && (
+                  <div
+                    id="dd-tabpanel-meta"
+                    role="tabpanel"
+                    aria-label="Meta"
+                  >
+                    <MetaTab meta={meta} snapshot={snapshot} />
+                  </div>
+                )}
+              </>
             ) : (
               <div className="muted dd-empty">
-                Select a source and click Analyze to see structural feedback.
+                Select a source and click Analyze to see feedback.
               </div>
             )}
           </div>
@@ -406,6 +546,208 @@ function Section({
       {findings.map((f, i) => (
         <FindingRow key={i} f={f} />
       ))}
+    </section>
+  );
+}
+
+// ---- Matchups tab --------------------------------------------------------
+
+interface MatchupsTabProps {
+  meta: MetaAnalysis | null;
+  opponent: Archetype | "unknown";
+  onChangeOpponent: (a: Archetype | "unknown") => void;
+  opponentChoices: Array<Archetype | "unknown">;
+  hasUsableSnapshot: boolean;
+}
+
+function MatchupsTab({
+  meta,
+  opponent,
+  onChangeOpponent,
+  opponentChoices,
+  hasUsableSnapshot,
+}: MatchupsTabProps) {
+  if (!meta) return null;
+  const grade = meta.matchupGrade;
+  const ci = meta.matchupCi95;
+  return (
+    <section className="dd-section" aria-label="Matchups">
+      <header className="dd-game-plan-header">
+        <h3>Matchups</h3>
+        <label className="dd-field" style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 11 }}>
+            {hasUsableSnapshot ? "Opponent" : "Opponent (no meta data available)"}
+          </span>
+          <select
+            aria-label="Opponent archetype"
+            value={opponent}
+            onChange={(e) => onChangeOpponent(e.target.value as Archetype)}
+          >
+            {opponentChoices.map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
+            ))}
+          </select>
+        </label>
+      </header>
+      <div className="dd-grade-banner" data-grade={grade}>
+        <strong>Matchup grade:</strong> {grade}
+        {ci && meta.expectedWinRate !== undefined && (
+          <span className="muted" style={{ marginLeft: 8 }}>
+            (winRate with Wilson CI range —{" "}
+            {formatPct(ci.low)}–{formatPct(ci.high)})
+          </span>
+        )}
+        {meta.matchupSampleSize !== undefined && (
+          <span className="muted" style={{ marginLeft: 8 }}>
+            · sample {meta.matchupSampleSize} ({meta.matchupConfidence})
+          </span>
+        )}
+      </div>
+      <p className="muted dd-static-disclaimer">
+        Static matchup checks: {STATIC_MATCHUP_DISCLAIMER}
+      </p>
+      {meta.matchupChecks.length === 0 ? (
+        <div className="muted dd-empty">No data — pick an opponent and re-analyze.</div>
+      ) : (
+        meta.matchupChecks.map((c, i) => <MatchupCheckRow key={i} c={c} />)
+      )}
+    </section>
+  );
+}
+
+function MatchupCheckRow({ c }: { c: MatchupCheck }) {
+  return (
+    <div className="dd-finding" data-severity={c.severity}>
+      <div className="dd-finding-title">{c.title}</div>
+      <div className="dd-finding-detail">{c.detail}</div>
+      {c.evidence && c.evidence.length > 0 && (
+        <ul className="dd-finding-evidence">
+          {c.evidence.map((e, i) => (
+            <li key={i}>{e}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ---- Meta tab ------------------------------------------------------------
+
+interface MetaTabProps {
+  meta: MetaAnalysis | null;
+  snapshot: MetaSnapshot | null;
+}
+
+function MetaTab({ meta, snapshot }: MetaTabProps) {
+  if (!meta) return null;
+  const snap = meta.snapshot;
+  return (
+    <section className="dd-section" aria-label="Meta">
+      {!snap || !snapshot ? (
+        <div className="muted dd-empty">
+          No meta snapshot available. Static feedback is in Structure / Matchups tabs.
+        </div>
+      ) : (
+        <>
+          {snap.unusable ? (
+            <div className="dd-banner dd-banner-error">
+              Meta snapshot is unusable ({snap.dataAgeDays} days old, quality{" "}
+              {snap.quality}). Meta grade unavailable; list-level signals still
+              apply below.
+            </div>
+          ) : snap.stale ? (
+            <div className="dd-banner dd-banner-warn">
+              Snapshot is {snap.dataAgeDays} days old — meta may have shifted.
+            </div>
+          ) : null}
+          <div className="dd-snapshot-header">
+            <strong>{snap.id}</strong> · data covers through{" "}
+            {snap.coversThrough} ({snap.dataAgeDays} days old) · file generated{" "}
+            {snap.generatedAgeDays} days ago.
+          </div>
+          {!snap.unusable && (
+            <div className="dd-grade-banner" data-grade={meta.metaGrade}>
+              <strong>Meta grade: {META_GRADE_LABEL[meta.metaGrade]}</strong>
+              {meta.expectedWinRate !== undefined && (
+                <>
+                  {" · expected WR "}
+                  <strong>{formatPct(meta.expectedWinRate)}</strong>
+                  {meta.expectedWinRateRange && (
+                    <span className="muted">
+                      {" "}(weighted range {formatPct(meta.expectedWinRateRange.low)}
+                      –{formatPct(meta.expectedWinRateRange.high)})
+                    </span>
+                  )}
+                </>
+              )}
+              {meta.fieldCoverage !== undefined && (
+                <span className="muted" style={{ marginLeft: 6 }}>
+                  · field coverage {formatPct(meta.fieldCoverage)}
+                </span>
+              )}
+              <span className="muted" style={{ marginLeft: 6 }}>
+                · {meta.metaConfidence} confidence
+              </span>
+            </div>
+          )}
+          <p className="muted dd-static-disclaimer">
+            This grade reflects the archetype into the field. List-specific
+            feedback is below.
+          </p>
+
+          <details className="dd-methodology">
+            <summary>Methodology &amp; coverage</summary>
+            <p>{snapshot.methodology}</p>
+            <ul>
+              <li>Online: {formatPct(snapshot.onlineShare)} · offline: {formatPct(snapshot.offlineShare)}</li>
+              <li>Bo1: {formatPct(snapshot.bo1Share)} · Bo3: {formatPct(snapshot.bo3Share)}</li>
+              <li>Snapshot-wide matchup coverage: {formatPct(snapshot.matchupCoverageShare)}</li>
+              <li>Unknown-archetype share: {formatPct(snapshot.unknownArchetypeShare)}</li>
+            </ul>
+            {snapshot.coverageNotes.length > 0 && (
+              <ul>
+                {snapshot.coverageNotes.map((n, i) => (
+                  <li key={i}>
+                    <strong>{n.category}</strong> ({n.count})
+                    {n.detail ? ` — ${n.detail}` : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {snapshot.sources.length > 0 && (
+              <p className="muted">
+                Sources: {snapshot.sources.slice(0, 3).join(", ")}
+                {snapshot.sources.length > 3 ? "…" : ""}
+              </p>
+            )}
+          </details>
+
+          {meta.stockListFindings.length > 0 && (
+            <div className="dd-section-inner">
+              <h4>Stock list comparison</h4>
+              {meta.stockListFindings.map((f, i) => (
+                <div key={i} className="dd-finding" data-severity={f.severity}>
+                  <div className="dd-finding-title">
+                    {f.cardName ? `${f.cardName}` : "Stock list"}
+                  </div>
+                  <div className="dd-finding-detail">{f.detail}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {meta.techCoverageFindings.length > 0 && (
+            <div className="dd-section-inner">
+              <h4>Top missing tech</h4>
+              {meta.techCoverageFindings.map((c, i) => (
+                <MatchupCheckRow key={i} c={c} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </section>
   );
 }

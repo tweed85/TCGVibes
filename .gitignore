@@ -4,3 +4,5 @@ dist
 *.log
 .vite
 tsconfig.tsbuildinfo
+docs/PTCG_SIM_ASSESSMENT.md
+docs/META_SNAPSHOT_AGENT.md

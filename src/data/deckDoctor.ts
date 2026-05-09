@@ -1169,7 +1169,29 @@ export function composeReport(a: DeckAnalysis, meta: ReportMeta): DoctorReport {
 const SCOPE_DISCLAIMER =
   "Structural review only — not a meta or matchup grade.";
 
-export function serializeDoctorReport(report: DoctorReport): string {
+// Optional Meta-section payload — kept loosely typed at the deckDoctor.ts
+// boundary so the serializer doesn't need to import metaDoctor's types
+// directly (metaDoctor depends on this module). The shape MUST match
+// MetaAnalysis from metaDoctor.ts.
+export interface SerializedMetaSection {
+  metaGrade: "A" | "B" | "C" | "D" | "insufficient-data";
+  matchupGrade?: "favored" | "even" | "unfavored" | "unknown";
+  matchupGradeAgainst?: string;
+  expectedWinRate?: number;
+  expectedWinRateRange?: { low: number; high: number };
+  metaConfidence?: string;
+  fieldCoverage?: number;
+  topMatchups?: { hero: string; villain: string; winRate: number; ci95Low: number; ci95High: number }[];
+  worstMatchups?: { hero: string; villain: string; winRate: number; ci95Low: number; ci95High: number }[];
+  stockMissingCore?: string[];
+  techMissingClasses?: string[];
+  snapshot?: { id: string; coversThrough: string; dataAgeDays: number; quality: string };
+}
+
+export function serializeDoctorReport(
+  report: DoctorReport,
+  meta?: SerializedMetaSection,
+): string {
   const out: string[] = [];
   out.push(SCOPE_DISCLAIMER);
   out.push("");
@@ -1228,5 +1250,60 @@ export function serializeDoctorReport(report: DoctorReport): string {
       }
     }
   }
+
+  if (meta) {
+    out.push("");
+    out.push("Meta");
+    out.push("----");
+    out.push(
+      "This grade reflects the archetype into the field. List-specific feedback is above.",
+    );
+    if (meta.snapshot) {
+      out.push(
+        `Snapshot: ${meta.snapshot.id} · covers through ${meta.snapshot.coversThrough} (${meta.snapshot.dataAgeDays} days old, ${meta.snapshot.quality})`,
+      );
+    }
+    out.push(`Meta grade: ${meta.metaGrade}`);
+    if (meta.expectedWinRate !== undefined) {
+      const pct = (meta.expectedWinRate * 100).toFixed(1);
+      const range = meta.expectedWinRateRange
+        ? ` (weighted range ${(meta.expectedWinRateRange.low * 100).toFixed(0)}–${(meta.expectedWinRateRange.high * 100).toFixed(0)}%)`
+        : "";
+      out.push(`Expected WR: ${pct}%${range}`);
+    }
+    if (meta.metaConfidence) out.push(`Confidence: ${meta.metaConfidence}`);
+    if (meta.fieldCoverage !== undefined)
+      out.push(`Field coverage: ${(meta.fieldCoverage * 100).toFixed(0)}%`);
+    if (meta.matchupGradeAgainst) {
+      out.push(
+        `Matchup vs ${meta.matchupGradeAgainst}: ${meta.matchupGrade ?? "unknown"}`,
+      );
+    }
+    if (meta.topMatchups?.length) {
+      out.push("Favored matchups:");
+      for (const m of meta.topMatchups) {
+        out.push(
+          `  ${m.villain} — ${(m.winRate * 100).toFixed(0)}% (95% CI: ${(m.ci95Low * 100).toFixed(0)}–${(m.ci95High * 100).toFixed(0)}%)`,
+        );
+      }
+    }
+    if (meta.worstMatchups?.length) {
+      out.push("Tough matchups:");
+      for (const m of meta.worstMatchups) {
+        out.push(
+          `  ${m.villain} — ${(m.winRate * 100).toFixed(0)}% (95% CI: ${(m.ci95Low * 100).toFixed(0)}–${(m.ci95High * 100).toFixed(0)}%)`,
+        );
+      }
+    }
+    if (meta.stockMissingCore?.length) {
+      out.push("Missing stock cards:");
+      for (const n of meta.stockMissingCore) out.push(`  - ${n}`);
+    }
+    if (meta.techMissingClasses?.length) {
+      out.push("Missing tech answer-classes:");
+      for (const n of meta.techMissingClasses) out.push(`  - ${n}`);
+    }
+  }
+
   return out.join("\n");
 }

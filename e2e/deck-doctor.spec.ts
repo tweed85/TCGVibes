@@ -32,13 +32,33 @@ test.describe("Deck Doctor — standalone entry path", () => {
     // Default mode is "Preset"; the combobox is the preset selector.
     await doctor.getByRole("button", { name: /^analyze$/i }).click();
 
-    // The Game plan section is the report header — its accessible name is
-    // exposed via aria-label on the <section>.
+    // The Game plan section is the report header — Structure tab is the
+    // default; aria-label on the <section> identifies it.
     await expect(doctor.getByRole("region", { name: /game plan/i })).toBeVisible();
 
     // Close the doctor; pre-game dialog must still be visible (no game
     // was started — Deck Doctor is purely standalone).
     await doctor.getByRole("button", { name: /^close$/i }).click();
     await expect(preGame).toBeVisible();
+  });
+
+  test("Meta tab renders the snapshot grade banner without leaking fixtures", async ({ page }) => {
+    await page.goto(APP_URL);
+
+    const preGame = page.getByRole("dialog", { name: /choose decks/i });
+    await preGame.getByRole("button", { name: /deck doctor/i }).click();
+    const doctor = page.getByRole("dialog", { name: /deck doctor/i });
+
+    await doctor.getByRole("button", { name: /^analyze$/i }).click();
+
+    // Switch to Meta tab.
+    await doctor.getByRole("tab", { name: /^meta$/i }).click();
+    const metaPanel = doctor.getByRole("tabpanel", { name: /meta/i });
+    await expect(metaPanel).toBeVisible();
+
+    // The rendered snapshot id MUST NOT start with "fixture-" — guards the
+    // user-facing path against fixture leakage.
+    const text = await metaPanel.textContent();
+    expect(text ?? "").not.toMatch(/fixture-/);
   });
 });

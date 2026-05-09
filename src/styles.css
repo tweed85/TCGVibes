@@ -2302,6 +2302,98 @@ button.secondary:hover:not(:disabled) {
   }
 }
 
+/* ---- Deck Doctor: tabs + Matchups + Meta -------------------------------- */
+.dd-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--panel-3);
+  margin-bottom: 8px;
+}
+.dd-tabs button {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  font-size: 12px;
+  cursor: pointer;
+}
+.dd-tabs button.active {
+  background: var(--panel-2);
+  color: var(--accent);
+  border-color: var(--panel-3);
+}
+.dd-grade-banner {
+  background: var(--panel-2);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  margin-bottom: 8px;
+  border-left: 3px solid var(--panel-3);
+}
+.dd-grade-banner[data-grade="A"]      { border-left-color: var(--ok); }
+.dd-grade-banner[data-grade="B"]      { border-left-color: var(--accent); }
+.dd-grade-banner[data-grade="C"]      { border-left-color: #f59e0b; }
+.dd-grade-banner[data-grade="D"]      { border-left-color: var(--danger); }
+.dd-grade-banner[data-grade="favored"]   { border-left-color: var(--ok); }
+.dd-grade-banner[data-grade="even"]      { border-left-color: var(--accent); }
+.dd-grade-banner[data-grade="unfavored"] { border-left-color: var(--danger); }
+.dd-grade-banner[data-grade="unknown"]   { border-left-color: var(--muted); }
+.dd-grade-banner[data-grade="insufficient-data"] { border-left-color: var(--muted); }
+.dd-static-disclaimer {
+  font-size: 10px;
+  font-style: italic;
+  margin: 4px 0 8px;
+}
+.dd-snapshot-header {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 6px 0;
+}
+.dd-banner {
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+.dd-banner-warn  { background: rgba(245, 158, 11, 0.12); color: #fbbf24; }
+.dd-banner-error { background: rgba(239, 68, 68, 0.14); color: #fca5a5; }
+.dd-methodology {
+  background: var(--panel-2);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+.dd-methodology summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.dd-methodology p,
+.dd-methodology li {
+  font-size: 11px;
+  color: var(--muted);
+}
+.dd-methodology ul {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+.dd-section-inner {
+  background: var(--panel-2);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-top: 8px;
+}
+.dd-section-inner h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+
 /* Compact "skipped stage" notice modal (Dawn intermediates). */
 .search-notice-modal {
   max-width: 420px;
