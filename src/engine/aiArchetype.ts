@@ -10,7 +10,11 @@
 // `state._archetypeCache` (a non-serialized convenience field). For v1
 // callers, the entry points are inert (return Generic / 0).
 
-import type { Card, GameState, PlayerId, PokemonInPlay, TrainerCard } from "./types";
+import type { Card, EnergyType, GameState, PlayerId, PokemonInPlay, TrainerCard } from "./types";
+
+// Shared confidence union — Deck Doctor reads this so we don't end up with
+// two parallel definitions or an engine→data type-import boundary cross.
+export type Confidence = "high" | "medium" | "low";
 
 export type Archetype =
   | "festival-leads"
@@ -130,21 +134,222 @@ const SIGNATURES: Record<Exclude<Archetype, "generic">, string[]> = {
   ],
 };
 
-// Archetype detection. Scans every zone (deck, hand, discard, prizes,
-// in-play) for signature card NAMES. Returns the archetype with the most
-// signature matches, weighted toward unique attackers (signature[0]).
-export function detectArchetype(state: GameState, player: PlayerId): Archetype {
-  const pl = state.players[player];
-  const all: Card[] = [
-    ...pl.deck,
-    ...pl.hand,
-    ...pl.discard,
-    ...pl.prizes,
-  ];
-  if (pl.active) all.push(pl.active.card);
-  for (const p of pl.bench) all.push(p.card);
-  const names = new Set(all.map((c) => c.name));
+// ---- Archetype profiles --------------------------------------------------
+//
+// Per-archetype context for Deck Doctor. The AI's score adjustments live
+// further down this file (archetypeTrainerBonus / playbookCardBonus / etc.)
+// and operate independently from these profiles — profiles are about deck
+// CONSTRUCTION (what cards a structurally-healthy deck of this archetype
+// should run), not in-game decisions.
+//
+// Profiles intentionally lean small: each lists the cards whose absence
+// would be a real "this isn't that deck" signal (`core`), the pillars a
+// healthy build is expected to ship (`support`), common techs that don't
+// hurt to flag-as-missing-but-not-required (`tech`), and variant-specific
+// optional cards we never flag (`optional`). `mainAttackers` overrides the
+// damage-≥-100 heuristic so control / wall plans aren't misread.
 
+export interface ArchetypeProfile {
+  id: Archetype;
+  core: string[];
+  support: string[];
+  tech: string[];
+  optional: string[];
+  mainAttackers: string[];
+  preferredAttacks?: Record<string, string[]>;
+  energyPlan?: {
+    attackers: string[];
+    requiredTypes: EnergyType[];
+    acceleration: string[];
+    manualEnergyIsThinOk?: boolean;
+  };
+  notes?: string[];
+  expectedExceptions?: Array<{ id: string; reason: string }>;
+}
+
+// v1 profiles deliberately leave `core` / `support` / `tech` / `optional`
+// empty: archetype-specific "must-have" lists are valuable but high-curation
+// against a moving card pool. The load-bearing fields for v1 are
+// `mainAttackers` (overrides damage-≥-100 heuristic for control / wall
+// plans), `energyPlan` (drives suppression of energy.attacker-cant-be-paid
+// and energy.thin-supply when the deck is meant to accelerate), and
+// `notes` (context surfaced in the report's composition card). Future work
+// can populate the lists once the dataset settles.
+const NO_CARDS: string[] = [];
+
+export const ARCHETYPE_PROFILES: Record<Exclude<Archetype, "generic">, ArchetypeProfile> = {
+  "festival-leads": {
+    id: "festival-leads",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Dipplin", "Thwackey"],
+    energyPlan: {
+      attackers: ["Dipplin", "Thwackey"],
+      requiredTypes: ["Grass"],
+      acceleration: [],
+      manualEnergyIsThinOk: true,
+    },
+    notes: [
+      "Twin-hit Festival Lead engine — minimal energy is intentional; attacks are mostly Colorless or 1-Grass.",
+    ],
+  },
+  "arboliva": {
+    id: "arboliva",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Arboliva ex", "Teal Mask Ogerpon ex"],
+    energyPlan: {
+      attackers: ["Arboliva ex", "Teal Mask Ogerpon ex"],
+      requiredTypes: ["Grass"],
+      acceleration: ["Teal Mask Ogerpon ex", "Forest of Vitality"],
+    },
+    notes: ["Teal Mask Ogerpon ex's Energy Reserves accelerates the Grass plan."],
+  },
+  "alakazam": {
+    id: "alakazam",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Alakazam ex", "Alakazam"],
+    energyPlan: {
+      attackers: ["Alakazam ex"],
+      requiredTypes: ["Psychic"],
+      acceleration: [],
+    },
+  },
+  "lucario-ex": {
+    id: "lucario-ex",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Mega Lucario ex"],
+    energyPlan: {
+      attackers: ["Mega Lucario ex"],
+      requiredTypes: ["Fighting"],
+      acceleration: ["Fighting Gong"],
+    },
+    notes: ["Mega Brave attack scales with Premium Power Pro tool layer."],
+  },
+  "rocket-mewtwo": {
+    id: "rocket-mewtwo",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Team Rocket's Mewtwo ex"],
+    energyPlan: {
+      attackers: ["Team Rocket's Mewtwo ex"],
+      requiredTypes: ["Psychic"],
+      acceleration: ["Team Rocket's Spidops"],
+    },
+    notes: ["Tarountula→Spidops energy-discard ramp powers Mewtwo's Psydrive."],
+  },
+  "dragapult-blaziken": {
+    id: "dragapult-blaziken",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Dragapult ex"],
+    energyPlan: {
+      attackers: ["Dragapult ex"],
+      requiredTypes: ["Fire", "Psychic"],
+      acceleration: ["Blaziken ex", "Crispin"],
+    },
+    notes: ["Blaziken ex Charging Up + Crispin tutor is the energy-acceleration line."],
+  },
+  "dragapult-dudunsparce": {
+    id: "dragapult-dudunsparce",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Dragapult ex", "Dudunsparce ex"],
+    energyPlan: {
+      attackers: ["Dragapult ex", "Dudunsparce ex"],
+      requiredTypes: ["Fire", "Psychic"],
+      acceleration: [],
+    },
+    notes: [
+      "Hero's Cape ACE SPEC on the 1-prize Dudunsparce — forces opp into 2-attack KOs.",
+    ],
+  },
+  "crustle": {
+    id: "crustle",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Crustle", "Cornerstone Mask Ogerpon ex", "Mega Kangaskhan ex"],
+    energyPlan: {
+      attackers: ["Crustle", "Cornerstone Mask Ogerpon ex", "Mega Kangaskhan ex"],
+      requiredTypes: ["Fighting", "Colorless"],
+      acceleration: [],
+      manualEnergyIsThinOk: true,
+    },
+    notes: [
+      "Wall-first plan: Mysterious Rocking Inability blocks EX attackers; the deck wins on prize math, not raw damage.",
+    ],
+    expectedExceptions: [
+      {
+        id: "energy.attacker-cant-be-paid",
+        reason:
+          "Crustle is a wall plan; its main attackers' costs are paid via stalling rather than a normal energy curve.",
+      },
+      {
+        id: "prob.mulligan-rate",
+        reason:
+          "Crustle's wall plan accepts a high mulligan rate — the deck wins via setup over time, not opening speed.",
+      },
+    ],
+  },
+  "cynthia-garchomp": {
+    id: "cynthia-garchomp",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Cynthia's Garchomp ex"],
+    energyPlan: {
+      attackers: ["Cynthia's Garchomp ex"],
+      requiredTypes: ["Fighting", "Grass"],
+      acceleration: ["Cynthia's Roserade"],
+    },
+    notes: ["Cynthia's Roserade accelerates energy onto the Garchomp line."],
+  },
+  "grimmsnarl-froslass": {
+    id: "grimmsnarl-froslass",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Marnie's Grimmsnarl ex"],
+    energyPlan: {
+      attackers: ["Marnie's Grimmsnarl ex"],
+      requiredTypes: ["Darkness"],
+      acceleration: ["Punk Up"],
+    },
+    notes: [
+      "Punk Up energy acceleration on evolution; Spikemuth Gym is item-lock-immune stadium search.",
+    ],
+  },
+  "mega-starmie-froslass": {
+    id: "mega-starmie-froslass",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Mega Starmie ex", "Mega Froslass ex"],
+    energyPlan: {
+      attackers: ["Mega Starmie ex", "Mega Froslass ex"],
+      requiredTypes: ["Water", "Psychic"],
+      acceleration: [],
+    },
+    notes: [
+      "Risky Ruins passive 2-counter spread + Jetting Blow snipe stack into compound damage.",
+    ],
+  },
+  "hops-trevenant": {
+    id: "hops-trevenant",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Hop's Trevenant"],
+    preferredAttacks: {
+      "Hop's Trevenant": ["Horrifying Revenge"],
+    },
+    energyPlan: {
+      attackers: ["Hop's Trevenant"],
+      requiredTypes: ["Psychic"],
+      acceleration: ["Telepathic Psychic Energy"],
+    },
+    notes: [
+      "Single-prize attackers; Telepathic Psychic Energy is Buddy-Buddy-Poffin-on-an-energy.",
+    ],
+  },
+};
+
+// Pure name-set detection. Used by both the AI (which gathers names from a
+// live GameState) and Deck Doctor (which gathers names from a `Card[]`).
+// Returns the archetype id and a confidence band derived from the score:
+//   ≥ 5  → high   (unique-attacker signature[0] hit, plus at least one more)
+//   ≥ 3  → medium
+//   ≥ 2  → low    (the bare commit threshold; could be a coincidence)
+//   < 2  → generic / low
+export function detectArchetypeFromCardNames(
+  names: Set<string>,
+): { id: Archetype; confidence: Confidence } {
   let bestArch: Archetype = "generic";
   let bestScore = 0;
   for (const [arch, sigs] of Object.entries(SIGNATURES) as [Exclude<Archetype, "generic">, string[]][]) {
@@ -157,9 +362,30 @@ export function detectArchetype(state: GameState, player: PlayerId): Archetype {
       bestArch = arch;
     }
   }
-  // Need at least one signature hit to commit to an archetype; otherwise
-  // default to generic so the AI plays unbiased.
-  return bestScore >= 2 ? bestArch : "generic";
+  if (bestScore < 2) return { id: "generic", confidence: "low" };
+  const confidence: Confidence =
+    bestScore >= 5 ? "high" : bestScore >= 3 ? "medium" : "low";
+  return { id: bestArch, confidence };
+}
+
+// Archetype detection. Scans every zone (deck, hand, discard, prizes,
+// in-play) for signature card NAMES. Returns the archetype with the most
+// signature matches, weighted toward unique attackers (signature[0]).
+//
+// Wraps `detectArchetypeFromCardNames` so the AI's name-set construction
+// path stays unchanged while sharing the scoring with Deck Doctor.
+export function detectArchetype(state: GameState, player: PlayerId): Archetype {
+  const pl = state.players[player];
+  const all: Card[] = [
+    ...pl.deck,
+    ...pl.hand,
+    ...pl.discard,
+    ...pl.prizes,
+  ];
+  if (pl.active) all.push(pl.active.card);
+  for (const p of pl.bench) all.push(p.card);
+  const names = new Set(all.map((c) => c.name));
+  return detectArchetypeFromCardNames(names).id;
 }
 
 // Cached archetype lookup. Stored on a non-serialized field so it survives

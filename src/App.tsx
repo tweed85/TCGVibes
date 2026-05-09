@@ -53,6 +53,9 @@ import { CardView, FaceDownCard, PokemonInPlayView, setCardZoomHandler } from ".
 // first-page bundle — ~400 KB gzipped savings since the builder isn't needed
 // until the user opens the pre-game modal's Build Deck button.
 const DeckBuilderModal = lazy(() => import("./ui/DeckBuilderModal"));
+// Deck Doctor — same lazy split. The analyzer + helpers (~30KB) and the
+// modal UI (~10KB) only load when a user opens the doctor.
+const DeckDoctorModal = lazy(() => import("./ui/DeckDoctorModal"));
 
 type Selection =
   | { kind: "hand"; index: number }
@@ -249,6 +252,11 @@ export default function App() {
   const [openHands, setOpenHands] = useState(savedSettings.openHands ?? false);
   const [importOpen, setImportOpen] = useState(false);
   const [buildOpen, setBuildOpen] = useState(false);
+  // Deck Doctor — null when closed. Optional `initial` pre-populates the
+  // input pane (e.g. "open with this saved deck selected").
+  const [doctorOpen, setDoctorOpen] = useState<
+    null | { initial?: { source: "preset" | "saved"; id: string } }
+  >(null);
   // Gate the game behind a pre-game deck selection step. Nothing runs (AI
   // setup, turn-1 draw, opening modal) until the player clicks Start.
   const [preGameOpen, setPreGameOpen] = useState(true);
@@ -1447,6 +1455,14 @@ export default function App() {
               <button className="secondary" onClick={() => setBuildOpen(true)}>Build Deck</button>
               <button className="secondary" onClick={() => setImportOpen(true)}>Import Deck</button>
               <button className="secondary" onClick={() => setPreGameOpen(true)}>Change Decks</button>
+              <button
+                className="secondary"
+                onClick={() => setDoctorOpen({})}
+                aria-label="Deck Doctor"
+                title="Analyze a deck — does NOT have to be the deck you're playing."
+              >
+                Deck Doctor
+              </button>
               <button className="secondary" onClick={onExportLog} title="Download this game's event log as JSON">
                 Export Log
               </button>
@@ -1484,6 +1500,7 @@ export default function App() {
           }}
           onOpenImport={() => setImportOpen(true)}
           onOpenBuild={() => setBuildOpen(true)}
+          onOpenDoctor={() => setDoctorOpen({})}
           onStart={() => {
             onReset();
             setPreGameOpen(false);
@@ -1679,6 +1696,22 @@ export default function App() {
               if (assignTo === "opp" || assignTo === "both") setOppDeckId(id);
               setBuildOpen(false);
             }}
+          />
+        </Suspense>
+      )}
+
+      {doctorOpen && (
+        <Suspense fallback={
+          <div className="modal-backdrop">
+            <div className="modal" style={{ maxWidth: 360, textAlign: "center" }}>
+              <div className="muted" style={{ padding: 16 }}>Loading Deck Doctor…</div>
+            </div>
+          </div>
+        }>
+          <DeckDoctorModal
+            imports={imports}
+            initial={doctorOpen.initial}
+            onClose={() => setDoctorOpen(null)}
           />
         </Suspense>
       )}
@@ -2893,6 +2926,7 @@ function PreGameModal({
   onChangeMode,
   onOpenImport,
   onOpenBuild,
+  onOpenDoctor,
   onStart,
 }: {
   deckSpecs: { id: string; name: string }[];
@@ -2908,6 +2942,7 @@ function PreGameModal({
   onChangeMode: (m: "vsCPU" | "local") => void;
   onOpenImport: () => void;
   onOpenBuild: () => void;
+  onOpenDoctor: () => void;
   onStart: () => void;
 }) {
   const describe = (id: string): string | null => {
@@ -2921,7 +2956,12 @@ function PreGameModal({
   const opponentLabel = gameMode === "local" ? "Player 2" : "CPU";
   return (
     <div className="modal-backdrop">
-      <div className="modal pregame-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal pregame-modal"
+        role="dialog"
+        aria-label="Choose decks"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
           <h2>PandaBananasTCG — Start a game</h2>
         </div>
@@ -3002,6 +3042,9 @@ function PreGameModal({
           )}
           <button onClick={onOpenBuild}>Build Deck…</button>
           <button onClick={onOpenImport}>Import Deck…</button>
+          <button onClick={onOpenDoctor} aria-label="Deck Doctor">
+            Deck Doctor…
+          </button>
         </div>
         <div className="modal-actions">
           <button
