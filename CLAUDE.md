@@ -57,8 +57,8 @@ src/
   ui/CardView.tsx     Card + in-play renderers (memoized)
   ui/DeckBuilderModal.tsx
   ui/VariantPicker.tsx Modal: pick which printing of a card to use
-  App.tsx
-  styles.css
+  App.tsx              Includes inline GameInspector right-rail panel
+  styles.css           .game-layout grid + inspector + action-bar
   test-setup.ts       Loads dataset + jest-dom matchers
 e2e/smoke.spec.ts     Playwright boot + undo click-through
 playwright.config.ts
@@ -83,6 +83,26 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
 - **Interactive picker pattern** — `PendingInPlayTarget` carries a
   discriminated-union action; `resolveInPlayTarget` re-arms between
   clicks until `remaining` hits 0. `formatPickerLabel` appends "— N left".
+  Actions spawned mid-attack (Phantom Dive, Aura Jab) carry a
+  `finishTurn` flag; `finishHit` defers `endTurn` while a human picker
+  is open and `resolveInPlayTarget` runs it on the final click.
+- **Drag-and-drop: hand → in-play.** `useCardGesture` in
+  [CardView.tsx](src/ui/CardView.tsx) is one state machine for tap +
+  long-press-zoom + drag, dispatched off pointerdown: move >8px before
+  500ms → DRAG, hold 500ms without movement → ZOOM, otherwise CLICK.
+  Pointer capture keeps move/up firing on the source card so
+  `clientX/Y` stays valid as the cursor crosses drop targets. App tags
+  in-play tiles + empty bench slots with `data-droptarget="my:inPlay:<id>"`
+  / `"my:bench:empty"`; `dispatchHandToInPlay` resolves drops via
+  `document.elementFromPoint → closest("[data-droptarget]")` and routes
+  to the same engine functions the click flow calls (`attachEnergy`,
+  `evolve`, `playTrainer({ kind: "inPlay" })`, `playBasicToBench`).
+  The drag pre-populates `selected` so the existing `legalTargets`
+  memo lights up legal targets without duplicating its logic. A
+  `.drag-ghost` portal in `document.body` follows the pointer.
+  `<img draggable={false}>` + `pointer-events: none` on the hand-card
+  image prevents the browser's native HTML5 drag from swallowing
+  pointermove. Click flow stays as fallback for accessibility.
 - **Pause states.** Terminal promotes (attack/checkup KO) set
   `pendingPromote` + `phase = "promoteActive"` and queue
   `onPromoteResolved` (`endTurn` / `passTurn` / `secondAttack`).
@@ -110,6 +130,45 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
   `evaluatePredicate`; fizzleIfNot zeroes the preview when the
   condition is unmet (Hop's Cramorant Fickle Spitting projects 0 at
   prizes ∉ {3,4} instead of misleading 120).
+- **Effective type / weakness math.** Runtime weakness math reads
+  `effectiveTypes(attacker)` and `effectiveWeaknesses(defender, state)`
+  rather than raw card types / weaknesses, so Fairy Zone (Dragons gain
+  Psychic weakness) and type-rewriting abilities (Double Type, Dual
+  Core) match between attack resolution and the AI / UI damage
+  estimator.
+- **Game layout = board + inspector rail.** `.game-layout` is a
+  responsive grid: desktop pairs the play field with a right-side
+  `GameInspector` (selected card or current Active — HP meter, energy /
+  tool / status chips, attack previews, recent log); tablet / mobile
+  collapse to a single column. The header collapses deck controls into
+  a `Game` `<details>` menu (build / import / change / export) and only
+  shows them pre-game. The log lives in the inspector, not the hand
+  strip. The action bar has a status line, turn-resource chips
+  (Energy / Supporter / Retreat), and an attack button with damage
+  preview; on mobile it sticks as a bottom sheet.
+- **KO cause attribution.** `knockOut` takes a `KoContext` so
+  opponent-attack-only effects (Legacy Energy, Heavy Baton + Amulet of
+  Hope discards, Lillie's Pearl prize reduction, Final Chain, Infinite
+  Shadow) only fire when `applyDamage` calls it with
+  `{ byOpponentAttack: true }`. Self-KOs from recoil / status / Cursed
+  Blast no longer trigger them.
+- **Deck builder = readable tiles + side-rail preview.** Grid uses
+  medium tiles (~110px wide, 5:7 aspect ratio) — readable card text
+  without losing scan density. The right rail pins a large
+  `.builder-preview` block above the deck list that swaps to whichever
+  tile (or deck-list row) the user hovers / focuses. Right-click still
+  opens the existing fullscreen zoom. Mobile (≤768px) keeps the
+  Browse / Your-deck tab toggle.
+- **Card images: English-first with Japanese fallback.**
+  [cardImages.ts](src/data/cardImages.ts) maps the local pokemon-tcg
+  set codes to Limitless's English TPCi CDN
+  (`tpci/<SET>/<SET>_<NNN>_R_EN_LG.png`, zero-padded number). For
+  sets whose English images haven't landed on Limitless yet (e.g.
+  `me4` / Chaos Rising — releases 2026-05-22), a parallel
+  `SET_CODE_TO_LIMITLESS_JP` map points at the Japanese TPC bucket
+  (`tpc/<SET>/<SET>_<N>_R_JP_LG.png`, NOT zero-padded, JP suffix).
+  JP entries take precedence; flip a set EN-side by removing it from
+  the JP map and adding to the EN map.
 - **Art variants** — `gameplayKey(card)` in [cardEquivalence.ts](src/data/cardEquivalence.ts)
   produces a canonical signature from every gameplay-relevant field
   (name + supertype + subtypes + HP + types + retreat + attacks +
@@ -177,7 +236,7 @@ For task-specific deep dives, read the relevant docs/ companion:
 - **Effect coverage** (attacks / abilities / trainers / stadiums / tools, ~85 effect kinds incl. Chaos Rising additions, ~24 tools, special interactions): see [docs/EFFECTS.md](docs/EFFECTS.md)
 - **AI internals** (v1 greedy, v2 archetype-aware heuristics, MCTS, the 12 wired archetype playbooks, measured win rates): see [docs/AI.md](docs/AI.md)
 - **Deck library** (12 curated decks: 4 baseline + 8 Prague Regional 2026 community lists; deck-builder gameplay-equivalence grouping; dataset refresh): see [docs/DECKS.md](docs/DECKS.md)
-- **Test suite** (626 vitest across 37 files + 3 Playwright e2e — full enumeration with what each file covers): see [docs/TESTS.md](docs/TESTS.md)
+- **Test suite** (633 vitest + 3 Playwright e2e — full enumeration with what each file covers): see [docs/TESTS.md](docs/TESTS.md)
 - **Mobile / iOS / offline** (Capacitor, PWA, responsive CSS, safe-area hardening): see [docs/MOBILE.md](docs/MOBILE.md)
 - **Open findings + deferred AI work** (MVP scope cuts, pressure-test findings, Phases 2c / 2e / 7-12 of the AI overhaul plan): see [docs/FINDINGS.md](docs/FINDINGS.md)
 

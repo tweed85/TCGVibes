@@ -127,6 +127,7 @@ button, select, input, [role="button"] {
   padding: 6px 10px;
   background: var(--panel);
   border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
 }
 
 .header .brand { display: flex; flex-direction: column; gap: 0; min-width: 0; }
@@ -175,6 +176,48 @@ button, select, input, [role="button"] {
   padding: 2px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.02);
+}
+
+.game-menu {
+  position: relative;
+}
+.game-menu summary {
+  list-style: none;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: var(--text-base);
+}
+.game-menu summary::-webkit-details-marker { display: none; }
+.game-menu[open] summary,
+.game-menu summary:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+.game-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.98);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55);
+}
+.game-menu-panel button {
+  justify-content: flex-start;
+  text-align: left;
+  width: 100%;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -354,8 +397,15 @@ button, select, input, [role="button"] {
   letter-spacing: 0.4px;
 }
 
-.board {
+.game-layout {
   grid-area: board;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 8px;
+  min-height: 0;
+}
+
+.board {
   display: grid;
   /* Sides take the full board width; the Stadium floats as an overlay pinned
      to the right, straddling the gap between the two sides. Both the
@@ -376,6 +426,135 @@ button, select, input, [role="button"] {
   border-radius: 10px;
   padding: 8px;
   position: relative; /* anchor for the absolute Stadium overlay */
+  border: 1px solid rgba(148, 163, 184, 0.10);
+}
+
+.game-inspector {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 8px;
+  min-height: 0;
+}
+
+.inspector-section {
+  min-width: 0;
+  background: rgba(30, 41, 59, 0.86);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.inspector-kicker {
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-weight: 700;
+}
+.inspector-card-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+.inspector-card .card {
+  width: 88px;
+  min-height: 118px;
+}
+.inspector-facts h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  line-height: 1.15;
+}
+.hp-meter {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.hp-meter-top {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 11px;
+}
+.hp-meter-top strong { color: var(--text); }
+.hp-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.8);
+}
+.hp-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--ok), var(--accent-hi));
+}
+.state-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+}
+.state-chip {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  color: var(--muted);
+  background: rgba(15, 23, 42, 0.48);
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.state-chip.on {
+  color: #bbf7d0;
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(22, 101, 52, 0.22);
+}
+.state-chip.danger {
+  color: #fecaca;
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(127, 29, 29, 0.26);
+}
+.attack-preview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.attack-preview-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 8px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.42);
+}
+.attack-preview-row div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.attack-preview-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.attack-preview-row span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.attack-preview-row b {
+  color: var(--accent-hi);
+  font-size: 12px;
+}
+.log-panel {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .side.opponent { grid-area: opp-side; }
@@ -757,16 +936,17 @@ button, select, input, [role="button"] {
 
 .action-bar {
   grid-area: action;
-  background: var(--panel);
-  border-radius: 8px;
-  padding: 6px 8px;
+  background: rgba(30, 41, 59, 0.96);
+  border-radius: 10px;
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 7px;
   min-height: 0;
   /* Subtle top edge so the action bar reads as distinct from the hand
      strip directly above it. */
-  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.16);
 }
 
 .action-bar .status-line {
@@ -774,13 +954,13 @@ button, select, input, [role="button"] {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  font-size: var(--text-sm);
-  min-height: 16px;
+  font-size: var(--text-base);
+  min-height: 22px;
 }
 .action-bar .status-line .msg {
   color: var(--accent);
   flex: 1;
-  font-weight: 500;
+  font-weight: 700;
 }
 .action-bar .status-line .msg.waiting {
   color: var(--info);
@@ -798,17 +978,28 @@ button, select, input, [role="button"] {
 }
 .action-bar .status-line .turn-flags {
   display: flex;
-  gap: 6px;
+  gap: 5px;
   color: var(--muted);
   font-size: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
-.action-bar .status-line .turn-flags .on { color: var(--accent); }
+.action-bar .status-line .turn-flags span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.20);
+  background: rgba(15, 23, 42, 0.42);
+}
+.action-bar .status-line .turn-flags .on {
+  color: #111827;
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 700;
+}
 
 .action-bar .action-groups {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   /* Buttons bottom-align across all groups so the end group (no label)
      lines up with the button rows in the other groups. */
@@ -817,7 +1008,7 @@ button, select, input, [role="button"] {
 .action-bar .group {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   min-width: 0;
 }
 .action-bar .group .group-label {
@@ -828,7 +1019,7 @@ button, select, input, [role="button"] {
 }
 .action-bar .group .group-buttons {
   display: flex;
-  gap: 3px;
+  gap: 5px;
   flex-wrap: wrap;
 }
 .action-bar .group.abilities .group-label { color: var(--purple); }
@@ -865,6 +1056,11 @@ button, select, input, [role="button"] {
   background: linear-gradient(180deg, rgba(245, 158, 11, 0.25), rgba(245, 158, 11, 0.08));
   border-color: rgba(245, 158, 11, 0.6);
   color: #fef3c7;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 150px;
 }
 .action-bar .attack-btn:hover:not(:disabled) {
   background: linear-gradient(180deg, rgba(245, 158, 11, 0.45), rgba(245, 158, 11, 0.18));
@@ -909,6 +1105,12 @@ button, select, input, [role="button"] {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
   margin-top: 4px;
+}
+.game-inspector .log-content {
+  max-height: none;
+  min-height: 0;
+  flex: 1;
+  padding-right: 2px;
 }
 .log-content .entry { line-height: 1.45; padding: 1px 2px; }
 .log-content .entry.p1 { color: #fbbf24; }
@@ -991,6 +1193,57 @@ button, select, input, [role="button"] {
       rgba(34, 197, 94, 0.08) 0 6px,
       transparent 6px 14px
     );
+}
+
+/* -------- Drag-and-drop: hand → in-play ---------------------------------- */
+/* Hand card while it's the source of a drag — fade so the user can see the
+   floating ghost is "the same card" being moved. */
+.card.drag-source {
+  opacity: 0.35;
+  transition: opacity 80ms ease;
+}
+/* Tile (Active / bench) or empty bench slot directly under the pointer when
+   the dragged card can be legally dropped here. Brighter than the .legal-target
+   pulse so the player knows release-now will commit. */
+.card.drop-hover {
+  outline: 3px solid rgba(56, 189, 248, 1);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px rgba(56, 189, 248, 0.25);
+  animation: none; /* override the legal-target pulse so the highlight reads as a "lock" */
+}
+.card.empty-slot.drop-hover {
+  border-color: rgba(56, 189, 248, 1);
+  background: rgba(56, 189, 248, 0.12);
+}
+/* Hand cards must capture touch gestures (drag) instead of letting the page /
+   hand strip scroll. Mouse and pen ignore touch-action. user-select / -webkit
+   -user-drag prevent the browser's native image-drag from swallowing our
+   pointermove events. */
+.my-hand-row > .card {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.my-hand-row > .card .card-img {
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+/* Floating ghost portal — follows the pointer during drag. Pointer-events:
+   none so elementFromPoint sees the drop target underneath, not the ghost. */
+.drag-ghost {
+  position: fixed;
+  pointer-events: none;
+  width: var(--hand-card-w);
+  min-height: var(--hand-card-h);
+  transform: translate(-50%, -50%) rotate(2deg);
+  opacity: 0.92;
+  z-index: 200;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.55));
+}
+.drag-ghost > .card {
+  width: 100%;
+  min-height: var(--hand-card-h);
+  cursor: grabbing;
 }
 .card.facedown {
   background: linear-gradient(135deg, #1e40af, #3730a3);
@@ -1128,40 +1381,114 @@ button, select, input, [role="button"] {
 .card.in-play .in-play-overlay .energy-row {
   align-self: flex-start;
   display: flex;
-  gap: 2px;
+  gap: 3px;
   flex-wrap: wrap;
   max-width: 70%;
 }
 .card.in-play .in-play-overlay .energy-pip {
-  /* Sized for 2-letter codes (Fr / Ft / Dk / Dr / Fy) so colorblind users can
-     read the type without relying on color alone. Letterforms stay legible
-     at 9px when the pip is wide enough not to crop them. */
-  min-width: 18px;
-  height: 14px;
-  padding: 0 3px;
-  border-radius: 7px;
-  font-size: 9px;
+  position: relative;
+  width: 20px;
+  height: 20px;
+  padding: 4px;
+  border-radius: 50%;
+  font-size: 10px;
   font-weight: 700;
   color: #fff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.75);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.62),
+    0 0 0 1px rgba(255, 255, 255, 0.30),
+    inset 0 1px 2px rgba(255, 255, 255, 0.42),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.34);
   line-height: 1;
   letter-spacing: 0.02em;
 }
-.card.in-play .in-play-overlay .energy-pip.energy-Fire { background: var(--energy-fire); }
-.card.in-play .in-play-overlay .energy-pip.energy-Water { background: var(--energy-water); }
-.card.in-play .in-play-overlay .energy-pip.energy-Grass { background: var(--energy-grass); }
-.card.in-play .in-play-overlay .energy-pip.energy-Lightning { background: var(--energy-lightning); color: #111; text-shadow: 0 1px 1px rgba(255,255,255,0.6); }
-.card.in-play .in-play-overlay .energy-pip.energy-Psychic { background: var(--energy-psychic); }
-.card.in-play .in-play-overlay .energy-pip.energy-Fighting { background: var(--energy-fighting); }
-.card.in-play .in-play-overlay .energy-pip.energy-Darkness { background: var(--energy-darkness); }
-.card.in-play .in-play-overlay .energy-pip.energy-Metal { background: var(--energy-metal); color: #111; text-shadow: 0 1px 1px rgba(255,255,255,0.5); }
-.card.in-play .in-play-overlay .energy-pip.energy-Dragon { background: var(--energy-dragon); }
-.card.in-play .in-play-overlay .energy-pip.energy-Fairy { background: var(--energy-fairy); }
-.card.in-play .in-play-overlay .energy-pip.energy-Colorless { background: var(--energy-colorless); color: #111; text-shadow: 0 1px 1px rgba(255,255,255,0.5); }
+.card.in-play .in-play-overlay .energy-pip::before {
+  content: "";
+  position: absolute;
+  inset: 2px 3px auto 4px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.45);
+  filter: blur(0.2px);
+}
+.card.in-play .in-play-overlay .energy-pip svg {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+  stroke: rgba(0, 0, 0, 0.18);
+  stroke-width: 0.65;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.72));
+}
+.card.in-play .in-play-overlay .energy-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
+}
+.card.in-play .in-play-overlay .energy-wild-mark::before {
+  position: relative;
+  z-index: 1;
+  content: "*";
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+.card.in-play .in-play-overlay .energy-sr-code {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+.card.in-play .in-play-overlay .energy-pip.energy-Fire {
+  background: radial-gradient(circle at 35% 25%, #fed7aa 0 16%, #f97316 38%, #dc2626 72%, #7f1d1d 100%);
+}
+.card.in-play .in-play-overlay .energy-pip.energy-Water {
+  background: radial-gradient(circle at 35% 25%, #bae6fd 0 16%, #38bdf8 40%, #2563eb 76%, #1e3a8a 100%);
+}
+.card.in-play .in-play-overlay .energy-pip.energy-Grass {
+  background: radial-gradient(circle at 35% 25%, #bbf7d0 0 16%, #22c55e 42%, #15803d 78%, #14532d 100%);
+}
+.card.in-play .in-play-overlay .energy-pip.energy-Lightning {
+  background: radial-gradient(circle at 35% 25%, #fef9c3 0 18%, #fde047 42%, #eab308 76%, #854d0e 100%);
+  color: #111;
+  text-shadow: 0 1px 1px rgba(255,255,255,0.6);
+}
+.card.in-play .in-play-overlay .energy-pip.energy-Psychic {
+  background: radial-gradient(circle at 35% 25%, #f5d0fe 0 16%, #d946ef 40%, #9333ea 74%, #4c1d95 100%);
+}
+.card.in-play .in-play-overlay .energy-pip.energy-Fighting {
+  background: radial-gradient(circle at 35% 25%, #fed7aa 0 16%, #f97316 36%, #b45309 72%, #451a03 100%);
+}
+.card.in-play .in-play-overlay .energy-pip.energy-Darkness {
+  background: radial-gradient(circle at 35% 25%, #a78bfa 0 12%, #4c1d95 42%, #111827 78%, #020617 100%);
+}
+.card.in-play .in-play-overlay .energy-pip.energy-Metal {
+  background: radial-gradient(circle at 35% 25%, #f8fafc 0 16%, #cbd5e1 38%, #64748b 72%, #334155 100%);
+  color: #111;
+  text-shadow: 0 1px 1px rgba(255,255,255,0.5);
+}
+.card.in-play .in-play-overlay .energy-pip.energy-Dragon {
+  background: conic-gradient(from 25deg, #fde047, #a855f7, #2563eb, #22c55e, #fde047);
+}
+.card.in-play .in-play-overlay .energy-pip.energy-Fairy {
+  background: radial-gradient(circle at 35% 25%, #fbcfe8 0 16%, #f472b6 40%, #db2777 76%, #831843 100%);
+}
+.card.in-play .in-play-overlay .energy-pip.energy-Colorless {
+  background: radial-gradient(circle at 35% 25%, #ffffff 0 16%, #e2e8f0 42%, #94a3b8 76%, #475569 100%);
+  color: #111;
+  text-shadow: 0 1px 1px rgba(255,255,255,0.5);
+}
 /* Wildcard sentinel "*" for Prism/Luminous/Legacy/Neo Upper. */
 .card.in-play .in-play-overlay .energy-pip.energy-wild {
   background: conic-gradient(
@@ -1171,14 +1498,96 @@ button, select, input, [role="button"] {
   );
 }
 
-.card.in-play .in-play-overlay .tool-badge {
+.card.in-play .in-play-overlay .tool-row {
   align-self: flex-end;
-  background: rgba(5, 150, 105, 0.92);
-  color: #fff;
-  font-size: var(--text-xs);
-  padding: 1px 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+  max-height: 62px;
+}
+.card.in-play .in-play-overlay .tool-badge {
+  width: 23px;
+  height: 23px;
+  overflow: hidden;
   border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  background: rgba(15, 23, 42, 0.82);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.68),
+    0 0 0 1px rgba(15, 23, 42, 0.55);
+}
+.card.in-play .in-play-overlay .tool-icon {
+  --tool-fg: #fff;
+  --tool-bg1: #64748b;
+  --tool-bg2: #0f172a;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tool-fg);
+  background:
+    radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.55), transparent 24%),
+    linear-gradient(135deg, var(--tool-bg1), var(--tool-bg2));
+}
+.card.in-play .in-play-overlay .tool-icon::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  pointer-events: none;
+}
+.card.in-play .in-play-overlay .tool-icon svg {
+  position: relative;
+  z-index: 1;
+  width: 82%;
+  height: 82%;
+}
+.card.in-play .in-play-overlay .tool-icon svg path,
+.card.in-play .in-play-overlay .tool-icon svg circle {
+  fill: currentColor;
+  stroke: rgba(0, 0, 0, 0.30);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.65));
+}
+.card.in-play .in-play-overlay .tool-mark {
+  position: absolute;
+  z-index: 2;
+  right: 2px;
+  bottom: 2px;
+  min-width: 9px;
+  height: 9px;
+  padding: 0 2px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.84);
+  color: #fff;
+  font-size: 6px;
+  font-weight: 900;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+.card.in-play .in-play-overlay .tool-more {
+  min-width: 21px;
+  height: 17px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  text-align: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.65);
 }
 
 .muted { color: var(--muted); font-size: 11px; }
@@ -1274,6 +1683,17 @@ button.secondary:hover:not(:disabled) {
   }
   .header h1 { font-size: 14px; }
   .header .meta { font-size: 10px; }
+  .game-layout {
+    grid-template-columns: 1fr;
+  }
+  .game-inspector {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto auto;
+  }
+  .game-inspector .log-panel {
+    grid-column: 1 / -1;
+    max-height: 150px;
+  }
   /* Narrower padding reservation so bench keeps width on ~tablet widths.
      `env(safe-area-inset-right)` keeps the rightmost bench off the iPad
      Pro rounded corner / iPhone landscape notch. */
@@ -1312,6 +1732,32 @@ button.secondary:hover:not(:disabled) {
   .header .meta { font-size: 10px; }
   .header .controls-row { gap: 6px; width: 100%; }
   .header select { font-size: 11px; padding: 2px 3px; max-width: 110px; }
+  .game-menu { margin-left: auto; }
+  .game-menu summary { min-height: 40px; }
+  .game-menu-panel {
+    right: 0;
+    min-width: 170px;
+  }
+  .game-inspector {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .inspector-section {
+    padding: 8px;
+  }
+  .inspector-card-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .inspector-card .card {
+    width: 64px;
+    min-height: 86px;
+  }
+  .attack-preview-panel {
+    display: none;
+  }
+  .game-inspector .log-panel {
+    display: none;
+  }
 
   .side {
     gap: 6px;
@@ -1360,7 +1806,13 @@ button.secondary:hover:not(:disabled) {
 
   .my-hand-header .hint { display: none; }
 
-  .action-bar { padding: 4px 6px; }
+  .action-bar {
+    position: sticky;
+    bottom: max(4px, env(safe-area-inset-bottom));
+    z-index: 12;
+    padding: 8px;
+    border-radius: 12px 12px 8px 8px;
+  }
   /* On mobile, stack action groups vertically so every attack and ability
      button is visible at once. The previous horizontal-scroll layout
      hid buttons off the right edge. */
@@ -1379,6 +1831,12 @@ button.secondary:hover:not(:disabled) {
   .action-bar .group .group-buttons > button {
     flex: 1 1 calc(50% - 4px);
     min-width: 0;
+  }
+  .action-bar .attack-btn {
+    min-width: 0;
+    grid-template-columns: 1fr;
+    gap: 2px;
+    text-align: left;
   }
   .action-bar button { min-height: 44px; font-size: 12px; padding: 6px 8px; }
   .action-bar .group .group-label { font-size: 8px; }
@@ -1435,14 +1893,16 @@ button.secondary:hover:not(:disabled) {
     --hand-card-w: 60px;
     --hand-card-h: 82px;
   }
-  /* Bench cards top out at 70px wide here. Default pip min-width 18px and
-     HP badge font-size 12px crowd each other plus the status badges at
-     this size, forcing 3-4 pip rows to wrap awkwardly. Tighten both so
-     2-3 pips can sit alongside the HP badge and status row. */
+  /* Bench cards top out at 70px wide here. Tighten attachment icons so
+     energy/tool rows stay readable without crowding the HP badge. */
   .card.in-play .in-play-overlay .energy-pip {
-    min-width: 14px;
-    font-size: 8px;
-    padding: 0 2px;
+    width: 15px;
+    height: 15px;
+    padding: 2px;
+  }
+  .card.in-play .in-play-overlay .tool-badge {
+    width: 17px;
+    height: 17px;
   }
   .card.in-play .hp-badge {
     font-size: 11px;
@@ -1696,8 +2156,11 @@ button.secondary:hover:not(:disabled) {
 }
 .builder-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--mini-card-w), 1fr));
-  gap: 6px;
+  /* Medium tiles — readable card text without sacrificing scan density.
+     Local override of the global mini-card vars (which are reused by hand /
+     in-play tiles and must stay small). */
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
 }
 .builder-card {
   position: relative;
@@ -1711,12 +2174,18 @@ button.secondary:hover:not(:disabled) {
 }
 .builder-card.picked { outline: 2px solid var(--accent); outline-offset: 1px; }
 .builder-card.capped { opacity: 0.45; cursor: not-allowed; }
-.builder-card .card { width: var(--mini-card-w); min-height: var(--mini-card-h); font-size: 9px; padding: 3px; }
-.builder-card .card .name { font-size: 9px; }
+.builder-card .card {
+  width: 100%;
+  min-height: 0;
+  aspect-ratio: 5 / 7;
+  font-size: 11px;
+  padding: 4px;
+}
+.builder-card .card .name { font-size: 11px; }
 .builder-card .card .type,
 .builder-card .card .atk,
 .builder-card .card .hp,
-.builder-card .card .trainer-text { font-size: 8px; }
+.builder-card .card .trainer-text { font-size: 10px; }
 .builder-count {
   position: absolute;
   top: 2px;
@@ -1765,9 +2234,44 @@ button.secondary:hover:not(:disabled) {
   letter-spacing: 0.5px;
   color: var(--muted);
   border-bottom: 1px solid var(--panel-3);
-  position: sticky;
-  top: 0;
   background: var(--panel-2);
+}
+
+/* Side-rail preview pinned at the top of `.builder-selected`. Updates on
+   hover/focus over a tile or a deck-list row so the user can read the
+   focused card's full art + text without right-click → zoom. */
+.builder-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  border-bottom: 1px solid var(--panel-3);
+  background: var(--panel-2);
+}
+.builder-preview-img {
+  width: 100%;
+  max-width: 240px;
+  aspect-ratio: 5 / 7;
+  object-fit: contain;
+  border-radius: 6px;
+  background: var(--panel-3);
+}
+.builder-preview-name {
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+.builder-preview-printing {
+  font-size: 10px;
+  color: var(--muted);
+  text-align: center;
+}
+.builder-preview-empty {
+  padding: 20px 8px;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
 }
 .builder-selected-list {
   list-style: none;

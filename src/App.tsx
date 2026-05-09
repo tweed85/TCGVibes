@@ -1,4 +1,5 @@
-import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { createPortal } from "react-dom";
 import {
   attachEnergy,
   attack,
@@ -37,7 +38,7 @@ import {
 } from "./engine/rules";
 import { effectiveAttackCost, effectiveAttacks, effectiveMaxHp, energyPoolForCost, estimateAttackDamage } from "./engine/ongoingEffects";
 import type { ActionResult } from "./engine/actions";
-import type { Ability, Card, GameState, PlayerId, PokemonInPlay } from "./engine/types";
+import type { Ability, Card, GameState, LogEntry, PlayerId, PokemonInPlay } from "./engine/types";
 import { buildDeck, validateDeckForPlay, validatedDeckSpecs } from "./data/decks";
 import { datasetAsOf, datasetFormat } from "./data/cards";
 import { getAttackEffects } from "./data/effectPatterns";
@@ -200,6 +201,20 @@ export default function App() {
   const stateRef = useRef<GameState>(buildInitial());
   const rerender = useForceRerender();
   const [selected, setSelected] = useState<Selection>(null);
+  // Drag-and-drop from hand → in-play. Non-null while a drag is in flight.
+  // `dragging.handIndex` identifies the source card; `x/y` track the ghost's
+  // position; `hoverTargetId` is the data-droptarget the pointer is currently
+  // over (only set if it's a legal target — drives the .drop-hover highlight).
+  const [dragging, setDragging] = useState<{
+    handIndex: number;
+    card: Card;
+    x: number;
+    y: number;
+    hoverTargetId: string | null;
+  } | null>(null);
+  // Pointermove fires far faster than React can re-render. Stash the latest
+  // coords in a ref and flush via rAF so we don't tear or thrash.
+  const dragRafRef = useRef<number | null>(null);
   // Instance-id of the Pokémon whose ability button is currently hovered.
   // Used to glow the source Pokémon in the play area so multiple same-named
   // cards (e.g. two Teal Mask Ogerpon ex) are immediately distinguishable.
@@ -811,6 +826,152 @@ export default function App() {
     setSelected({ kind: "inPlay", instanceId: p.instanceId });
   };
 
+  // ------- Drag-and-drop: hand → in-play -----------------------------------
+  // Click flow above (`onInPlayClick`) stays the source of truth for legality
+  // gates and undo labels. Drag is a thin layer that pre-populates `selected`
+  // (so `legalTargets` lights up the same way it does mid-click) and, on
+  // pointerup, calls into the same engine routes the click handler does.
+
+  const dispatchHandToInPlay = (
+    handIndex: number,
+    target:
+      | { kind: "inPlay"; instanceId: string }
+      | { kind: "bench-empty" },
+  ): void => {
+    const card = me.hand[handIndex];
+    if (!card) return;
+
+    if (target.kind === "bench-empty") {
+      if (isPokemon(card) && isBasic(card)) {
+        snapshotForUndo(`play ${card.name} to bench`);
+        handle(
+          playBasicToBench(state, viewingPlayer, handIndex),
+          `Played ${card.name} to bench.`,
+        );
+      }
+      return;
+    }
+
+    const { instanceId } = target;
+    if (card.supertype === "Energy") {
+      snapshotForUndo(`attach ${card.name}`);
+      handle(
+        attachEnergy(state, viewingPlayer, handIndex, instanceId),
+        `Attached ${card.name}.`,
+      );
+      return;
+    }
+    if (card.supertype === "Pokémon" && card.evolvesFrom) {
+      snapshotForUndo(`evolve → ${card.name}`);
+      handle(
+        evolve(state, viewingPlayer, handIndex, instanceId),
+        `Evolved into ${card.name}.`,
+      );
+      return;
+    }
+    if (card.supertype === "Trainer") {
+      const isTool =
+        card.subtypes.includes("Pokémon Tool") ||
+        card.subtypes.includes("Tool");
+      if (isTool) {
+        snapshotForUndo(`attach ${card.name}`);
+        handle(
+          playTrainer(state, viewingPlayer, handIndex, {
+            kind: "inPlay",
+            instanceId,
+          }),
+          `Attached ${card.name}.`,
+        );
+      }
+    }
+  };
+
+  // Hit-test what the pointer is over, walking up to the nearest
+  // [data-droptarget] ancestor. The ghost has pointer-events: none so the
+  // element under the cursor is always the actual drop candidate, not the
+  // floating preview.
+  const dropTargetUnderPoint = (x: number, y: number): string | null => {
+    const el = document.elementFromPoint(x, y);
+    if (!el) return null;
+    const target = (el as Element).closest("[data-droptarget]");
+    return target?.getAttribute("data-droptarget") ?? null;
+  };
+
+  // True when `targetId` represents a legal drop for the currently dragged
+  // card. Reuses the same legality data the click flow uses for highlighting.
+  const isLegalDropTarget = (targetId: string, handIndex: number): boolean => {
+    const card = me.hand[handIndex];
+    if (!card) return false;
+    if (targetId === "my:bench:empty") {
+      return isPokemon(card) && isBasic(card) && me.bench.length < 5;
+    }
+    const m = targetId.match(/^my:inPlay:(.+)$/);
+    if (!m) return false;
+    return legalTargets.own.has(m[1]);
+  };
+
+  const onHandDragStart = (
+    i: number,
+    ev: ReactPointerEvent<HTMLElement>,
+  ) => {
+    if (!myTurn) return;
+    const card = me.hand[i];
+    if (!card) return;
+    // Pre-populate `selected` so the existing legalTargets memo lights up
+    // legal drop targets without duplicating its logic.
+    setSelected({ kind: "hand", index: i });
+    setDragging({
+      handIndex: i,
+      card,
+      x: ev.clientX,
+      y: ev.clientY,
+      hoverTargetId: null,
+    });
+  };
+
+  const onHandDragMove = (ev: ReactPointerEvent<HTMLElement>) => {
+    if (dragRafRef.current !== null) return;
+    const x = ev.clientX;
+    const y = ev.clientY;
+    dragRafRef.current = requestAnimationFrame(() => {
+      dragRafRef.current = null;
+      setDragging((prev) => {
+        if (!prev) return prev;
+        const tid = dropTargetUnderPoint(x, y);
+        const legal = tid && isLegalDropTarget(tid, prev.handIndex) ? tid : null;
+        return { ...prev, x, y, hoverTargetId: legal };
+      });
+    });
+  };
+
+  const onHandDragEnd = (ev: ReactPointerEvent<HTMLElement>) => {
+    if (dragRafRef.current !== null) {
+      cancelAnimationFrame(dragRafRef.current);
+      dragRafRef.current = null;
+    }
+    const drag = dragging;
+    setDragging(null);
+    if (!drag) return;
+    const tid = dropTargetUnderPoint(ev.clientX, ev.clientY);
+    if (!tid || !isLegalDropTarget(tid, drag.handIndex)) {
+      // Clear the drag-time auto-selection so the player isn't left with a
+      // mid-flow status hint after a snap-back.
+      setSelected(null);
+      return;
+    }
+    if (tid === "my:bench:empty") {
+      dispatchHandToInPlay(drag.handIndex, { kind: "bench-empty" });
+    } else {
+      const m = tid.match(/^my:inPlay:(.+)$/);
+      if (m) {
+        dispatchHandToInPlay(drag.handIndex, {
+          kind: "inPlay",
+          instanceId: m[1],
+        });
+      }
+    }
+  };
+
   const onActivateAbility = (p: PokemonInPlay, abilityIndex: number) => {
     if (!myTurn) return;
     const abName = p.card.abilities?.[abilityIndex]?.name ?? "ability";
@@ -984,6 +1145,49 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [me.active, me.active?.card, me.bench, state.log.length, state.turn],
   );
+
+  const inspected = useMemo(() => {
+    if (selected?.kind === "hand") {
+      const card = me.hand[selected.index];
+      if (card) {
+        return {
+          kind: "hand" as const,
+          card,
+          label: `Hand ${selected.index + 1}`,
+          pokemon: null,
+          owner: viewingPlayer,
+        };
+      }
+    }
+    if (selected?.kind === "inPlay") {
+      const sides: Array<{ owner: PlayerId; label: string; pokemon: PokemonInPlay | null }> = [
+        { owner: viewingPlayer, label: "Your Active", pokemon: me.active },
+        ...me.bench.map((pokemon, i) => ({ owner: viewingPlayer, label: `Your Bench ${i + 1}`, pokemon })),
+        { owner: opp.id, label: `${opp.name} Active`, pokemon: opp.active },
+        ...opp.bench.map((pokemon, i) => ({ owner: opp.id, label: `${opp.name} Bench ${i + 1}`, pokemon })),
+      ];
+      const found = sides.find((s) => s.pokemon?.instanceId === selected.instanceId);
+      if (found?.pokemon) {
+        return {
+          kind: "inPlay" as const,
+          card: found.pokemon.card,
+          label: found.label,
+          pokemon: found.pokemon,
+          owner: found.owner,
+        };
+      }
+    }
+    if (me.active) {
+      return {
+        kind: "inPlay" as const,
+        card: me.active.card,
+        label: "Your Active",
+        pokemon: me.active,
+        owner: viewingPlayer,
+      };
+    }
+    return null;
+  }, [selected, me.hand, me.active, me.bench, opp.id, opp.name, opp.active, opp.bench, viewingPlayer]);
 
   // Legal-target highlighting — when a card is selected in hand, compute the
   // set of Pokémon instance-ids that would be a legal drop target and pass
@@ -1170,7 +1374,7 @@ export default function App() {
   ]);
 
   return (
-    <div className="app">
+    <div className={`app${dragging ? " drag-active" : ""}`}>
       {/* ------------------------- Header ------------------------- */}
       <div className="header">
         <div className="brand">
@@ -1195,24 +1399,28 @@ export default function App() {
           </div>
         )}
         <div className="controls-row">
-          <label className="field">
-            You
-            <DeckSelect
-              value={myDeckId}
-              onChange={setMyDeckId}
-              specs={deckSpecs}
-              imports={imports}
-            />
-          </label>
-          <label className="field">
-            Opponent
-            <DeckSelect
-              value={oppDeckId}
-              onChange={setOppDeckId}
-              specs={deckSpecs}
-              imports={imports}
-            />
-          </label>
+          {preGameOpen && (
+            <>
+              <label className="field">
+                You
+                <DeckSelect
+                  value={myDeckId}
+                  onChange={setMyDeckId}
+                  specs={deckSpecs}
+                  imports={imports}
+                />
+              </label>
+              <label className="field">
+                Opponent
+                <DeckSelect
+                  value={oppDeckId}
+                  onChange={setOppDeckId}
+                  specs={deckSpecs}
+                  imports={imports}
+                />
+              </label>
+            </>
+          )}
           <label className="toggle">
             <input
               type="checkbox"
@@ -1233,14 +1441,17 @@ export default function App() {
               <option value="slow">Slow</option>
             </select>
           </label>
-          <div className="utility-group" role="group" aria-label="Deck & log utilities">
-            <button className="secondary" onClick={() => setBuildOpen(true)}>Build Deck</button>
-            <button className="secondary" onClick={() => setImportOpen(true)}>Import Deck</button>
-            <button className="secondary" onClick={() => setPreGameOpen(true)}>Change Decks</button>
-            <button className="secondary" onClick={onExportLog} title="Download this game's event log as JSON">
-              Export Log
-            </button>
-          </div>
+          <details className="game-menu">
+            <summary>Game</summary>
+            <div className="game-menu-panel">
+              <button className="secondary" onClick={() => setBuildOpen(true)}>Build Deck</button>
+              <button className="secondary" onClick={() => setImportOpen(true)}>Import Deck</button>
+              <button className="secondary" onClick={() => setPreGameOpen(true)}>Change Decks</button>
+              <button className="secondary" onClick={onExportLog} title="Download this game's event log as JSON">
+                Export Log
+              </button>
+            </div>
+          </details>
           <button className="primary" onClick={onReset}>New Game</button>
         </div>
       </div>
@@ -1513,39 +1724,49 @@ export default function App() {
          of the play area and Deck/Discard on the opposite side. We keep
          both sides aligned visually (rather than rotating the opponent)
          so clicking and reading feel natural on a screen. */}
-      <div className="board">
-        <PlayerSide
-          state={state}
-          label={opp.name}
-          player={opp}
-          isMe={false}
-          selected={selected}
-          legalTargets={legalTargets.opp}
-          onInPlayClick={(p) => onInPlayClick(p, "opp")}
-          onViewDiscard={(pid) => setDiscardViewer(pid)}
-        />
-        <div className="stadium-slot" aria-label="Stadium zone">
-          {state.stadium ? (
-            <div className="stadium-card-wrap" title={state.stadium.card.text ?? ""}>
-              <CardView card={state.stadium.card} />
-              <div className="stadium-caption">
-                Stadium · {state.players[state.stadium.controller].name}
+      <div className="game-layout">
+        <div className="board">
+          <PlayerSide
+            state={state}
+            label={opp.name}
+            player={opp}
+            isMe={false}
+            selected={selected}
+            legalTargets={legalTargets.opp}
+            dropHoverId={null}
+            onInPlayClick={(p) => onInPlayClick(p, "opp")}
+            onViewDiscard={(pid) => setDiscardViewer(pid)}
+          />
+          <div className="stadium-slot" aria-label="Stadium zone">
+            {state.stadium ? (
+              <div className="stadium-card-wrap" title={state.stadium.card.text ?? ""}>
+                <CardView card={state.stadium.card} />
+                <div className="stadium-caption">
+                  Stadium · {state.players[state.stadium.controller].name}
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="stadium-empty">Stadium</div>
-          )}
+            ) : (
+              <div className="stadium-empty">Stadium</div>
+            )}
+          </div>
+          <PlayerSide
+            state={state}
+            label={me.name}
+            player={me}
+            isMe
+            selected={selected}
+            legalTargets={legalTargets.own}
+            benchHint={legalTargets.benchHint}
+            dropHoverId={dragging?.hoverTargetId ?? null}
+            onInPlayClick={(p) => onInPlayClick(p, "me")}
+            onViewDiscard={(pid) => setDiscardViewer(pid)}
+          />
         </div>
-        <PlayerSide
+        <GameInspector
+          inspected={inspected}
+          attacks={myActiveAttacks}
+          log={state.log.slice(-14)}
           state={state}
-          label={me.name}
-          player={me}
-          isMe
-          selected={selected}
-          legalTargets={legalTargets.own}
-          benchHint={legalTargets.benchHint}
-          onInPlayClick={(p) => onInPlayClick(p, "me")}
-          onViewDiscard={(pid) => setDiscardViewer(pid)}
         />
       </div>
 
@@ -1564,30 +1785,14 @@ export default function App() {
               card={c}
               selected={selected?.kind === "hand" && selected.index === i}
               onClick={() => onHandClick(i)}
+              onDragStart={(ev) => onHandDragStart(i, ev)}
+              onDragMove={onHandDragMove}
+              onDragEnd={onHandDragEnd}
+              dragging={dragging?.handIndex === i}
             />
           ))}
           {me.hand.length === 0 && <span className="muted">—</span>}
         </div>
-        <details className="log-details">
-          <summary>Log ({state.log.length})</summary>
-          <div className="log-content">
-            {state.log.slice(-30).map((e, i, arr) => {
-              const prev = i > 0 ? arr[i - 1] : null;
-              const newTurn = prev && prev.turn !== e.turn;
-              return (
-                <div key={i}>
-                  {newTurn && (
-                    <div className="entry turn-sep">— Turn {e.turn} —</div>
-                  )}
-                  <div className={`entry ${e.player}`}>
-                    [T{e.turn}] {e.player !== "system" && `${state.players[e.player].name} `}
-                    {e.text}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </details>
       </div>
 
       {/* ------------------ Action bar (sticky) ------------------- */}
@@ -1673,6 +1878,20 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* Drag ghost — floats with the pointer during a hand → in-play drag.
+          Rendered into document.body via portal so it isn't clipped by the
+          hand strip's overflow or by any modal stacking context. */}
+      {dragging &&
+        createPortal(
+          <div
+            className="drag-ghost"
+            style={{ left: dragging.x, top: dragging.y }}
+            aria-hidden="true"
+          >
+            <CardView card={dragging.card} />
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
@@ -1766,6 +1985,10 @@ interface SideProps {
   legalTargets?: Set<string>;
   /** When true, highlight this side's empty bench slots (Basic being played). */
   benchHint?: boolean;
+  /** Drop-target id (e.g. "my:inPlay:<instanceId>" or "my:bench:empty") that
+   *  the user is currently hovering during a hand → in-play drag. Drives the
+   *  `.drop-hover` highlight on the relevant tile / empty slot. */
+  dropHoverId?: string | null;
   onInPlayClick?: (p: PokemonInPlay) => void;
   onViewDiscard?: (player: PlayerId) => void;
 }
@@ -1778,6 +2001,7 @@ function PlayerSide({
   selected,
   legalTargets,
   benchHint,
+  dropHoverId,
   onInPlayClick,
   onViewDiscard,
 }: SideProps) {
@@ -1797,6 +2021,10 @@ function PlayerSide({
             selected.instanceId === player.active.instanceId
           }
           legalTarget={!!legalTargets?.has(player.active.instanceId)}
+          dropHover={
+            isMe && dropHoverId === `my:inPlay:${player.active.instanceId}`
+          }
+          dropTargetId={isMe ? `my:inPlay:${player.active.instanceId}` : undefined}
           onClick={() => onInPlayClick?.(player.active!)}
         />
       ) : (
@@ -1805,6 +2033,10 @@ function PlayerSide({
     </div>
   );
 
+  // Empty bench slots collapse onto a single drop-target ("my:bench:empty")
+  // since `playBasicToBench` doesn't take a slot index — the engine appends
+  // to the next free slot. Marking each slot with the same id is fine: only
+  // one bench area exists per player.
   const benchRow = (
     <div className="bench-row">
       {player.bench.map((p) => (
@@ -1814,17 +2046,27 @@ function PlayerSide({
           maxHp={effectiveMaxHp(p, state)}
           selected={selected?.kind === "inPlay" && selected.instanceId === p.instanceId}
           legalTarget={!!legalTargets?.has(p.instanceId)}
+          dropHover={isMe && dropHoverId === `my:inPlay:${p.instanceId}`}
+          dropTargetId={isMe ? `my:inPlay:${p.instanceId}` : undefined}
           onClick={() => onInPlayClick?.(p)}
         />
       ))}
-      {Array.from({ length: 5 - player.bench.length }).map((_, i) => (
-        <div
-          key={`empty-${i}`}
-          className={`card empty-slot${benchHint ? " legal-target" : ""}`}
-        >
-          Empty
-        </div>
-      ))}
+      {Array.from({ length: 5 - player.bench.length }).map((_, i) => {
+        const isDropHover = isMe && dropHoverId === "my:bench:empty";
+        return (
+          <div
+            key={`empty-${i}`}
+            className={
+              `card empty-slot` +
+              (benchHint ? " legal-target" : "") +
+              (isDropHover ? " drop-hover" : "")
+            }
+            data-droptarget={isMe ? "my:bench:empty" : undefined}
+          >
+            Empty
+          </div>
+        );
+      })}
     </div>
   );
 
@@ -2148,6 +2390,116 @@ const ActionBar = memo(ActionBarInner, (prev, next) => {
   }
   return true;
 });
+
+type InspectedCard =
+  | {
+      kind: "hand" | "inPlay";
+      card: Card;
+      label: string;
+      pokemon: PokemonInPlay | null;
+      owner: PlayerId;
+    }
+  | null;
+
+function GameInspector({
+  inspected,
+  attacks,
+  log,
+  state,
+}: {
+  inspected: InspectedCard;
+  attacks: ActionBarProps["attacks"];
+  log: LogEntry[];
+  state: GameState;
+}) {
+  const pokemon = inspected?.pokemon ?? null;
+  const card = inspected?.card ?? null;
+  const maxHp = pokemon ? effectiveMaxHp(pokemon, state) : null;
+  const currentHp = pokemon && maxHp !== null ? Math.max(0, maxHp - pokemon.damage) : null;
+  const energies = pokemon?.attachedEnergy ?? [];
+  const tools = pokemon?.tools ?? [];
+  const statuses = pokemon?.statuses ?? [];
+
+  return (
+    <aside className="game-inspector" aria-label="Selected card and game log">
+      <section className="inspector-section selected-card-panel">
+        <div className="inspector-kicker">{inspected?.label ?? "Selected"}</div>
+        {card ? (
+          <>
+            <div className="inspector-card-row">
+              <div className="inspector-card">
+                <CardView card={card} />
+              </div>
+              <div className="inspector-facts">
+                <h2>{card.name}</h2>
+                <div className="muted">{card.supertype} · {card.subtypes.join(" · ")}</div>
+                {pokemon && currentHp !== null && maxHp !== null && (
+                  <div className="hp-meter" aria-label={`HP ${currentHp} of ${maxHp}`}>
+                    <div className="hp-meter-top">
+                      <span>HP</span>
+                      <strong>{currentHp}/{maxHp}</strong>
+                    </div>
+                    <div className="hp-track">
+                      <span style={{ width: `${Math.max(0, Math.min(100, (currentHp / maxHp) * 100))}%` }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            {pokemon && (
+              <div className="state-chip-grid">
+                <span className={energies.length ? "state-chip on" : "state-chip"}>Energy {energies.length}</span>
+                <span className={tools.length ? "state-chip on" : "state-chip"}>Tools {tools.length}</span>
+                <span className={statuses.length ? "state-chip danger" : "state-chip"}>Status {statuses.length ? statuses.join(", ") : "clear"}</span>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="modal-hint">Select a card or Pokemon to inspect details here.</p>
+        )}
+      </section>
+
+      <section className="inspector-section attack-preview-panel">
+        <div className="inspector-kicker">Attack Preview</div>
+        {attacks.length > 0 ? (
+          <div className="attack-preview-list">
+            {attacks.map((a) => (
+              <div className="attack-preview-row" key={a.index}>
+                <div>
+                  <strong>{a.name}</strong>
+                  <span>{a.cost.join(" / ") || "No cost"}</span>
+                </div>
+                <b>{a.damageText ?? a.damage}{a.estimated > 0 ? ` → ${a.estimated}` : ""}</b>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="modal-hint">Your Active Pokemon has no attacks available yet.</p>
+        )}
+      </section>
+
+      <section className="inspector-section log-panel">
+        <div className="inspector-kicker">Recent Log</div>
+        <div className="log-content">
+          {log.length === 0 && <div className="entry system">No actions yet.</div>}
+          {log.map((e, i, arr) => {
+            const prev = i > 0 ? arr[i - 1] : null;
+            const newTurn = prev && prev.turn !== e.turn;
+            return (
+              <div key={`${e.turn}-${i}-${e.text}`}>
+                {newTurn && <div className="entry turn-sep">Turn {e.turn}</div>}
+                <div className={`entry ${e.player}`}>
+                  [T{e.turn}] {e.player !== "system" && `${state.players[e.player].name} `}
+                  {e.text}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </aside>
+  );
+}
 
 // ---------------------------------------------------------------------------
 //  Deck picker — grouped preset + imported decks

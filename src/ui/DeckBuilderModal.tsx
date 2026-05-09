@@ -89,6 +89,10 @@ export default function DeckBuilderModal({
   // side. The CSS `.mobile-tab--<active>` class on `.builder-body` flips
   // which child is visible at ≤768px.
   const [mobileTab, setMobileTab] = useState<"browse" | "selected">("browse");
+  // Side-rail preview: sticky readable card pinned at the top of the right
+  // panel. Updated on tile hover/focus and on hovering a deck-list row.
+  // Click/right-click on tiles keeps their existing add/zoom behavior.
+  const [previewCard, setPreviewCard] = useState<Card | null>(null);
 
   const selectedCards: Array<{ card: Card; count: number }> = useMemo(() => {
     const out: Array<{ card: Card; count: number }> = [];
@@ -188,6 +192,11 @@ export default function DeckBuilderModal({
   }, [filteredCards]);
 
   const displayCards = groupedCards.slice(0, showCount);
+
+  // Default the side-rail preview to the first visible card so the panel
+  // isn't empty on open and updates sensibly when filters narrow the grid.
+  const effectivePreview =
+    previewCard ?? displayCards[0]?.representative ?? null;
 
   function nameExists(n: string): boolean {
     return existingNames.some((e) => e.toLowerCase() === n.trim().toLowerCase());
@@ -348,6 +357,8 @@ export default function DeckBuilderModal({
                   <div
                     key={c.name}
                     className={`builder-card${nameCount > 0 ? " picked" : ""}${atFourCap ? " capped" : ""}`}
+                    onMouseEnter={() => setPreviewCard(c)}
+                    onFocus={() => setPreviewCard(c)}
                     onClick={(ev) => {
                       if (ev.shiftKey || ev.metaKey) {
                         triggerCardZoom(c);
@@ -396,6 +407,26 @@ export default function DeckBuilderModal({
           </div>
 
           <div className="builder-selected">
+            <div className="builder-preview">
+              {effectivePreview ? (
+                <>
+                  <img
+                    className="builder-preview-img"
+                    src={effectivePreview.imageLarge}
+                    alt={effectivePreview.name}
+                    loading="lazy"
+                  />
+                  <div className="builder-preview-name">{effectivePreview.name}</div>
+                  <div className="builder-preview-printing">
+                    {toLimitlessCode(effectivePreview.setCode)} {effectivePreview.number}
+                  </div>
+                </>
+              ) : (
+                <div className="builder-preview-empty">
+                  Hover a card to preview · right-click to zoom
+                </div>
+              )}
+            </div>
             <div className="builder-selected-header">Your deck</div>
             {selectedCards.length === 0 ? (
               <div className="muted" style={{ padding: 12, fontSize: 12 }}>
@@ -412,7 +443,7 @@ export default function DeckBuilderModal({
                   const variants = variantsOf(card, sameName);
                   const variantCount = variants.length;
                   return (
-                    <li key={card.id}>
+                    <li key={card.id} onMouseEnter={() => setPreviewCard(card)}>
                       <span className="bsel-count">{count}×</span>
                       <span className="bsel-name" title={card.name}>{card.name}</span>
                       <button
