@@ -23,9 +23,21 @@ export interface StockListFinding {
   detail: string;
 }
 
+// Two cards are "the same stock entry" when their names match — accounting
+// for the fact that decklists / snapshots write "Grass Energy" while the
+// dataset stores "Basic Grass Energy" (the parser already does this via a
+// `Basic ${name}` fallback when resolving entries; we mirror it here so
+// stock comparison doesn't undercount basic energies).
+function nameMatches(cardName: string, entryName: string): boolean {
+  if (cardName === entryName) return true;
+  if (cardName === `Basic ${entryName}`) return true;
+  if (`Basic ${cardName}` === entryName) return true;
+  return false;
+}
+
 // Count user copies that match a stock entry. Uses gameplayKey when the
 // stock entry supplies one (Pokémon — same-name reprints aren't equivalent),
-// falls back to name-only match for Trainer entries.
+// falls back to a name match (with "Basic" prefix tolerance) otherwise.
 function countUserCopies(
   userDeck: Card[],
   entry: StockCardStats,
@@ -34,7 +46,7 @@ function countUserCopies(
   if (entry.gameplayKey) {
     return userDeck.filter((c) => ctx.gameplayKey(c) === entry.gameplayKey).length;
   }
-  return userDeck.filter((c) => c.name === entry.cardName).length;
+  return userDeck.filter((c) => nameMatches(c.name, entry.cardName)).length;
 }
 
 // "Within central 80%" check: returns true if `userCount` is in the
