@@ -475,7 +475,7 @@ describe("stockComparison", () => {
     const findings = compareToStockList(userDeck, "crustle", synthSnapshot, ctx);
     const missingCore = findings.find((f) => f.id === "stock.missing-core");
     expect(missingCore).toBeDefined();
-    expect(missingCore!.detail).toMatch(/Most lists run 4/);
+    expect(missingCore!.detail).toMatch(/run 4 copies/);
     // Should NOT use the average.
     expect(missingCore!.detail).not.toMatch(/3\.6/);
   });

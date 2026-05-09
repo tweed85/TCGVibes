@@ -61,13 +61,9 @@ function inCentral80(userCount: number, dist: Record<number, number>): boolean {
   return userCount >= lowBound && userCount <= highBound;
 }
 
-function modeBlurb(entry: StockCardStats): string {
-  if (entry.modeCountDecks !== undefined) {
-    return `${entry.modeCount} (${entry.modeCountDecks} of ${Math.round(
-      entry.modeCountDecks / Math.max(entry.inclusionRate, 1e-9),
-    )})`;
-  }
-  return `${entry.modeCount}`;
+// Plural / singular helper so "1 copy" / "5 copies" reads correctly.
+function copies(n: number): string {
+  return n === 1 ? "1 copy" : `${n} copies`;
 }
 
 export function compareToStockList(
@@ -109,7 +105,7 @@ export function compareToStockList(
         modeCountDecks: entry.modeCountDecks,
         averageCount: entry.averageCount,
         userCount,
-        detail: `Most lists run ${modeBlurb(entry)} ${entry.cardName}; you have 0.`,
+        detail: `Most successful lists run ${copies(entry.modeCount)} of ${entry.cardName}; yours has 0.`,
       });
       continue;
     }
@@ -123,7 +119,7 @@ export function compareToStockList(
         modeCountDecks: entry.modeCountDecks,
         averageCount: entry.averageCount,
         userCount,
-        detail: `Most successful lists include ${entry.cardName} (inclusion ${(entry.inclusionRate * 100).toFixed(0)}%); you have 0.`,
+        detail: `${(entry.inclusionRate * 100).toFixed(0)}% of successful lists include ${entry.cardName}; yours has 0.`,
       });
       continue;
     }
@@ -157,7 +153,7 @@ export function compareToStockList(
           modeCountDecks: entry.modeCountDecks,
           averageCount: entry.averageCount,
           userCount,
-          detail: `Most lists run ${modeBlurb(entry)} ${entry.cardName}; you have ${userCount}.`,
+          detail: `Most successful lists run ${copies(entry.modeCount)} of ${entry.cardName}; yours has ${userCount}.`,
         });
       }
     }

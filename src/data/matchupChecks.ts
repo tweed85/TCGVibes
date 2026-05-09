@@ -10,9 +10,77 @@
 import type { Card, PokemonCard } from "../engine/types";
 import { prizeValue } from "../engine/rules";
 import { ARCHETYPE_PROFILES, type Archetype } from "../engine/aiArchetype";
-import { getRoleTags } from "./cardRoles";
+import { getRoleTags, type RoleTag } from "./cardRoles";
 import type { DoctorContext } from "./deckDoctor";
 import type { StockListEntry, ThreatClass } from "./metaSnapshot";
+
+// Plain-English labels for role tags — kept short and example-free so
+// duplicate concepts (e.g. Rare Candy in answerCardNames AND
+// evolution:accelerator in answerTags) don't read twice.
+const TAG_LABELS: Record<RoleTag, string> = {
+  "draw:supporter": "draw Supporter",
+  "draw:disruption": "disruption draw Supporter",
+  "draw:ability": "draw-ability Pokémon",
+  "draw:item": "draw item",
+  "search:pokemon": "Pokémon search item",
+  "search:trainer": "Supporter search item",
+  "search:energy": "Energy search item",
+  "search:ability": "search-ability Pokémon",
+  "setup:ability": "setup-ability Pokémon",
+  "evolution:accelerator": "evolution accelerator",
+  "recycle:card": "recycle item",
+  "mobility:switch": "Switch card",
+  "mobility:pivot": "pivot Pokémon",
+  "mobility:gust": "gust effect",
+  "tech:tool-removal": "tool-removal item",
+  "tech:special-energy": "special-energy disruption",
+  "tech:ability-lock": "ability-lock card",
+};
+
+// Build a deduped, plain-English list of answer routes. If a tag's general
+// label refers to a card that's already named explicitly (e.g.
+// `answerCardNames: ["Rare Candy"]` + `answerTags: ["evolution:accelerator"]`),
+// the tag is dropped — the explicit card already covers it.
+function describeAnswers(cls: ThreatClass): string {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const name of cls.answerCardNames ?? []) {
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  // Tag → category label. Skip the tag if every card it would describe is
+  // already named (heuristic: if the tag's label appears as a substring of
+  // any named card, we still keep the category — but if `answerCardNames`
+  // already named one of the canonical cards for that tag, we trust the
+  // explicit list).
+  const TAG_CANONICAL: Partial<Record<RoleTag, string[]>> = {
+    "evolution:accelerator": ["Rare Candy"],
+    "recycle:card": ["Super Rod", "Night Stretcher", "Pal Pad", "Energy Recycler"],
+    "mobility:gust": ["Boss's Orders", "Counter Catcher"],
+    "tech:tool-removal": ["Lost Vacuum", "Tool Scrapper"],
+  };
+  for (const tag of cls.answerTags ?? []) {
+    const label = TAG_LABELS[tag] ?? tag;
+    const key = label.toLowerCase();
+    if (seen.has(key)) continue;
+    // Skip the tag entirely if `answerCardNames` already named one of its
+    // canonical cards — saying "Rare Candy or evolution accelerator" is
+    // redundant.
+    const canon = TAG_CANONICAL[tag];
+    if (canon && (cls.answerCardNames ?? []).some((n) => canon.includes(n))) {
+      continue;
+    }
+    seen.add(key);
+    out.push(label);
+  }
+  if (out.length === 0) return "";
+  const joined = out.length === 1 ? out[0] : out.slice(0, -1).join(", ") + " or " + out[out.length - 1];
+  return cls.minCopies && cls.minCopies > 1
+    ? `${joined} (≥${cls.minCopies} copies)`
+    : joined;
+}
 
 export interface MatchupCheck {
   id: string;
@@ -332,18 +400,19 @@ export function runStaticMatchupChecks(
   }
 
   // ---- 6) Tech coverage --------------------------------------------------
+  // Tech-coverage findings are pure list inspection — no static damage
+  // math — so we drop the static-estimate disclaimer prefix and skip the
+  // role-tag jargon. One human-readable sentence does the job.
   for (const cls of input.techCoverageForOpp ?? []) {
     if (threatClassCovered(user.deckCards, cls)) continue;
+    const answers = describeAnswers(cls);
     out.push({
       id: "matchup.tech-coverage-missing",
       severity: "suggestion",
-      title: `Missing answer: ${cls.threat}`,
-      detail: `${STATIC_DISCLAIMER} ${opponent.archetype} typically pressures ${cls.threat}; your deck has none of the usual answers.`,
-      evidence: [
-        ...(cls.answerCardNames ? [`Card answers: ${cls.answerCardNames.join(", ")}`] : []),
-        ...(cls.answerTags ? [`Tag answers: ${cls.answerTags.join(", ")}`] : []),
-        cls.minCopies && cls.minCopies > 1 ? `Minimum copies: ${cls.minCopies}` : "",
-      ].filter(Boolean) as string[],
+      title: `vs ${opponent.archetype}: ${cls.threat}`,
+      detail: answers
+        ? `Common answers: ${answers}. Your deck runs none of these.`
+        : "Your deck has no obvious answer for this threat.",
     });
   }
 
