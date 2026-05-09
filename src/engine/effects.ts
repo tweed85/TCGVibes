@@ -1251,6 +1251,7 @@ export function resolveAttackEffects(
                 ignoreWR: e.ignoreWR,
                 benchOnly: e.benchOnly,
                 attackName: ctx.move.name,
+                finishTurn: true,
               },
             };
             return;
@@ -1912,6 +1913,7 @@ export function resolveAttackEffects(
                 remaining,
                 energyType: e.energyType,
                 attackName: ctx.move.name,
+                finishTurn: true,
               },
             };
             return;

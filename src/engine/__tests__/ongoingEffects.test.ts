@@ -12,6 +12,7 @@ import {
   stadiumAttackBonus,
   stadiumDamageReduction,
   effectiveAttackCost,
+  estimateAttackDamage,
   prizeReductionFromTools,
   applySurvivalBrace,
   passiveAttackBonus,
@@ -486,5 +487,59 @@ describe("applySurvivalBrace — full-HP survival", () => {
     const s = mkState({ stadium: { card: mkStadium("Jamming Tower"), controller: "p2" } });
     const capped = applySurvivalBrace(s, p, 150);
     expect(capped).toBe(150);
+  });
+});
+
+describe("estimateAttackDamage — effective Weakness rewrites", () => {
+  it("uses Fairy Zone's Psychic Weakness override for Dragon defenders", () => {
+    const s = mkState();
+    const attacker = mkInPlay(
+      mkPokemon({
+        name: "Psychic Attacker",
+        types: ["Psychic"],
+        attacks: [{ name: "Mind Hit", cost: [], damage: 50 }],
+      }),
+    );
+    const defender = mkInPlay(
+      mkPokemon({
+        name: "Dragon Defender",
+        types: ["Dragon"],
+        weaknesses: [{ type: "Lightning", value: "×2" }],
+      }),
+    );
+    const fairyZoneHolder = mkInPlay(
+      mkPokemon({
+        name: "Fairy Zone Holder",
+        abilities: [{ name: "Fairy Zone", type: "Ability", text: "Dragon Weakness becomes Psychic." } as any],
+      }),
+    );
+    s.players.p1.active = attacker;
+    s.players.p2.active = defender;
+    s.players.p1.bench = [fairyZoneHolder];
+
+    expect(estimateAttackDamage(s, "p1", attacker, attacker.card.attacks[0])).toBe(100);
+  });
+
+  it("uses ability-added attacker types for Weakness checks", () => {
+    const s = mkState();
+    const attacker = mkInPlay(
+      mkPokemon({
+        name: "Double Type Attacker",
+        types: ["Psychic"],
+        abilities: [{ name: "Double Type", type: "Ability", text: "This Pokémon is Psychic and Fighting." } as any],
+        attacks: [{ name: "Type Hit", cost: [], damage: 50 }],
+      }),
+    );
+    const defender = mkInPlay(
+      mkPokemon({
+        name: "Fighting Weak Defender",
+        types: ["Colorless"],
+        weaknesses: [{ type: "Fighting", value: "×2" }],
+      }),
+    );
+    s.players.p1.active = attacker;
+    s.players.p2.active = defender;
+
+    expect(estimateAttackDamage(s, "p1", attacker, attacker.card.attacks[0])).toBe(100);
   });
 });

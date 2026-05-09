@@ -4249,6 +4249,14 @@ export function resolveInPlayTarget(
         state.pendingInPlayTarget = null;
       }
       knockOutFromAbilityCounters(state, targetOwner, target);
+      if (remaining <= 0 && action.finishTurn && state.phase !== "gameOver") {
+        if (state.pendingPromote) {
+          state.phase = "promoteActive";
+          state.onPromoteResolved = "endTurn";
+        } else {
+          endTurnRule(state);
+        }
+      }
       return { ok: true };
     }
     case "heavyBatonPick": {
@@ -4301,6 +4309,7 @@ export function resolveInPlayTarget(
       if (idx < 0) {
         state.pendingInPlayTarget = null;
         logEvent(state, clicker, `${action.attackName}: no more ${action.energyType} Energy in discard.`);
+        if (action.finishTurn && state.phase !== "gameOver") endTurnRule(state);
         return { ok: true };
       }
       const [en] = clickerPl.discard.splice(idx, 1) as [EnergyCard];
@@ -4325,6 +4334,7 @@ export function resolveInPlayTarget(
         };
       } else {
         state.pendingInPlayTarget = null;
+        if (action.finishTurn && state.phase !== "gameOver") endTurnRule(state);
       }
       return { ok: true };
     }
@@ -4593,4 +4603,3 @@ export function resolveRareCandyChoice(
 export function cancelRareCandyChoice(state: GameState): void {
   state.pendingRareCandyChoice = null;
 }
-

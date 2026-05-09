@@ -2,7 +2,9 @@
 
 Browser-based Pokémon TCG clone. Vite + React + TS. Human vs strategic AI,
 local hot-seat, using the Play! Pokémon Standard pool (NA, snapshot
-2026-04-23, 2,693 cards).
+2026-05-08, 2,776 cards — includes Mega Evolution—Chaos Rising / me4,
+mapped from the Japanese Ninja Spinner counterpart pending official
+English data).
 
 ## Run
 
@@ -145,7 +147,8 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
 - Weakness ×2, Resistance −N. All 5 Special Conditions with proper
   Checkup + attack-time confusion flip.
 - Status immunity — Festival Grounds, Insomnia, Antique Fossils,
-  Ancient Booster Energy Capsule (Ancient Pokémon).
+  Ancient Booster Energy Capsule (Ancient Pokémon), Bubble Water Energy
+  (Water Pokémon).
 - Retreat + evolution clear statuses (Confused persists on evolve under
   Dizzying Valley; same gate for Rare Candy).
 - Both-Active simultaneous KO — both players promote in sequence.
@@ -171,10 +174,10 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
 
 For task-specific deep dives, read the relevant docs/ companion:
 
-- **Effect coverage** (attacks / abilities / trainers / stadiums / tools, ~70 effect kinds, ~24 tools, special interactions): see [docs/EFFECTS.md](docs/EFFECTS.md)
+- **Effect coverage** (attacks / abilities / trainers / stadiums / tools, ~85 effect kinds incl. Chaos Rising additions, ~24 tools, special interactions): see [docs/EFFECTS.md](docs/EFFECTS.md)
 - **AI internals** (v1 greedy, v2 archetype-aware heuristics, MCTS, the 12 wired archetype playbooks, measured win rates): see [docs/AI.md](docs/AI.md)
 - **Deck library** (12 curated decks: 4 baseline + 8 Prague Regional 2026 community lists; deck-builder gameplay-equivalence grouping; dataset refresh): see [docs/DECKS.md](docs/DECKS.md)
-- **Test suite** (625 vitest across 37 files + 3 Playwright e2e — full enumeration with what each file covers): see [docs/TESTS.md](docs/TESTS.md)
+- **Test suite** (626 vitest across 37 files + 3 Playwright e2e — full enumeration with what each file covers): see [docs/TESTS.md](docs/TESTS.md)
 - **Mobile / iOS / offline** (Capacitor, PWA, responsive CSS, safe-area hardening): see [docs/MOBILE.md](docs/MOBILE.md)
 - **Open findings + deferred AI work** (MVP scope cuts, pressure-test findings, Phases 2c / 2e / 7-12 of the AI overhaul plan): see [docs/FINDINGS.md](docs/FINDINGS.md)
 

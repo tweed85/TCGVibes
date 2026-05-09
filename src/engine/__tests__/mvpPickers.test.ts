@@ -259,7 +259,7 @@ describe("Heavy Baton (#7) — interactive Bench-target picker", () => {
     const state = setupHeavyBatonScenario(true, 3);
     const ap = state.activePlayer;
     const oppId = ap === "p1" ? "p2" : "p1";
-    knockOut(state, oppId);
+    knockOut(state, oppId, { byOpponentAttack: true });
     // Holder KO'd → energies stashed, pendingHeavyBaton set.
     expect(state.pendingHeavyBaton).not.toBeNull();
     expect(state.pendingHeavyBaton!.energies).toHaveLength(2);
@@ -290,7 +290,7 @@ describe("Heavy Baton (#7) — interactive Bench-target picker", () => {
     const ap = state.activePlayer;
     const oppId = ap === "p1" ? "p2" : "p1";
     state.players[oppId].bench[1].attachedEnergy = [mkBasicEnergy("Fire")]; // most energy
-    knockOut(state, oppId);
+    knockOut(state, oppId, { byOpponentAttack: true });
     expect(state.pendingHeavyBaton).toBeNull();
     expect(state.players[oppId].bench[1].attachedEnergy.length).toBeGreaterThanOrEqual(2);
   });
@@ -299,7 +299,7 @@ describe("Heavy Baton (#7) — interactive Bench-target picker", () => {
     const state = setupHeavyBatonScenario(true, 1);
     const ap = state.activePlayer;
     const oppId = ap === "p1" ? "p2" : "p1";
-    knockOut(state, oppId);
+    knockOut(state, oppId, { byOpponentAttack: true });
     // Only one bench → no meaningful choice → auto-applies.
     expect(state.pendingHeavyBaton).toBeNull();
     expect(state.players[oppId].bench[0].attachedEnergy).toHaveLength(2);

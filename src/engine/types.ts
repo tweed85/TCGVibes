@@ -1368,12 +1368,12 @@ export interface PendingInPlayTarget {
     // click hits the chosen opp Pokémon for `perHit` damage; `remaining`
     // decrements. When remaining reaches 0, the picker closes. `benchOnly`
     // restricts targets to the opp's Bench (Phantom Dive).
-    | { kind: "distributeDamage"; remaining: number; perHit: number; ignoreWR: boolean; benchOnly?: boolean; attackName: string }
+    | { kind: "distributeDamage"; remaining: number; perHit: number; ignoreWR: boolean; benchOnly?: boolean; attackName: string; finishTurn?: boolean }
     // Multi-pick energy attach to your own Bench (Aura Jab et al.). Each
     // click pulls one matching basic Energy out of discard and attaches
     // to the clicked Bench Pokémon. `remaining` decrements; when 0 OR
     // discard runs dry, the picker closes.
-    | { kind: "attachEnergyFromDiscardPicker"; remaining: number; energyType: EnergyType; attackName: string }
+    | { kind: "attachEnergyFromDiscardPicker"; remaining: number; energyType: EnergyType; attackName: string; finishTurn?: boolean }
     // Heavy Baton: the energies were stashed mid-KO; the player picks one of
     // their Bench Pokémon to receive them all at once.
     | { kind: "heavyBatonPick" };

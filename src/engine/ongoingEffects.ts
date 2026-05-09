@@ -1833,9 +1833,9 @@ export function estimateAttackDamage(
   }
   // Now apply W/R and defender reductions to the final total.
   if (def) {
-    const atkType = attacker.card.types[0];
-    const weak = def.card.weaknesses?.find((w) => w.type === atkType);
-    const res = def.card.resistances?.find((w) => w.type === atkType);
+    const atkTypes = effectiveTypes(attacker.card, attacker);
+    const weak = effectiveWeaknesses(def, state).find((w) => atkTypes.includes(w.type));
+    const res = def.card.resistances?.find((w) => atkTypes.includes(w.type));
     if (weak?.value.startsWith("×")) d *= parseInt(weak.value.slice(1), 10) || 2;
     if (res?.value.startsWith("-")) d = Math.max(0, d - (parseInt(res.value.slice(1), 10) || 30));
     d = Math.max(0, d - stadiumDamageReduction(state, attacker, def));

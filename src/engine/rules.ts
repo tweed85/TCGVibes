@@ -654,7 +654,9 @@ export function applyDamage(
     "system",
     `${target.card.name} takes ${damage} damage (now ${target.damage}).`,
   );
-  if (target.damage >= effectiveMaxHp(target, state)) knockOut(state, defenderOwner);
+  if (target.damage >= effectiveMaxHp(target, state)) {
+    knockOut(state, defenderOwner, { byOpponentAttack: true });
+  }
 }
 
 // True if `player` is currently on their own first turn of the game.
@@ -702,11 +704,20 @@ export function takePrizes(state: GameState, taker: PlayerId, count: number): vo
   }
 }
 
+interface KoContext {
+  byOpponentAttack?: boolean;
+}
+
 // Knock out the Active Pokémon of `ownerId` and resolve prize/win logic.
-export function knockOut(state: GameState, ownerId: PlayerId): void {
+export function knockOut(
+  state: GameState,
+  ownerId: PlayerId,
+  ctx: KoContext = {},
+): void {
   const owner = state.players[ownerId];
   if (!owner.active) return;
   const ko = owner.active;
+  const byOpponentAttack = ctx.byOpponentAttack === true && state.activePlayer !== ownerId;
   // If the KO happens on the opponent's turn, flag the KO'd player so their
   // Flip-the-Script-style "if one of your Pokémon was KO'd last turn" gate
   // can fire on their next turn.
@@ -714,7 +725,7 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
   // Resolve KO-triggered Tool effects BEFORE the KO'd card goes to discard,
   // so the Tool is still "attached" for any condition checks. These effects
   // take place from the KO'd player's perspective.
-  for (const act of toolOnKoActions(state, ko)) {
+  for (const act of byOpponentAttack ? toolOnKoActions(state, ko) : []) {
     if (act.kind === "searchDeckAnyN") {
       // Amulet of Hope — search your deck for up to N cards. Mid-KO we can't
       // open an interactive pick (pendingPromote needs the phase), so we do
@@ -819,12 +830,12 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
   }
 
   const basePrizes = prizeValue(ko.card);
-  let reduction = prizeReductionFromTools(ko);
+  let reduction = byOpponentAttack ? prizeReductionFromTools(ko) : 0;
   let bonus = 0;
   // Legacy Energy — once per game per player: if KO'd by opponent's attack,
   // opp takes 1 fewer Prize.
   const hasLegacy = ko.attachedEnergy.some((e) => e.name === "Legacy Energy");
-  if (hasLegacy && !owner.legacyEnergyUsed) {
+  if (byOpponentAttack && hasLegacy && !owner.legacyEnergyUsed) {
     reduction += 1;
     owner.legacyEnergyUsed = true;
     logEvent(state, ownerId, `Legacy Energy triggers — opponent takes 1 fewer Prize.`);
@@ -885,7 +896,7 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
   // put into hand. AI auto-picks the most useful card (any draw / energy / ex);
   // simplest heuristic: pick the first ex Pokémon, else first energy, else
   // first card.
-  if ((ko.card.abilities ?? []).some((a) => a.name === "Final Chain")) {
+  if (byOpponentAttack && (ko.card.abilities ?? []).some((a) => a.name === "Final Chain")) {
     const deck = owner.deck;
     if (deck.length > 0) {
       const isEx = (c: import("./types").Card) =>
@@ -903,7 +914,8 @@ export function knockOut(state: GameState, ownerId: PlayerId): void {
   }
   // Infinite Shadow — if KO'd by opp's attack, return this card to hand
   // instead of the discard pile (attached cards still go to discard).
-  const infiniteShadow = (ko.card.abilities ?? []).some((a) => a.name === "Infinite Shadow");
+  const infiniteShadow =
+    byOpponentAttack && (ko.card.abilities ?? []).some((a) => a.name === "Infinite Shadow");
   const prizes = Math.max(0, basePrizes - reduction + bonus);
   if (prizes !== basePrizes) {
     logEvent(state, "system", `${ko.card.name} Knocked Out — prizes reduced.`);

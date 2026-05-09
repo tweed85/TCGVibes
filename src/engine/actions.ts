@@ -47,6 +47,7 @@ import {
   effectiveAttacks,
   effectiveMaxHp,
   effectiveRetreatCost,
+  effectiveTypes,
   effectiveWeaknesses,
   energyPoolForCost,
   maxBenchSize,
@@ -810,10 +811,10 @@ function executeAttackHit(
   });
   damage = result.damage;
   if (def && damage > 0) {
-    const atkType = atk.card.types[0];
+    const atkTypes = effectiveTypes(atk.card, atk);
     // effectiveWeaknesses honors Fairy Zone (opp Dragons get Psychic weakness).
-    const weak = effectiveWeaknesses(def, state).find((w) => w.type === atkType);
-    const res = def.card.resistances?.find((w) => w.type === atkType);
+    const weak = effectiveWeaknesses(def, state).find((w) => atkTypes.includes(w.type));
+    const res = def.card.resistances?.find((w) => atkTypes.includes(w.type));
     const defenderIgnoresWeakness =
       def.noWeaknessUntilTurn !== undefined && state.turn <= def.noWeaknessUntilTurn;
     if (!result.ignoreWeakness && !defenderIgnoresWeakness && weak && weak.value.startsWith("×")) {
@@ -822,7 +823,7 @@ function executeAttackHit(
       logEvent(
         state,
         "system",
-        `Weakness: ${def.card.name} takes ×${mult} from ${atkType} attacks.`,
+        `Weakness: ${def.card.name} takes ×${mult} from ${weak.type} attacks.`,
       );
     }
     if (!result.ignoreResistance && res && res.value.startsWith("-")) {
@@ -831,7 +832,7 @@ function executeAttackHit(
       logEvent(
         state,
         "system",
-        `Resistance: ${def.card.name} reduces ${atkType} damage by ${red}.`,
+        `Resistance: ${def.card.name} reduces ${res.type} damage by ${red}.`,
       );
     }
     if (!result.ignoreOppEffects) {
@@ -1097,6 +1098,14 @@ function finishHit(
   // End of sequence.
   if (state.pendingPromote) {
     state.onPromoteResolved = "endTurn";
+    return;
+  }
+  if (
+    state.pendingInPlayTarget &&
+    (state.pendingInPlayTarget.action.kind === "distributeDamage" ||
+      state.pendingInPlayTarget.action.kind === "attachEnergyFromDiscardPicker") &&
+    state.pendingInPlayTarget.action.finishTurn
+  ) {
     return;
   }
   const phaseAfter: string = state.phase;

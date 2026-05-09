@@ -14,6 +14,7 @@ import {
   isPokemon,
 } from "../rules";
 import { attack } from "../actions";
+import { resolveInPlayTarget } from "../trainerEffects";
 import { makeRng } from "../rng";
 import { buildDeck, DECK_SPECS } from "../../data/decks";
 import type { GameState, PokemonCard } from "../types";
@@ -120,9 +121,77 @@ describe("Phantom Dive — human path (user-reported bug repro)", () => {
     expect(action.kind).toBe("distributeDamage");
     expect(action.remaining).toBe(6);
     expect(action.perHit).toBe(10);
+    expect(state.activePlayer).toBe(ap);
 
     // CRITICAL: bench should be untouched until the human clicks targets.
     const benchDamageAfter = state.players[opp].bench.map((p) => p.damage);
     expect(benchDamageAfter).toEqual([0, 0, 0]);
+  });
+
+  it("does not pass turn until the human finishes all damage-placement clicks", () => {
+    const state = bootGameToMain(34);
+    const ap = state.activePlayer;
+    const opp = ap === "p1" ? "p2" : "p1";
+    state.players[ap].isAI = false;
+
+    state.players[ap].active!.card = {
+      id: "dragapult-test",
+      name: "Dragapult ex",
+      supertype: "Pokémon",
+      subtypes: ["Stage 2", "ex"],
+      hp: 320,
+      types: ["Dragon"],
+      attacks: [
+        {
+          name: "Phantom Dive",
+          cost: [],
+          damage: 200,
+          effects: [
+            { kind: "distributeDamage", times: 6, perHit: 10, ignoreWR: true, benchOnly: true },
+          ],
+        },
+      ],
+      retreatCost: ["Colorless", "Colorless"],
+    } as PokemonCard;
+    state.players[opp].active!.card = {
+      id: "opp-active-test",
+      name: "Opp Active",
+      supertype: "Pokémon",
+      subtypes: ["Basic"],
+      hp: 300,
+      types: ["Colorless"],
+      attacks: [],
+      retreatCost: [],
+    } as PokemonCard;
+    const benchCard: PokemonCard = {
+      id: "opp-bench-test",
+      name: "Opp Bench",
+      supertype: "Pokémon",
+      subtypes: ["Basic"],
+      hp: 80,
+      types: ["Colorless"],
+      attacks: [],
+      retreatCost: [],
+    } as PokemonCard;
+    state.players[opp].bench = [
+      { instanceId: "ob1", card: benchCard, damage: 0, attachedEnergy: [], evolvedFrom: [], tools: [], playedThisTurn: false, evolvedThisTurn: false, statuses: [], abilityUsedThisTurn: false },
+    ];
+
+    attack(state, ap, 0);
+    expect(state.activePlayer).toBe(ap);
+    expect(state.pendingInPlayTarget).not.toBeNull();
+
+    for (let i = 0; i < 5; i++) {
+      const r = resolveInPlayTarget(state, ap, opp, "ob1");
+      expect(r.ok).toBe(true);
+      expect(state.activePlayer).toBe(ap);
+    }
+
+    const final = resolveInPlayTarget(state, ap, opp, "ob1");
+    expect(final.ok).toBe(true);
+    expect(state.pendingInPlayTarget).toBeNull();
+    expect(state.activePlayer).toBe(opp);
+    expect(state.phase).toBe("main");
+    expect(state.players[opp].bench[0].damage).toBe(60);
   });
 });

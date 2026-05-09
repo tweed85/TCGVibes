@@ -145,6 +145,40 @@ describe("per-friendly-bench damage scaling — Dipplin-style attacks", () => {
   });
 });
 
+describe("runtime type rewrites — Double Type", () => {
+  it("applies Weakness when an ability adds the matching attack type", () => {
+    const state = bootGameToMain(13);
+    const ap = state.activePlayer;
+    const op = ap === "p1" ? "p2" : "p1";
+    state.players[ap].active!.card = {
+      id: "double-type-attacker",
+      name: "Double Type Attacker",
+      supertype: "Pokémon",
+      subtypes: ["Basic"],
+      hp: 100,
+      types: ["Psychic"],
+      abilities: [{ name: "Double Type", type: "Ability", text: "This Pokémon is Psychic and Fighting." }],
+      attacks: [{ name: "Type Hit", cost: [], damage: 50 }],
+      retreatCost: [],
+    };
+    state.players[op].active!.card = {
+      id: "fighting-weak-defender",
+      name: "Fighting Weak Defender",
+      supertype: "Pokémon",
+      subtypes: ["Basic"],
+      hp: 200,
+      types: ["Colorless"],
+      attacks: [],
+      weaknesses: [{ type: "Fighting", value: "×2" }],
+      retreatCost: [],
+    };
+
+    attack(state, ap, 0);
+
+    expect(state.players[op].active!.damage).toBe(100);
+  });
+});
+
 describe("Festival Grounds + Energy attached → status immunity", () => {
   it("attempts to apply a status are blocked when stadium + energy present", () => {
     const state = bootGameToMain(12);
