@@ -14,7 +14,7 @@ this audited baseline:
 
 | Surface | Source | Count | Inventory hash |
 | --- | --- | ---: | --- |
-| Attack effects | `src/engine/types.ts` `AttackEffect` | 305 | `70358e863c904922` |
+| Attack effects | `src/engine/types.ts` `AttackEffect` | 306 | `11de4a1df0a3c0b1` |
 | Ability effects | `src/engine/types.ts` `AbilityEffect` | 68 | `3c6119c0c8e1b247` |
 | Trainer effects | `src/engine/trainerEffects.ts` `TrainerEffectId` | 162 | `16e315fe6c79e542` |
 

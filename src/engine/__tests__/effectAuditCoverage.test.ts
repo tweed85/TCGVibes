@@ -15,7 +15,7 @@ interface InventoryExpectation {
 }
 
 const EXPECTED = {
-  attack: { count: 305, hash: "70358e863c904922" },
+  attack: { count: 306, hash: "11de4a1df0a3c0b1" },
   ability: { count: 68, hash: "3c6119c0c8e1b247" },
   trainer: { count: 162, hash: "16e315fe6c79e542" },
 } satisfies Record<string, InventoryExpectation>;
@@ -32,7 +32,8 @@ function between(text: string, startMarker: string, endMarker: string): string {
 function topLevelKindUnion(text: string): string[] {
   return [
     ...new Set(
-      [...text.matchAll(/^  \| \{ kind: "([^"]+)"/gm)].map((m) => m[1]),
+      [...text.matchAll(/^  \| \{(?:\s*kind: "([^"]+)"|\s*\n\s+kind: "([^"]+)")/gm)]
+        .map((m) => m[1] ?? m[2]),
     ),
   ].sort();
 }
