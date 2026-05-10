@@ -588,6 +588,21 @@ function scoreTrainerForNow(
       return benchTarget ? 95 : 5;
     }
 
+    // --- One-shot hand disruption ----------------------------------------
+    case "unfairStampShuffleDraw": {
+      // ACE SPEC. Engine-gated to "one of your Pokémon was KO'd during
+      // opp's last turn" (precheckTrainerEffect is authoritative); the
+      // scorer mirrors that gate so the AI doesn't try obviously
+      // illegal plays. Among legal plays, scale by opp hand size:
+      // 6+ cards → high-value disruption; 3-5 → modest (below Item
+      // threshold so we save it for a better window); 2 or fewer →
+      // burning a one-shot ACE SPEC to flip a tiny hand is wasteful.
+      if (!pl.yourPokemonKoedLastOppTurn) return 0;
+      if (opp.hand.length >= 6) return 80;
+      if (opp.hand.length <= 2) return 5;
+      return 35;
+    }
+
     // --- Switch / self-retreat --------------------------------------------
     case "simpleSwitch":
     case "switchActive":
@@ -2442,134 +2457,175 @@ function drainPending(sim: GameState, maxSteps = 30): void {
 // better. Game-over states get extreme scores so a winning line dominates;
 // otherwise we combine prizes (biggest factor), bench HP, energy on board,
 // and a small penalty for being out-of-actives.
+// --- Load-bearing scorePosition constants ---------------------------------
+// These weights drive the v2 threat-aware leaf eval that's responsible for
+// the measured +12.5pp v2+MCTS win-rate edge over v1 (see docs/AI.md).
+// Load-bearing MCTS leaf-eval weights; change only with benchmark evidence.
+const ACTIVE_OHKO_BASE_PENALTY = 60;
+const ACTIVE_OHKO_PRIZE_PENALTY = 80;
+const OPP_ACTIVE_OHKO_BASE_BONUS = 50;
+const OPP_ACTIVE_OHKO_PRIZE_BONUS = 60;
+
+// scorePosition: terminal short-circuit + sum of named sub-scores. Each
+// sub-score reads `state` for one slice of the position (prize race, threat,
+// readiness, board, resources). The Phase 2A extraction is intentionally
+// behavior-preserving — new AI strategy lands as additive overlays inside
+// these helpers (e.g. scoreBenchRisk for spread-pressure detection).
 function scorePosition(state: GameState, player: PlayerId): number {
   if (state.winner === player) return 1_000_000;
   if (state.winner !== null) return -1_000_000;
+  return (
+    scorePrizeRace(state, player) +
+    scoreImmediateThreats(state, player) +
+    scoreAttackReadiness(state, player) +
+    scoreBoardDevelopment(state, player) +
+    scoreResourceQuality(state, player) +
+    scoreBenchRisk(state, player) +
+    scoreDisruptionTiming(state, player)
+  );
+}
 
+// Prize differential — the central currency of the game. Each prize the
+// opponent owes is worth more than HP or energy. v2 adds a non-linear
+// endgame curve (the last prize is worth more than the first; champions
+// play harder for prizes 4→6 than for 0→1).
+function scorePrizeRace(state: GameState, player: PlayerId): number {
   const me = state.players[player];
   const opp = state.players[opponentOf(player)];
   const v2 = me.aiVersion === "v2";
-  let s = 0;
-
-  // Prize differential — the central currency of the game. Each prize the
-  // opponent owes is worth more than HP or energy. v2: non-linear endgame
-  // weighting (the last prize is worth more than the first; champions
-  // play harder for prizes 4→6 than for 0→1).
   const prizeWeight = (prizesTaken: number): number => {
     if (!v2) return prizesTaken * 250;
-    // Linear 250 per prize, plus a curve that rewards being closer to
-    // closing out the game.
     return prizesTaken * 250 + Math.max(0, prizesTaken - 2) * 60;
   };
-  s += prizeWeight(6 - me.prizes.length);
-  s -= prizeWeight(6 - opp.prizes.length);
+  return prizeWeight(6 - me.prizes.length) - prizeWeight(6 - opp.prizes.length);
+}
 
-  // Total HP on board (active + bench), proxied by max - damage.
-  const hpSum = (pl: typeof me): number => {
-    let total = pl.active ? effectiveMaxHp(pl.active, state) - pl.active.damage : 0;
-    for (const b of pl.bench) total += effectiveMaxHp(b, state) - b.damage;
-    return total;
-  };
-  s += hpSum(me) / 6;
-  s -= hpSum(opp) / 6;
+// v2-only threat-aware eval. Penalize positions where our Active is in OHKO
+// range from opp's projected next attack; symmetrically reward positions
+// where opp's Active is in our OHKO range. This is the single biggest gap
+// the agent audit identified — scoring board state alone without "which
+// side is about to lose a 2-prize attacker" was the v1 weakness.
+function scoreImmediateThreats(state: GameState, player: PlayerId): number {
+  const me = state.players[player];
+  const opp = state.players[opponentOf(player)];
+  if (me.aiVersion !== "v2") return 0;
+  let s = 0;
+  if (me.active) {
+    const incoming = opponentMaxDamageNextTurn(state, player);
+    const myActiveRemaining = effectiveMaxHp(me.active, state) - me.active.damage;
+    if (incoming >= myActiveRemaining) {
+      const prizeAtRisk = prizeValue(me.active.card);
+      s -= ACTIVE_OHKO_BASE_PENALTY + prizeAtRisk * ACTIVE_OHKO_PRIZE_PENALTY;
+    }
+  }
+  if (opp.active) {
+    const ourPeak = me.active
+      ? Math.max(
+          0,
+          ...me.active.card.attacks.map((a) =>
+            estimateDamage(state, player, me.active!, a, opp.active),
+          ),
+        )
+      : 0;
+    const oppActiveRemaining = effectiveMaxHp(opp.active, state) - opp.active.damage;
+    if (ourPeak >= oppActiveRemaining) {
+      const oppPrize = prizeValue(opp.active.card);
+      s += OPP_ACTIVE_OHKO_BASE_BONUS + oppPrize * OPP_ACTIVE_OHKO_PRIZE_BONUS;
+    }
+  }
+  return s;
+}
 
-  // Energy on board — a flat proxy for "tempo." Each energy is one tempo
-  // beat already paid for; losing a powered-up Pokémon costs us this much.
+// Energy on board (tempo proxy) + v2 ready-bench counting. Each energy is
+// one already-paid attachment beat — losing a powered Pokémon costs this
+// much in resimulated attaches. v2 layers on bench-attacker readiness with
+// a non-linear gust-insurance bonus for redundant ready attackers.
+function scoreAttackReadiness(state: GameState, player: PlayerId): number {
+  const me = state.players[player];
+  const opp = state.players[opponentOf(player)];
   const energyOnBoard = (pl: typeof me): number => {
     let n = pl.active?.attachedEnergy.length ?? 0;
     for (const b of pl.bench) n += b.attachedEnergy.length;
     return n;
   };
-  s += energyOnBoard(me) * 8;
-  s -= energyOnBoard(opp) * 8;
+  let s = energyOnBoard(me) * 8 - energyOnBoard(opp) * 8;
+  if (me.aiVersion !== "v2") return s;
+  // v2: count ready / nearly-ready bench attackers.
+  let readyBench = 0;
+  let nearlyReadyBench = 0;
+  for (const p of me.bench) {
+    if (p.attachedEnergy.length === 0) continue;
+    const attacks = p.card.attacks;
+    if (!attacks || attacks.length === 0) continue;
+    const provided = energyPoolForCost(p, state);
+    const hasCheapAttack = attacks.some((a) =>
+      canPayCost(provided, effectiveAttackCost(state, p, a.cost)),
+    );
+    if (hasCheapAttack) {
+      readyBench++;
+      continue;
+    }
+    // One energy short of paying any attack — still gust insurance after
+    // the next attach.
+    const minShort = Math.min(
+      ...attacks.map((a) => {
+        const cost = effectiveAttackCost(state, p, a.cost);
+        return Math.max(0, cost.length - provided.length);
+      }),
+    );
+    if (minShort === 1) nearlyReadyBench++;
+  }
+  s += readyBench * 15;
+  // Gust-insurance bonus: redundant ready bench attackers convert "opp
+  // gusts our finisher → -2 prizes and tempo" into "opp gusts → swap-and-
+  // attack line." The second ready attacker is worth significantly more
+  // than the first since it removes the single-point-of-failure. Sourced
+  // from Prague R9 G1 T4: champion spread Crispin energies across two
+  // Drakloaks specifically to defuse Boss's/Giovanni.
+  if (readyBench >= 2) s += 35;
+  if (readyBench >= 3) s += 15;
+  s += nearlyReadyBench * 5;
+  return s;
+}
 
-  // Bench depth so we don't tunnel-vision into a state with no follow-up.
+// HP sum + bench depth + catastrophic-no-Pokémon detection. Bench-depth
+// weights are asymmetric (me ×6 / opp ×4): our follow-up plays matter more
+// than denying opp follow-up at typical evaluation depth.
+function scoreBoardDevelopment(state: GameState, player: PlayerId): number {
+  const me = state.players[player];
+  const opp = state.players[opponentOf(player)];
+  const hpSum = (pl: typeof me): number => {
+    let total = pl.active ? effectiveMaxHp(pl.active, state) - pl.active.damage : 0;
+    for (const b of pl.bench) total += effectiveMaxHp(b, state) - b.damage;
+    return total;
+  };
+  let s = hpSum(me) / 6 - hpSum(opp) / 6;
   s += me.bench.length * 6;
   s -= opp.bench.length * 4;
-
-  // No active = catastrophic if we can't promote.
+  // No active + no bench = we can't promote — catastrophic for that side.
   if (!me.active && me.bench.length === 0) s -= 100_000;
   if (!opp.active && opp.bench.length === 0) s += 100_000;
-
-  // Hand size (mild — too much hand is a Marnie/N/Iono target).
-  s += Math.min(me.hand.length, 7) * 3;
-  s -= Math.min(opp.hand.length, 7) * 2;
-
-  if (v2) {
-    // v2: threat-aware position eval. Penalize positions where our Active
-    // is in OHKO range from the opponent's projected next attack and we
-    // have no safer bench option to retreat into. Symmetrically reward
-    // positions where opp's Active is in our OHKO range. This is the
-    // single biggest gap the agent audit identified — `scorePosition` was
-    // counting raw board state without considering "which side is about
-    // to lose a 2-prize attacker."
-    if (me.active) {
-      const incoming = opponentMaxDamageNextTurn(state, player);
-      const myActiveRemaining = effectiveMaxHp(me.active, state) - me.active.damage;
-      if (incoming >= myActiveRemaining) {
-        // Penalty scales with the prize value of the at-risk Pokémon.
-        const prizeAtRisk = prizeValue(me.active.card);
-        s -= 60 + prizeAtRisk * 80;
-      }
-    }
-    if (opp.active) {
-      // Estimate our peak damage to opp Active. Reuse `estimateDamage`
-      // over our active's attacks if any energy is sufficient.
-      const ourPeak = me.active
-        ? Math.max(
-            0,
-            ...me.active.card.attacks.map((a) =>
-              estimateDamage(state, player, me.active!, a, opp.active),
-            ),
-          )
-        : 0;
-      const oppActiveRemaining = effectiveMaxHp(opp.active, state) - opp.active.damage;
-      if (ourPeak >= oppActiveRemaining) {
-        const oppPrize = prizeValue(opp.active.card);
-        s += 50 + oppPrize * 60;
-      }
-    }
-
-    // Bench-attacker readiness: count Pokémon that could attack next turn
-    // (already have ≥ cost-1 energy + at least one valid attack). A bench
-    // full of half-powered Pokémon scores too high without this.
-    let readyBench = 0;
-    let nearlyReadyBench = 0;
-    for (const p of me.bench) {
-      if (p.attachedEnergy.length === 0) continue;
-      const attacks = p.card.attacks;
-      if (!attacks || attacks.length === 0) continue;
-      const provided = energyPoolForCost(p, state);
-      const hasCheapAttack = attacks.some((a) =>
-        canPayCost(provided, effectiveAttackCost(state, p, a.cost)),
-      );
-      if (hasCheapAttack) {
-        readyBench++;
-        continue;
-      }
-      // One energy short of paying any attack — still gust insurance after
-      // the next attach.
-      const minShort = Math.min(
-        ...attacks.map((a) => {
-          const cost = effectiveAttackCost(state, p, a.cost);
-          return Math.max(0, cost.length - provided.length);
-        }),
-      );
-      if (minShort === 1) nearlyReadyBench++;
-    }
-    s += readyBench * 15;
-    // Gust-insurance bonus: redundant ready bench attackers convert "opp
-    // gusts our finisher = -2 prizes and tempo" into "opp gusts → we still
-    // have a swap-and-attack line." The second ready attacker is worth
-    // significantly more than the first since it removes the single-point-
-    // of-failure. Sourced from Prague R9 G1 T4: champion spread Crispin
-    // energies across two Drakloaks specifically to defuse Boss's/Giovanni.
-    if (readyBench >= 2) s += 35;
-    if (readyBench >= 3) s += 15;
-    s += nearlyReadyBench * 5;
-  }
-
   return s;
+}
+
+// Hand-size signal (capped at 7) — mild because too much hand is a
+// Marnie / N / Iono target, but a thin hand is structurally worse.
+function scoreResourceQuality(state: GameState, player: PlayerId): number {
+  const me = state.players[player];
+  const opp = state.players[opponentOf(player)];
+  return Math.min(me.hand.length, 7) * 3 - Math.min(opp.hand.length, 7) * 2;
+}
+
+// Reserved for additive v2 overlays (spread-pressure detection,
+// over-benching penalty, exposed-rule-box risk).
+function scoreBenchRisk(_state: GameState, _player: PlayerId): number {
+  return 0;
+}
+
+// Reserved for additive v2 overlays (Unfair Stamp / Iono / Marnie timing
+// beyond the per-card scoreTrainerForNow lane, ACE SPEC scheduling).
+function scoreDisruptionTiming(_state: GameState, _player: PlayerId): number {
+  return 0;
 }
 
 // 1-ply lookahead variant of pickBestAttack: simulates opp's expected reply.

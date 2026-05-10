@@ -46,20 +46,34 @@ src/
     aiArchetype.ts    Archetype detection + bonuses + T1-T3 playbooks
     mcts.ts           Determinized UCT, action-level tree, depth=0 leaf
     rng.ts            Seeded mulberry32 with getState/setState
+    gameCommands.ts   GameCommand union + applyGameCommand dispatcher
+                        (replay backbone)
+    replay.ts         GameReplayV1/V2 schema, newReplay, loadReplay,
+                        finalizeReplayIfDone, REPLAY_SCHEMA_VERSION
+    preflight.ts      canBenchBasic/canEvolve/canAttachEnergy/...,
+                        precheckAbility, precheckStadium, canEndTurn
+    prompts.ts        PendingPrompt union + activePrompt(viewer)
+    effectPrefabs.ts  searchDeckToBench/Hand, recoverFromDiscardToHand
   data/
     cards.ts          Lazy dynamic import()
     cardMapper.ts     API → engine types
     cardEquivalence.ts gameplayKey() canonical "same card different art"
     decklistParser.ts PTCGL importer (caps >4 copies at parse time)
     decks.ts          Curated + community decks + validateDeckForPlay
-    persistence.ts    idb-keyval deck storage
+    persistence.ts    idb-keyval storage: imported decks + completed
+                        replays (StoredReplay rows)
+    identity.ts       Anonymous device-scoped UUID (cloud upload)
+    replayUpload.ts   Supabase upload (lazy-loaded @supabase/supabase-js)
     effectPatterns.ts
   ui/CardView.tsx     Card + in-play renderers (memoized)
   ui/DeckBuilderModal.tsx
   ui/VariantPicker.tsx Modal: pick which printing of a card to use
-  App.tsx              Includes inline GameInspector right-rail panel
+  ui/ReplayHistoryModal.tsx  Past games + Download/Delete/Upload (lazy)
+  App.tsx              Includes inline GameInspector right-rail panel,
+                        outcome useEffect, CloudConsentModal
   styles.css           .game-layout grid + inspector + action-bar
   test-setup.ts       Loads dataset + jest-dom matchers
+supabase/migrations/0001_replays.sql   Cloud replay table + RLS
 e2e/smoke.spec.ts     Playwright boot + undo click-through
 playwright.config.ts
 vite.config.ts        manualChunks split, vite-plugin-pwa
@@ -86,6 +100,25 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
   Actions spawned mid-attack (Phantom Dive, Aura Jab) carry a
   `finishTurn` flag; `finishHit` defers `endTurn` while a human picker
   is open and `resolveInPlayTarget` runs it on the final click.
+- **Stable picker identity** — `PendingPickEffectKind`
+  (`preciousTrolley` / `energySearchPro` / `academyAtNight` /
+  `prismTower` / `mysteryGarden` / `levincia` / `grandTreeStage1` /
+  `grandTreeStage2` / `glassTrumpetEnergyPick`) is set on `PendingPick`
+  and `PendingHandReveal` via the `effectKind` field, joining the
+  existing `PendingInPlayTarget.action.kind` discriminator. AI lanes
+  and tests route off these kinds — never `label` text, which is
+  display-only and shifts without notice. `setDeckSearchPick` takes
+  `effectKind` as a builder option; in-place picks set it directly.
+- **Optional-prompt skip commands** — Optional picker steps with a
+  card-specific cleanup (Prime Catcher self-switch, Glass Trumpet
+  attach) ship explicit `GameCommand` kinds (`skipPrimeCatcherSelfSwitch`,
+  `skipGlassTrumpetAttach`) so replay exports don't stall on the
+  prompt. Glass Trumpet's skip returns any queued (discard-pulled)
+  Energy to the discard pile; the action-bar Cancel button is wired
+  to route through `skipGlassTrumpetAttach` instead of plain
+  `cancelInPlayTarget` so queued Energy never leaks. Optional
+  `PendingPick` steps (Grand Tree Stage 2) use `min: 0` so the existing
+  picker UI's Skip button covers them without a dedicated command.
 - **Drag-and-drop: hand → in-play.** `useCardGesture` in
   [CardView.tsx](src/ui/CardView.tsx) is one state machine for tap +
   long-press-zoom + drag, dispatched off pointerdown: move >8px before
@@ -193,6 +226,20 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
   retried shuffles consumed different entropy. Stack resets at turn
   boundary; cleared on successful attack. Multiple undos walk back
   through the turn one action at a time.
+- **Replay capture + outcome.** Every successful `GameCommand` appends
+  to `replayRef` in `App.tsx`. On `state.phase === "gameOver"` a
+  render-keyed `useEffect` runs the pure `finalizeReplayIfDone` helper
+  (idempotent; injectable clock for tests) to stamp `outcome.winner /
+  completedAt / gameMode`, then `saveReplay()` lands the row in IDB.
+  Catches AI-driven endings that bypass `handle()`. Schema is v2 with
+  a v1 acceptance shim; loader takes `unknown` and validates.
+- **Cloud replay aggregation (opt-in).** Toggle in the Game menu fires
+  `uploadReplay()` after each completed game; Supabase client is
+  lazy-loaded so the dep is in its own chunk, not the boot bundle.
+  Anonymous `client_id` is a UUID stored at `tcgvibes.clientId.v1`.
+  Anon clients can INSERT only (no SELECT, table CHECK + RLS enforce
+  schema-v2 / valid winner / 200KB cap). Local delete does NOT
+  propagate to the cloud — consent modal says so explicitly.
 
 ## Rules implemented
 
@@ -233,12 +280,15 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
 
 For task-specific deep dives, read the relevant docs/ companion:
 
-- **Effect coverage** (attacks / abilities / trainers / stadiums / tools, ~85 effect kinds incl. Chaos Rising additions, ~24 tools, special interactions): see [docs/EFFECTS.md](docs/EFFECTS.md)
+- **Effect coverage** (attacks / abilities / trainers / stadiums / tools, ~85 effect kinds incl. Chaos Rising additions, ~24 tools, special interactions; prefab layer for new card work): see [docs/EFFECTS.md](docs/EFFECTS.md)
 - **AI internals** (v1 greedy, v2 archetype-aware heuristics, MCTS, the 12 wired archetype playbooks, measured win rates): see [docs/AI.md](docs/AI.md)
 - **Deck library** (12 curated decks: 4 baseline + 8 Prague Regional 2026 community lists; deck-builder gameplay-equivalence grouping; dataset refresh): see [docs/DECKS.md](docs/DECKS.md)
-- **Test suite** (633 vitest + 3 Playwright e2e — full enumeration with what each file covers): see [docs/TESTS.md](docs/TESTS.md)
+- **Test suite** (789 vitest + 5 Playwright e2e — full enumeration with what each file covers): see [docs/TESTS.md](docs/TESTS.md)
+- **Replay determinism contract + cloud aggregation** (schema versions, v1→v2 migration, what's recorded vs not, opt-in upload): see [docs/REPLAY.md](docs/REPLAY.md) and [docs/REPLAY_BACKEND.md](docs/REPLAY_BACKEND.md) for the Supabase setup recipe
+- **Twinleaf-inspired phases + v2 follow-ups** (preflight, prompt adapter, prefabs, replay, cloud aggregation — status table): see [docs/TWINLEAFGG_IMPLEMENTATION_PLAN.md](docs/TWINLEAFGG_IMPLEMENTATION_PLAN.md)
 - **Mobile / iOS / offline** (Capacitor, PWA, responsive CSS, safe-area hardening): see [docs/MOBILE.md](docs/MOBILE.md)
 - **Open findings + deferred AI work** (MVP scope cuts, pressure-test findings, Phases 2c / 2e / 7-12 of the AI overhaul plan): see [docs/FINDINGS.md](docs/FINDINGS.md)
+- **CPU AI build plan** (Phase 0 = picker AI lanes + bug fixes — landed; Phases 1–6 deferred, parity-first `scorePosition` refactor strategy recorded): see [docs/AI_CPU_BUILD_PLAN.md](docs/AI_CPU_BUILD_PLAN.md)
 
 ## Working branch
 
