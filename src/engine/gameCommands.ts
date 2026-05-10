@@ -27,6 +27,7 @@ import {
   resolveInPlayTarget,
   resolveHandReveal,
   resolveRareCandyChoice,
+  skipGlassTrumpetAttach,
   skipPrimeCatcherSelfSwitch,
 } from "./trainerEffects";
 import { useStadium } from "./stadiumActivated";
@@ -75,7 +76,11 @@ export type GameCommand =
   // Optional-prompt skip — Prime Catcher's "If you do, you may switch your
   // Active." Without an explicit skip command, exported replays would stall
   // on the optional prompt.
-  | { kind: "skipPrimeCatcherSelfSwitch"; player: PlayerId };
+  | { kind: "skipPrimeCatcherSelfSwitch"; player: PlayerId }
+  // Optional-prompt skip — Glass Trumpet's "attach a Basic Energy ... to
+  // each of them" allows attaching to fewer than the queued count. Returns
+  // remaining queued Energy to the player's discard pile.
+  | { kind: "skipGlassTrumpetAttach"; player: PlayerId };
 
 /**
  * Apply a command to the live game state. Thin dispatcher over the
@@ -154,6 +159,10 @@ export function applyGameCommand(state: GameState, c: GameCommand): ActionResult
     }
     case "skipPrimeCatcherSelfSwitch": {
       const r = skipPrimeCatcherSelfSwitch(state, c.player);
+      return r.ok ? { ok: true } : { ok: false, reason: r.reason ?? "Skip failed." };
+    }
+    case "skipGlassTrumpetAttach": {
+      const r = skipGlassTrumpetAttach(state, c.player);
       return r.ok ? { ok: true } : { ok: false, reason: r.reason ?? "Skip failed." };
     }
   }

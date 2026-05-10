@@ -23,6 +23,7 @@ import {
   chooseFirstPlayer,
   completeSetup,
   isBasic,
+  isPlayersFirstTurn,
   isPokemon,
   prizeValue,
   opponentOf,
@@ -45,6 +46,7 @@ import {
 import { resolvePendingPick, resolvePendingSearchNotice } from "./pendingPick";
 import { getAttackEffects } from "../data/effectPatterns";
 import { resolveAiHandReveal } from "./trainerEffects";
+import { precheckStadium, stadiumHasActivatedEffect, useStadium } from "./stadiumActivated";
 import { logEvent } from "./rules";
 import {
   archetypeOf,
@@ -1144,6 +1146,107 @@ function resolveAiPendingPickSmart(state: GameState, player: PlayerId): boolean 
     return true;
   }
 
+  // Discriminant-first dispatch. Effect-specific AI lanes match on
+  // `pick.effectKind` (a stable identifier set by the effect that opened
+  // the picker) rather than parsing `label`. Falls through to the
+  // generic / label-based logic below if no effectKind is set or the
+  // kind has no specialized handler yet.
+  if (pick.effectKind) {
+    switch (pick.effectKind) {
+      case "preciousTrolley": {
+        // Pick up to `max` Basics, ranked by archetype evolution support
+        // first then generic Pokémon score.
+        const evolvesFromSet = new Set<string>();
+        for (const c of pl.deck) {
+          if (isPokemonCard(c) && c.evolvesFrom) evolvesFromSet.add(c.evolvesFrom);
+        }
+        for (const c of pl.hand) {
+          if (isPokemonCard(c) && c.evolvesFrom) evolvesFromSet.add(c.evolvesFrom);
+        }
+        const scored = eligible.map((i) => {
+          const c = pick.pool[i];
+          let s = 0;
+          if (isPokemonCard(c)) {
+            s = scorePickedPokemon(state, player, c, primaryEnergy);
+            if (evolvesFromSet.has(c.name)) s += 40;
+          }
+          return { i, c, s };
+        });
+        scored.sort((a, b) => b.s - a.s);
+        const picked: number[] = [];
+        const seenNames = new Set<string>();
+        for (const s of scored) {
+          if (picked.length >= max) break;
+          if (!isPokemonCard(s.c)) continue;
+          if (seenNames.has(s.c.name)) continue;
+          picked.push(s.i);
+          seenNames.add(s.c.name);
+        }
+        resolvePendingPick(state, player, picked);
+        return true;
+      }
+      case "energySearchPro": {
+        // Different basic-Energy types only. Resolver enforces uniqueness;
+        // here we de-dupe ourselves so the AI never gets caught by the
+        // resolver-side rejection.
+        const seenTypes = new Set<string>();
+        const picked: number[] = [];
+        const scored = eligible.map((i) => {
+          const c = pick.pool[i];
+          const s = isEnergyCard(c) ? scorePickedEnergy(c, primaryEnergy) : 0;
+          return { i, c, s };
+        });
+        scored.sort((a, b) => b.s - a.s);
+        for (const s of scored) {
+          if (picked.length >= max) break;
+          if (!isEnergyCard(s.c)) continue;
+          const t = s.c.provides[0];
+          if (!t || seenTypes.has(t)) continue;
+          seenTypes.add(t);
+          picked.push(s.i);
+        }
+        resolvePendingPick(state, player, picked);
+        return true;
+      }
+      case "levincia": {
+        // All eligible discard Energy is already filtered to Basic Lightning
+        // — just take up to `max`.
+        resolvePendingPick(state, player, eligible.slice(0, max));
+        return true;
+      }
+      case "glassTrumpetEnergyPick": {
+        // Pull up to 2 Basic Energy from discard. Prefer the deck's primary
+        // type to fuel the Tera attacker.
+        const scored = eligible.map((i) => {
+          const c = pick.pool[i];
+          const s = isEnergyCard(c) ? scorePickedEnergy(c, primaryEnergy) : 0;
+          return { i, s };
+        });
+        scored.sort((a, b) => b.s - a.s);
+        resolvePendingPick(state, player, scored.slice(0, max).map((x) => x.i));
+        return true;
+      }
+      case "grandTreeStage1":
+      case "grandTreeStage2": {
+        // The captured-instance afterPick handlers in pendingPick.ts apply
+        // the chosen Stage 1 / Stage 2 to the right ally. AI just picks
+        // the first eligible card (only one card matches by construction
+        // — the predicate is name-keyed). For Stage 2 (optional), still
+        // take it: the surrounding stadiumActivated AI lane already
+        // decides whether to run the chain.
+        resolvePendingPick(state, player, eligible.slice(0, max));
+        return true;
+      }
+      case "academyAtNight":
+      case "prismTower":
+      case "mysteryGarden":
+        // These spawn pendingHandReveal, not pendingPick. Defensive
+        // fallthrough — if a future change ever spawns a pendingPick under
+        // these kinds, take the generic-scoring path below.
+        break;
+    }
+  }
+
   // Special handling: Buddy-Buddy Poffin — pick TWO DIFFERENT low-HP Basics
   // that set up evolution lines.
   if (label.startsWith("buddy-buddy poffin")) {
@@ -1323,6 +1426,8 @@ function applyMctsAction(state: GameState, player: PlayerId, a: McAction): boole
       return retreat(state, player, a.benchIdx).ok;
     case "activateAbility":
       return activateAbility(state, player, a.holderInstanceId, a.abilityIdx).ok;
+    case "useStadium":
+      return useStadium(state, player).ok;
     case "endTurn":
       endTurn(state, player);
       return true;
@@ -1406,12 +1511,39 @@ function tryStepAiTurn(state: GameState, player: PlayerId): boolean {
   }
 
   // Play a Stadium if we have one and none is on the field (or ours would
-  // displace the opponent's). Simple heuristic — stadium power isn't modeled,
-  // so this is mostly about preserving tempo.
-  const stadiumIdx = pl.hand.findIndex(isStadium);
+  // displace the opponent's). v2 Arboliva gets one extra exception: replace
+  // our own non-Forest Stadium with Forest of Vitality when it immediately
+  // unlocks a Grass evolution chain this turn.
+  const stadiumIdx = pickStadiumToPlay(state, player);
   if (stadiumIdx >= 0) {
     const alreadyOurs = state.stadium?.controller === player;
-    if (!alreadyOurs && playTrainer(state, player, stadiumIdx).ok) return true;
+    const card = pl.hand[stadiumIdx];
+    const replacingOwnForForest =
+      isTrainer(card) &&
+      card.name === "Forest of Vitality" &&
+      forestOfVitalityUnlocksGrassEvolution(state, player);
+    if (
+      (!alreadyOurs || replacingOwnForForest) &&
+      playTrainer(state, player, stadiumIdx).ok
+    ) return true;
+  }
+
+  // Activate the in-play Stadium's once-per-turn effect. Each activated
+  // Stadium's `run()` already short-circuits to an AI-friendly auto-resolve
+  // path (no human picker spawned), so this just needs to fire useStadium
+  // when the precheck passes.
+  // Lumiose City already short-circuits via `endTurnOnResolve`, so the
+  // auto-pick path consumes the Bench-search and ends the turn cleanly.
+  if (
+    !pl.stadiumUsedThisTurn &&
+    state.stadium &&
+    stadiumHasActivatedEffect(state.stadium.card.name)
+  ) {
+    const pre = precheckStadium(state, player);
+    if (pre.ok) {
+      const r = useStadium(state, player);
+      if (r.ok) return true;
+    }
   }
 
   // Step 6: attach Energy — after searches/evolves so the right attacker
@@ -1853,6 +1985,44 @@ function tryEvolve(state: GameState, player: PlayerId): boolean {
   // Reject very-bad evolutions outright (e.g., Mega without immediate attack).
   if (pick.score <= -100) return false;
   return evolve(state, player, pick.handIdx, pick.targetId).ok;
+}
+
+function pickStadiumToPlay(state: GameState, player: PlayerId): number {
+  const pl = state.players[player];
+  const forestIdx = pl.hand.findIndex(
+    (c) => isStadium(c) && c.name === "Forest of Vitality",
+  );
+  if (forestIdx >= 0 && forestOfVitalityUnlocksGrassEvolution(state, player)) {
+    return forestIdx;
+  }
+  return pl.hand.findIndex(isStadium);
+}
+
+function forestOfVitalityUnlocksGrassEvolution(
+  state: GameState,
+  player: PlayerId,
+): boolean {
+  if (!v2Active(state, player)) return false;
+  if (archetypeOf(state, player) !== "arboliva") return false;
+  if (state.stadium?.card.name === "Forest of Vitality") return false;
+  if (isPlayersFirstTurn(state, player)) return false;
+
+  const pl = state.players[player];
+  const grassEvolutionInHand = pl.hand.some((c) =>
+    isPokemonCard(c) &&
+    c.evolvesFrom &&
+    c.types.includes("Grass"));
+  if (!grassEvolutionInHand) return false;
+
+  const targets = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+  return targets.some((target) => {
+    if (!target.card.types.includes("Grass")) return false;
+    if (!target.playedThisTurn && !target.evolvedThisTurn) return false;
+    return pl.hand.some((c) =>
+      isPokemonCard(c) &&
+      c.evolvesFrom === target.card.name &&
+      c.types.includes("Grass"));
+  });
 }
 
 // Pick the best Trainer of a given kind. Returns null if nothing scores high

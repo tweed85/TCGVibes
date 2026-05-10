@@ -1296,6 +1296,22 @@ export type PendingPickFallback =
   | "discard" // Explorer's Guidance: unpicked top cards are discarded
   | "returnToDiscard"; // discard-recovery effects
 
+// Stable AI-routing discriminant for pending deck/discard picks. Lets the AI
+// auto-resolver dispatch on `pendingPick.effectKind` instead of parsing
+// `label` text — labels are display-only and may shift without notice. Only
+// effects whose AI lane needs card-specific scoring need a kind here; generic
+// search picks fall through to `resolveAiPendingPickSmart`.
+export type PendingPickEffectKind =
+  | "preciousTrolley"
+  | "energySearchPro"
+  | "academyAtNight"
+  | "prismTower"
+  | "mysteryGarden"
+  | "levincia"
+  | "grandTreeStage1" // pick the Stage 1 to evolve onto the captured Basic
+  | "grandTreeStage2" // optional Stage 2 search (skippable)
+  | "glassTrumpetEnergyPick"; // step 1: pick basic Energy from discard
+
 // Reveal-opponent's-hand prompt. The initiator (`player`) picks which cards
 // from the target's hand (`target`) to act on (discard / move to bottom).
 // Filter restricts which hand cards are eligible.
@@ -1307,6 +1323,10 @@ export interface PendingHandReveal {
   max: number;
   filter: "item" | "tool" | "itemOrTool" | "supporter" | "pokemon" | "energy" | "any";
   action: "discard" | "toBottomOfDeck" | "toTopOfDeck";
+  // Stable AI-routing identity. Mirrors PendingPick.effectKind so tests +
+  // future centralized AI dispatch can identify the spawning effect without
+  // parsing `label`.
+  effectKind?: PendingPickEffectKind;
   // Optional follow-up run by the resolver after the pick completes.
   // `useRevealedCount` (Perrin): when set, the post-search caps at the
   // number of cards the player actually revealed instead of the fixed max
@@ -1397,8 +1417,12 @@ export interface PendingInPlayTarget {
     // Glass Trumpet step 2 (after the discard-recovery picker stashed
     // basic Energy in `pendingAttachQueue`): each click on a Benched
     // Colorless Pokémon attaches one queued Energy. `remaining` decrements;
-    // when 0 OR queue is empty, the picker closes.
-    | { kind: "glassTrumpetAttach"; remaining: number }
+    // when 0 OR queue is empty, the picker closes. `pickedInstanceIds`
+    // tracks already-attached targets — the card text says "attach a Basic
+    // Energy ... to each of them," so a single target cannot receive
+    // multiple Energy in one resolution. Player may skip remaining picks
+    // via `skipGlassTrumpetAttach`; queued Energy then returns to discard.
+    | { kind: "glassTrumpetAttach"; remaining: number; pickedInstanceIds: string[] }
     // Scramble Switch step 1: pick the Bench Pokémon to switch into the
     // Active spot. Step 2 (energy transfer) is currently always-move-all
     // — see APPROXIMATION comment in trainerEffects.ts.
@@ -1459,6 +1483,10 @@ export interface PendingPick {
   // the first selection, but the resolver is the correctness layer.
   // (Energy Search Pro.)
   uniqueByEnergyType?: boolean;
+  // Stable identity for AI lane routing. When set, the AI auto-resolver
+  // dispatches to a card-specific scorer instead of falling through to the
+  // generic greedy ranker. Never parsed from `label`.
+  effectKind?: PendingPickEffectKind;
   // Effect-specific continuation that needs the cards selected by this pick.
   afterPick?:
     | { kind: "crispinHandEnergy" }

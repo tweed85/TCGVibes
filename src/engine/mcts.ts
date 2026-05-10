@@ -37,6 +37,7 @@ import {
   energyPoolForCost,
 } from "./ongoingEffects";
 import { canPayCost } from "./rules";
+import { precheckStadium, stadiumHasActivatedEffect, useStadium } from "./stadiumActivated";
 import type {
   Card,
   EnergyCard,
@@ -56,6 +57,7 @@ export type McAction =
   | { kind: "playTrainer"; handIdx: number; target?: { kind: "inPlay" | "oppInPlay"; instanceId: string } }
   | { kind: "retreat"; benchIdx: number }
   | { kind: "activateAbility"; holderInstanceId: string; abilityIdx: number }
+  | { kind: "useStadium" }
   | { kind: "endTurn" };
 
 function applyMcAction(state: GameState, player: PlayerId, action: McAction): boolean {
@@ -75,6 +77,8 @@ function applyMcAction(state: GameState, player: PlayerId, action: McAction): bo
         return retreat(state, player, action.benchIdx).ok;
       case "activateAbility":
         return activateAbility(state, player, action.holderInstanceId, action.abilityIdx).ok;
+      case "useStadium":
+        return useStadium(state, player).ok;
       case "endTurn":
         endTurn(state, player);
         return true;
@@ -189,6 +193,15 @@ export function enumerateActions(
   if (!pl.retreatedThisTurn && pl.active) {
     for (let bi = 0; bi < pl.bench.length; bi++) {
       out.push({ kind: "retreat", benchIdx: bi });
+    }
+  }
+
+  // Activated Stadium (once per turn). Stadium-specific AI auto-resolve
+  // lives in stadiumActivated.ts.
+  if (!pl.stadiumUsedThisTurn && state.stadium) {
+    const name = state.stadium.card.name;
+    if (stadiumHasActivatedEffect(name) && precheckStadium(state, player).ok) {
+      out.push({ kind: "useStadium" });
     }
   }
 

@@ -288,6 +288,7 @@ describe("replay — recorder + loader", () => {
       "resolveHandReveal",
       "resolveRareCandyChoice",
       "skipPrimeCatcherSelfSwitch",
+      "skipGlassTrumpetAttach",
     ];
     // Force the type-system to enumerate every kind: if a future kind is
     // added without listing it here, the assertion below catches it.
@@ -311,7 +312,57 @@ describe("replay — recorder + loader", () => {
       resolveHandReveal: true,
       resolveRareCandyChoice: true,
       skipPrimeCatcherSelfSwitch: true,
+      skipGlassTrumpetAttach: true,
     };
     for (const k of expectedKinds) expect(dummy[k]).toBe(true);
+  });
+
+  it("skipGlassTrumpetAttach dispatches via applyGameCommand and clears the prompt", () => {
+    // Construct a minimal state with a Glass Trumpet attach prompt + queue
+    // and verify the GameCommand routes to the engine function. Doesn't
+    // need a full replay round-trip — the static-kind test above pins
+    // schema coverage; this asserts the dispatcher actually wires the
+    // function in.
+    const live = freshSetup();
+    // We can't reach the prompt through public actions in 2 lines, so
+    // shape the state directly: pretend the user reached step 2 with one
+    // queued Energy and a bench Colorless target.
+    const ap = live.activePlayer;
+    const pl = live.players[ap];
+    live.pendingAttachQueue = {
+      ownerId: ap,
+      energies: [
+        {
+          id: "e-fire-skip",
+          name: "Basic Fire Energy",
+          supertype: "Energy",
+          subtypes: ["Basic"],
+          provides: ["Fire"],
+        } as never,
+      ],
+      sourceLabel: "Glass Trumpet",
+    };
+    live.pendingInPlayTarget = {
+      player: ap,
+      label: "Glass Trumpet: pick a Benched Colorless Pokémon",
+      scope: "own",
+      slot: "bench",
+      filter: "anyPokemon",
+      action: {
+        kind: "glassTrumpetAttach",
+        remaining: 1,
+        pickedInstanceIds: [],
+      },
+    };
+    const before = pl.discard.length;
+    const r = applyGameCommand(live, {
+      kind: "skipGlassTrumpetAttach",
+      player: ap,
+    });
+    expect(r.ok).toBe(true);
+    // Queue cleared; prompt cleared; the unattached Energy is in discard.
+    expect(live.pendingAttachQueue).toBeNull();
+    expect(live.pendingInPlayTarget).toBeNull();
+    expect(pl.discard.length).toBe(before + 1);
   });
 });

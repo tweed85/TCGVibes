@@ -56,8 +56,8 @@ const STADIUM_CLASSIFICATION: Record<string, Tier> = {
 
   // Activated but with documented approximations — see
   // docs/STADIUM_AUDIT.md.
-  "Grand Tree": "approximate", // auto-picks Basic + Stage 1 + Stage 2; first-turn gate uses global turn
-  "Surfing Beach": "approximate", // auto-picks first Water Benched
+  "Grand Tree": "approximate", // AI chain scoring is heuristic; human path has full picker + per-player T1 gate
+  "Surfing Beach": "approximate", // AI ranks Water bench by energy/damage; human path has picker
 };
 
 function standardStadiumNames(): string[] {

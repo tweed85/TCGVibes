@@ -74,6 +74,8 @@ export function setDeckSearchPick(
     // Enforce different basic Energy types in the picked set (Energy
     // Search Pro). Resolver rejects duplicates.
     uniqueByEnergyType?: boolean;
+    // Stable AI-routing identity. Set on the PendingPick verbatim.
+    effectKind?: import("./types").PendingPickEffectKind;
   } = {},
 ): boolean {
   const pl = state.players[player];
@@ -115,6 +117,7 @@ export function setDeckSearchPick(
     attachToInstanceId: options.attachToInstanceId,
     afterPick: options.afterPick,
     uniqueByEnergyType: options.uniqueByEnergyType,
+    effectKind: options.effectKind,
     // Snapshot the non-matching deck cards so the UI's "All" tab can show
     // the entire deck during the search. Slice() to avoid sharing state with
     // pl.deck (which gets mutated when the pick resolves).
@@ -357,7 +360,11 @@ function applyAfterPick(
         scope: "own",
         slot: "bench",
         filter: "anyPokemon",
-        action: { kind: "glassTrumpetAttach", remaining: energies.length },
+        action: {
+          kind: "glassTrumpetAttach",
+          remaining: energies.length,
+          pickedInstanceIds: [],
+        },
       };
       break;
     }
@@ -368,7 +375,13 @@ function applyAfterPick(
           c.supertype === "Pokémon" &&
           !!(c as import("./types").PokemonCard).evolvesFrom,
       ) as import("./types").PokemonCard | undefined;
-      if (!stageEvo) return;
+      if (!stageEvo) {
+        // Optional Stage 2 was offered and the user resolved with no
+        // selection — still shuffle the deck (the rest of the resolution
+        // already shuffled on the success path).
+        if (afterPick.kind === "grandTreeApplyStage2") shuffleDeck(state, player);
+        return;
+      }
       const handIdx = pl.hand.lastIndexOf(stageEvo);
       if (handIdx < 0) return;
       const ally = [pl.active, ...pl.bench]
@@ -406,6 +419,7 @@ function applyAfterPick(
             `Grand Tree (optional): pick a Stage 2 that evolves from ${ally.card.name}`,
             {
               afterPick: { kind: "grandTreeApplyStage2", targetInstanceId },
+              effectKind: "grandTreeStage2",
             },
           )
         ) {

@@ -35,6 +35,7 @@ import {
 import type {
   Card,
   EnergyCard,
+  EnergyType,
   GameState,
   PlayerId,
   PlayerState,
@@ -2716,12 +2717,48 @@ export function applyTrainerEffect(
       const isBasicPoke = (c: Card) =>
         c.supertype === "Pokémon" && c.subtypes.includes("Basic");
 
-      // AI: keep the existing greedy auto-bench so AI turns stay fast.
+      // AI lane: prefer Basics whose evolution line is already represented
+      // in our deck or hand — those Basics matter (they're upcoming
+      // attackers / engines), unlike random fillers. Score each Basic by
+      // (a) does its evolution exist in deck or hand, (b) is the Basic
+      // already an in-play setup target. Greedy-take top-N.
       if (pl.isAI) {
+        const evolutionInLibrary = (basicName: string): boolean => {
+          const search = (zone: Card[]) =>
+            zone.some(
+              (c) =>
+                c.supertype === "Pokémon" &&
+                (c as PokemonCard).evolvesFrom === basicName,
+            );
+          return search(pl.deck) || search(pl.hand);
+        };
+        const candidates = pl.deck
+          .map((c, idx) => ({ c, idx }))
+          .filter(({ c }) => isBasicPoke(c));
+        const scored = candidates.map(({ c, idx }) => {
+          let score = 10; // baseline (any Basic is potentially useful)
+          if (evolutionInLibrary(c.name)) score += 50;
+          // Rule-box Basics are usually high-value attackers/engines.
+          const subs = (c as PokemonCard).subtypes ?? [];
+          if (subs.includes("ex") || subs.includes("V") || subs.includes("VSTAR") || subs.includes("VMAX")) {
+            score += 20;
+          }
+          // Light penalty for ≤1 bench slot remaining unless score is high.
+          if (slots <= 1 && score < 50) score -= 30;
+          return { idx, score };
+        });
+        scored.sort((a, b) => b.score - a.score);
+        const pickIdxSet = new Set<number>(
+          scored
+            .filter((s) => s.score > 0)
+            .slice(0, slots)
+            .map((s) => s.idx),
+        );
         const rest: Card[] = [];
         let added = 0;
-        for (const c of pl.deck) {
-          if (added < slots && isBasicPoke(c)) {
+        for (let i = 0; i < pl.deck.length; i++) {
+          const c = pl.deck[i];
+          if (pickIdxSet.has(i) && added < slots && isBasicPoke(c)) {
             pl.bench.push(makePokemonInPlay(c as PokemonCard));
             added++;
           } else {
@@ -2739,7 +2776,7 @@ export function applyTrainerEffect(
       if (!setDeckSearchPick(
         state, player, isBasicPoke, slots,
         `Precious Trolley: pick up to ${slots} Basic Pokémon to bench`,
-        { toBench: true },
+        { toBench: true, effectKind: "preciousTrolley" },
       )) {
         logEvent(state, player, "finds no Basic Pokémon.");
       }
@@ -2749,12 +2786,51 @@ export function applyTrainerEffect(
     case "searchEnergyVariety": {
       // Energy Search Pro — any number of Basic Energies of different types.
 
-      // AI: keep the existing one-of-each-type auto-pull for speed.
+      // AI lane: prefer energy types that close current/bench attackers'
+      // cost gaps first; then fill remaining unique types as utility
+      // (the card allows "any number of different types"). Wanted types
+      // are computed by walking each attacker's attack costs against
+      // their already-attached Energy.
       if (pl.isAI) {
+        const allies = [pl.active, ...pl.bench].filter(
+          (p): p is PokemonInPlay => !!p,
+        );
+        const wantedTypes = new Set<string>();
+        for (const a of allies) {
+          const haveCounts = new Map<string, number>();
+          for (const e of a.attachedEnergy) {
+            for (const p of e.provides) haveCounts.set(p, (haveCounts.get(p) ?? 0) + 1);
+          }
+          for (const atk of a.card.attacks ?? []) {
+            const haveCopy = new Map(haveCounts);
+            for (const c of atk.cost) {
+              if (c === "Colorless") continue;
+              const have = haveCopy.get(c) ?? 0;
+              if (have <= 0) wantedTypes.add(c);
+              else haveCopy.set(c, have - 1);
+            }
+          }
+        }
         const seen = new Set<string>();
         const pulled: Card[] = [];
-        const rest: Card[] = [];
+        // Two-phase pass: keep deck order but prefer wanted types when
+        // both wanted + non-wanted exist for the same type slot.
+        // Phase A: pull wanted types first.
+        const remaining: Card[] = [];
         for (const c of pl.deck) {
+          if (isBasicEnergy(c)) {
+            const t = c.provides[0];
+            if (t && !seen.has(t) && wantedTypes.has(t)) {
+              seen.add(t);
+              pulled.push(c);
+              continue;
+            }
+          }
+          remaining.push(c);
+        }
+        // Phase B: fill in remaining unique types from what's left.
+        const finalRest: Card[] = [];
+        for (const c of remaining) {
           if (isBasicEnergy(c)) {
             const t = c.provides[0];
             if (t && !seen.has(t)) {
@@ -2763,13 +2839,13 @@ export function applyTrainerEffect(
               continue;
             }
           }
-          rest.push(c);
+          finalRest.push(c);
         }
-        pl.deck = rest;
+        pl.deck = finalRest;
         pl.hand.push(...pulled);
         shuffleDeck(state, player);
         logEvent(state, player, pulled.length
-          ? `takes ${pulled.length} basic Energy (one of each type).`
+          ? `takes ${pulled.length} basic Energy.`
           : "finds no basic Energy.");
         return;
       }
@@ -2780,7 +2856,7 @@ export function applyTrainerEffect(
       if (!setDeckSearchPick(
         state, player, isBasicEnergy, 9,
         "Energy Search Pro: pick any number of basic Energy of different types",
-        { uniqueByEnergyType: true },
+        { uniqueByEnergyType: true, effectKind: "energySearchPro" },
       )) {
         logEvent(state, player, "finds no basic Energy.");
       }
@@ -2892,16 +2968,50 @@ export function applyTrainerEffect(
         return;
       }
 
-      // AI: keep the existing heuristic — gust highest-HP opp bench, then
-      // switch with bench[0] if available.
+      // AI lane: pick the highest-prize-value bench target our Active can
+      // most likely KO this turn. Without easy access to the full damage
+      // estimator, score = (estimated KO available) * 1000 + prize value
+      // * 100 + raw HP. Skip the optional self-switch by default — the
+      // gust's value is the KO, not the swap; switching exposes a bench
+      // Pokémon to the opponent's reply unless we have a clear retaliator
+      // (Phase 1+ improvement).
       if (pl.isAI) {
-        const benchedTarget = opp.bench.slice().sort((a, b) => b.card.hp - a.card.hp)[0];
+        const atk = pl.active;
+        const ourPool = atk ? new Set<string>() : null;
+        if (atk && ourPool) {
+          for (const e of atk.attachedEnergy) for (const p of e.provides) ourPool.add(p);
+        }
+        const score = (target: PokemonInPlay): number => {
+          const subs = target.card.subtypes ?? [];
+          const prize =
+            subs.includes("Mega Evolution") ? 3 :
+            subs.includes("VMAX") ? 3 :
+            subs.includes("V-UNION") ? 3 :
+            subs.includes("ex") || subs.includes("V") || subs.includes("VSTAR") || subs.includes("GX") ? 2 :
+            1;
+          // Crude KO estimate: can our Active's strongest payable attack
+          // bring this target below 0 HP given existing damage?
+          let koAvailable = 0;
+          if (atk && ourPool) {
+            for (const a of atk.card.attacks ?? []) {
+              const cost = a.cost;
+              const colored = cost.filter((c) => c !== "Colorless");
+              const totalAttached = atk.attachedEnergy.length;
+              const havePayoff = colored.every((c) => ourPool.has(c)) && totalAttached >= cost.length;
+              if (!havePayoff) continue;
+              const dmg = a.damage;
+              if (dmg + target.damage >= target.card.hp) {
+                koAvailable = Math.max(koAvailable, 1);
+              }
+            }
+          }
+          return koAvailable * 1000 + prize * 100 + target.card.hp;
+        };
+        const benchedTarget = opp.bench.slice().sort((a, b) => score(b) - score(a))[0];
         const idx = opp.bench.indexOf(benchedTarget);
         const r = performGust(state, oppId, idx);
         if (r) logEvent(state, player, `gusts ${r.pulled.card.name} to Active.`);
-        if (pl.active && pl.bench.length > 0) {
-          performSwitch(state, player, 0);
-        }
+        // Skip the optional self-switch (Phase 0 default).
         return;
       }
 
@@ -2964,8 +3074,35 @@ export function applyTrainerEffect(
     case "scrambleSwitch": {
       if (!pl.active || pl.bench.length === 0) return;
 
-      // AI or single-bench: keep the existing auto-bench[0] + move-all path.
-      if (pl.isAI || pl.bench.length === 1) {
+      // AI lane: rank bench by attack readiness given the Energy transfer
+      // (current Active's Energy moves wholesale to the new Active under
+      // the documented "always move all" approximation). Score = (energy
+      // available after transfer) * 100 + max attack damage. Picks the
+      // bench Pokémon that becomes the strongest Active post-switch.
+      if (pl.isAI) {
+        const transferring = pl.active.attachedEnergy.length;
+        const ranked = pl.bench
+          .map((p, idx) => {
+            const energyAfter = p.attachedEnergy.length + transferring;
+            const maxDamage = (p.card.attacks ?? []).reduce(
+              (m, a) => Math.max(m, a.damage),
+              0,
+            );
+            return { idx, score: energyAfter * 100 + maxDamage };
+          })
+          .sort((a, b) => b.score - a.score);
+        const targetIdx = ranked[0].idx;
+        performSwitch(state, player, targetIdx);
+        const prev = pl.bench[pl.bench.length - 1];
+        if (pl.active && prev) {
+          pl.active.attachedEnergy.push(...prev.attachedEnergy);
+          prev.attachedEnergy = [];
+          logEvent(state, player, `switches + transfers Energy to ${pl.active.card.name}.`);
+        }
+        enforceSpecialEnergyAttachRules(state);
+        return;
+      }
+      if (pl.bench.length === 1) {
         performSwitch(state, player, 0);
         const prev = pl.bench[pl.bench.length - 1];
         if (pl.active && prev) {
@@ -3062,15 +3199,53 @@ export function applyTrainerEffect(
         return;
       }
 
-      // AI: keep the existing greedy first-2-Energy → first-2-Colorless flow.
+      // AI lane: pair each Bench Colorless target with the discard Energy
+      // whose type best closes its next-attack cost gap. Greedy: prefer
+      // (target, energy) pairs where the Energy fills a non-Colorless cost
+      // slot the target hasn't paid yet; fall back to any Basic Energy if
+      // no strong type match. Each target receives at most one Energy
+      // (per card text "to each of them"). Up to 2 attachments total.
       if (pl.isAI) {
-        const colorless = colorlessBench.slice(0, 2);
+        const wantedTypes = (t: PokemonInPlay): Set<EnergyType> => {
+          const want = new Set<EnergyType>();
+          for (const a of t.card.attacks ?? []) {
+            for (const c of a.cost) if (c !== "Colorless") want.add(c);
+          }
+          // Subtract types already attached.
+          for (const e of t.attachedEnergy) {
+            for (const p of e.provides) want.delete(p as EnergyType);
+          }
+          return want;
+        };
+        const usedEnergy = new Set<EnergyCard>();
         let attached = 0;
-        for (const c of colorless) {
-          const idx = pl.discard.findIndex(isBasicEnergy);
-          if (idx < 0) break;
-          const [e] = pl.discard.splice(idx, 1) as [EnergyCard];
-          c.attachedEnergy.push(e);
+        // Sort targets so those with the most un-met non-Colorless cost
+        // slots get first pick of the matching Energy.
+        const targetsByNeed = colorlessBench
+          .map((t) => ({ t, want: wantedTypes(t) }))
+          .sort((a, b) => b.want.size - a.want.size);
+        for (const { t, want } of targetsByNeed) {
+          if (attached >= 2) break;
+          // Find best matching Energy in discard.
+          let bestIdx = -1;
+          let bestScore = -1;
+          for (let i = 0; i < pl.discard.length; i++) {
+            const c = pl.discard[i];
+            if (!isBasicEnergy(c)) continue;
+            const e = c as EnergyCard;
+            if (usedEnergy.has(e)) continue;
+            let score = 0;
+            for (const p of e.provides) if (want.has(p as EnergyType)) score += 50;
+            if (score === 0) score = 1; // Colorless filler fallback
+            if (score > bestScore) {
+              bestScore = score;
+              bestIdx = i;
+            }
+          }
+          if (bestIdx < 0) break;
+          const [e] = pl.discard.splice(bestIdx, 1) as [EnergyCard];
+          t.attachedEnergy.push(e);
+          usedEnergy.add(e);
           attached++;
         }
         logEvent(state, player, `attaches ${attached} basic Energy to Benched Colorless Pokémon.`);
@@ -3092,6 +3267,7 @@ export function applyTrainerEffect(
       // narrow.)
       if (state.pendingPick) {
         state.pendingPick.afterPick = { kind: "glassTrumpetStash" };
+        state.pendingPick.effectKind = "glassTrumpetEnergyPick";
       }
       return;
     }
@@ -4673,11 +4849,23 @@ export function resolveInPlayTarget(
     }
     case "glassTrumpetAttach": {
       // Each click attaches one queued Energy to the clicked Bench
-      // Colorless Pokémon. Closes when the queue empties.
+      // Colorless Pokémon. The card text "to each of them" forbids the
+      // same target receiving multiple Energy in one resolution, so we
+      // track previously-picked instance IDs and reject duplicates.
+      // Closes when the queue empties; player can also skip remaining
+      // attachments via `skipGlassTrumpetAttach` (queued Energy returns
+      // to discard).
       if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
       if (fromActive) return { ok: false, reason: "Pick a Benched Pokémon." };
       if (!target.card.types.includes("Colorless")) {
         return { ok: false, reason: "Glass Trumpet: target must be a Colorless Pokémon." };
+      }
+      const action = pending.action;
+      if (action.pickedInstanceIds.includes(target.instanceId)) {
+        return {
+          ok: false,
+          reason: "Glass Trumpet: that Pokémon already received an Energy this resolution.",
+        };
       }
       const queue = state.pendingAttachQueue;
       if (!queue || queue.energies.length === 0) {
@@ -4693,6 +4881,7 @@ export function resolveInPlayTarget(
         `Glass Trumpet: attaches ${energy.name} to ${target.card.name}.`,
       );
       enforceSpecialEnergyAttachRules(state);
+      const nextPicked = [...action.pickedInstanceIds, target.instanceId];
       if (queue.energies.length === 0) {
         state.pendingAttachQueue = null;
         state.pendingInPlayTarget = null;
@@ -4703,7 +4892,11 @@ export function resolveInPlayTarget(
           scope: "own",
           slot: "bench",
           filter: "anyPokemon",
-          action: { kind: "glassTrumpetAttach", remaining: queue.energies.length },
+          action: {
+            kind: "glassTrumpetAttach",
+            remaining: queue.energies.length,
+            pickedInstanceIds: nextPicked,
+          },
         };
       }
       return { ok: true };
@@ -4796,6 +4989,7 @@ export function resolveInPlayTarget(
         {
           min: 1,
           afterPick: { kind: "grandTreeApplyStage1", targetInstanceId },
+          effectKind: "grandTreeStage1",
         },
       )) {
         logEvent(state, clicker, "Grand Tree: no matching Stage 1 in deck.");
@@ -4825,11 +5019,63 @@ export function skipPrimeCatcherSelfSwitch(
   return { ok: true };
 }
 
+// Stop attaching at the current Glass Trumpet step. Any queued Energy that
+// hasn't been attached yet returns to the player's discard pile (it never
+// transited the hand, so "returns" matches the card text). Replay-recorded
+// as `skipGlassTrumpetAttach` so exports don't stall mid-attach.
+export function skipGlassTrumpetAttach(
+  state: GameState,
+  player: PlayerId,
+): { ok: boolean; reason?: string } {
+  const pending = state.pendingInPlayTarget;
+  if (!pending || pending.player !== player) {
+    return { ok: false, reason: "No Glass Trumpet attach pending." };
+  }
+  if (pending.action.kind !== "glassTrumpetAttach") {
+    return { ok: false, reason: "Pending action is not Glass Trumpet's attach step." };
+  }
+  const queue = state.pendingAttachQueue;
+  if (queue) {
+    state.players[queue.ownerId].discard.push(...queue.energies);
+    state.pendingAttachQueue = null;
+  }
+  state.pendingInPlayTarget = null;
+  logEvent(state, player, "Glass Trumpet: stops attaching.");
+  return { ok: true };
+}
+
 // Cancel a pending in-play target (user backed out / the UI dismissed it).
 // We don't refund the trainer card — that's already been discarded — but we
 // clear the prompt so the game can continue. Some effects leave state partially
 // applied (e.g. Crushing Hammer's coin flip already happened); that's fine.
+//
+// Special-cased prompts:
+//   * glassTrumpetAttach — its attach queue carries Energy cards pulled from
+//     discard; route through the explicit skip so queued Energy returns to
+//     discard rather than leaking.
+//   * crispinAttachEnergy — the picked Energy was pulled out of hand at chain
+//     time and stored ONLY on the prompt. Cancelling without rehoming would
+//     leak the card. Return it to hand before clearing the prompt.
+//   * primeCatcherSelfSwitch — optional second step; cancellation is the
+//     "skip" intent. Route through skipPrimeCatcherSelfSwitch so exported
+//     replays record an explicit skip command instead of stalling.
 export function cancelInPlayTarget(state: GameState): void {
+  const pending = state.pendingInPlayTarget;
+  if (!pending) return;
+  if (pending.action.kind === "glassTrumpetAttach") {
+    skipGlassTrumpetAttach(state, pending.player);
+    return;
+  }
+  if (pending.action.kind === "crispinAttachEnergy") {
+    state.players[pending.player].hand.push(pending.action.energy);
+    logEvent(state, pending.player, `Crispin: returns ${pending.action.energy.name} to hand.`);
+    state.pendingInPlayTarget = null;
+    return;
+  }
+  if (pending.action.kind === "primeCatcherSelfSwitch") {
+    skipPrimeCatcherSelfSwitch(state, pending.player);
+    return;
+  }
   state.pendingInPlayTarget = null;
 }
 

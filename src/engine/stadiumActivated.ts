@@ -3,8 +3,17 @@
 // retreat cost / HP), these require the player to *press* the Stadium to
 // take its action on their turn.
 
-import { fireTriggeredOnMoveToActive, fireTriggeredOnMoveToBench } from "./abilities";
-import { endTurn, isPlayersFirstTurn, logEvent } from "./rules";
+import {
+  fireTriggeredOnEvolve,
+  fireTriggeredOnMoveToActive,
+  fireTriggeredOnMoveToBench,
+} from "./abilities";
+import {
+  applyEvolveSideEffects,
+  endTurn,
+  isPlayersFirstTurn,
+  logEvent,
+} from "./rules";
 import { setDeckSearchPick, setDiscardRecoveryPick } from "./pendingPick";
 import type {
   Card,
@@ -32,6 +41,23 @@ interface StadiumEffect {
   run: (state: GameState, player: PlayerId) => void;
 }
 
+// Apply a Grand Tree evolution onto the captured ally instance. Mirrors the
+// human chain-step path in pendingPick.ts so AI and human routes share the
+// same status-cleanup, evolved-this-turn flag, ability-reset, and on-evolve
+// trigger semantics.
+function applyGrandTreeEvolution(
+  state: GameState,
+  player: PlayerId,
+  ally: PokemonInPlay,
+  evoCard: PokemonCard,
+): void {
+  ally.evolvedFrom.push(ally.card);
+  ally.card = evoCard;
+  applyEvolveSideEffects(state, ally);
+  logEvent(state, player, `Grand Tree: evolves into ${evoCard.name}.`);
+  fireTriggeredOnEvolve(state, player, ally);
+}
+
 const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
   "Academy at Night": {
     precheck: (state, player) => {
@@ -40,9 +66,46 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
     },
     run: (state, player) => {
       const pl = state.players[player];
-      // AI: keep auto-pick of the first hand card.
+      // AI lane: pick the lowest-immediate-use card to put on top of the
+      // deck. Ranking (worst-first → best-stash):
+      //   1. Duplicate basic Energy of an over-stocked type
+      //   2. Duplicate Pokémon already in play
+      //   3. Trainer with no immediate useful target this turn
+      //   4. First card (fallback)
       if (pl.isAI) {
-        const [c] = pl.hand.splice(0, 1);
+        const handIdxs = pl.hand.map((_, i) => i);
+        const score = (c: Card): number => {
+          // Lower score = better to stash (less useful now).
+          if (c.supertype === "Energy") {
+            // Count how many of this energy type we already have available.
+            const provides = (c as { provides?: string[] }).provides ?? [];
+            let copies = 0;
+            for (const h of pl.hand) {
+              if (h.supertype === "Energy") {
+                const hp = (h as { provides?: string[] }).provides ?? [];
+                if (hp.some((t) => provides.includes(t))) copies++;
+              }
+            }
+            // Duplicate basic Energy = great stash candidate.
+            return 5 + copies; // more copies = even better to stash
+          }
+          if (c.supertype === "Pokémon") {
+            const inPlay = [pl.active, ...pl.bench].some(
+              (p) => p && p.card.name === c.name,
+            );
+            if (inPlay) return 10; // duplicate of already-in-play Pokémon
+            return 100; // unique Pokémon — keep in hand
+          }
+          // Trainer: heuristic. Supporters are usually high value,
+          // Items moderate, Stadiums depend on board state.
+          const subs = c.subtypes ?? [];
+          if (subs.includes("Supporter")) return 80;
+          if (subs.includes("Stadium")) return state.stadium ? 30 : 60;
+          return 40; // generic Item
+        };
+        const ranked = handIdxs.sort((a, b) => score(pl.hand[a]) - score(pl.hand[b]));
+        const pick = ranked[0] ?? 0;
+        const [c] = pl.hand.splice(pick, 1);
         pl.deck.unshift(c);
         logEvent(state, player, `Academy at Night: places ${c.name} on top of deck.`);
         return;
@@ -56,6 +119,7 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
         max: 1,
         filter: "any",
         action: "toTopOfDeck",
+        effectKind: "academyAtNight",
       };
     },
   },
@@ -86,8 +150,23 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
         c.subtypes.includes("Basic") &&
         c.provides.includes("Lightning");
 
-      // AI: keep the existing greedy auto-pull of up to 2.
+      // AI lane: take Lightning only if some current or bench attacker
+      // has a Lightning or Colorless cost slot — otherwise the recovery
+      // is wasted. (The card text doesn't force you to take any; "up to 2"
+      // covers a 0-pick path.)
       if (pl.isAI) {
+        const allies = [pl.active, ...pl.bench].filter(
+          (p): p is PokemonInPlay => !!p,
+        );
+        const lightningUseful = allies.some((p) =>
+          (p.card.attacks ?? []).some((a) =>
+            a.cost.some((c) => c === "Lightning" || c === "Colorless"),
+          ),
+        );
+        if (!lightningUseful) {
+          logEvent(state, player, "Levincia: no Lightning use; skips recovery.");
+          return;
+        }
         const kept: Card[] = [];
         const pulled: Card[] = [];
         for (const c of pl.discard) {
@@ -113,6 +192,7 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
       )) {
         logEvent(state, player, "Levincia: no basic Lightning Energy in discard.");
       }
+      if (state.pendingPick) state.pendingPick.effectKind = "levincia";
     },
   },
 
@@ -168,11 +248,60 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
         p.card.types.includes("Psychic"),
       ).length;
 
-      // AI: keep the existing first-Energy auto-discard + drawUntilHand.
+      // AI lane: discard the energy type LEAST needed by current/bench
+      // attackers' costs. If every Energy in hand is useful, fall back to
+      // discarding a duplicate so we don't waste a one-of-its-kind type.
       if (pl.isAI) {
-        const idx = pl.hand.findIndex((c) => c.supertype === "Energy");
-        if (idx < 0) return;
-        const [e] = pl.hand.splice(idx, 1);
+        const energyIdxs = pl.hand
+          .map((c, i) => ({ c, i }))
+          .filter(({ c }) => c.supertype === "Energy");
+        if (energyIdxs.length === 0) return;
+        const wantedTypes = new Set<string>();
+        for (const a of allies) {
+          for (const atk of a.card.attacks ?? []) {
+            for (const c of atk.cost) if (c !== "Colorless") wantedTypes.add(c);
+          }
+        }
+        // Score each hand Energy: lower = better discard candidate.
+        const score = (c: Card): number => {
+          if (c.supertype !== "Energy") return 1000;
+          const provides = (c as { provides?: string[] }).provides ?? [];
+          // Special Energy in hand is high-value — don't discard if avoidable.
+          const subs = c.subtypes ?? [];
+          const isSpecial = !subs.includes("Basic");
+          if (isSpecial) return 100;
+          // Wanted basic Energy: keep.
+          if (provides.some((p) => wantedTypes.has(p))) return 50;
+          // Unneeded basic Energy: prime discard candidate.
+          return 5;
+        };
+        let pickIdx = energyIdxs[0].i;
+        let pickScore = score(energyIdxs[0].c);
+        for (const { c, i } of energyIdxs) {
+          const s = score(c);
+          if (s < pickScore) {
+            pickScore = s;
+            pickIdx = i;
+          }
+        }
+        // If the least-useful Energy is still wanted, prefer a duplicate-
+        // type Energy (we have multiple) over a singleton.
+        if (pickScore >= 50) {
+          const typeCounts = new Map<string, number>();
+          for (const { c } of energyIdxs) {
+            const provides = (c as { provides?: string[] }).provides ?? [];
+            for (const p of provides) typeCounts.set(p, (typeCounts.get(p) ?? 0) + 1);
+          }
+          for (const { c, i } of energyIdxs) {
+            const provides = (c as { provides?: string[] }).provides ?? [];
+            const isDup = provides.some((p) => (typeCounts.get(p) ?? 0) > 1);
+            if (isDup) {
+              pickIdx = i;
+              break;
+            }
+          }
+        }
+        const [e] = pl.hand.splice(pickIdx, 1);
         pl.discard.push(e);
         let drawn = 0;
         while (pl.hand.length < psychicCount) {
@@ -201,6 +330,7 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
         filter: "energy",
         action: "discard",
         postAction: { kind: "drawUntilHand", targetSize: psychicCount },
+        effectKind: "mysteryGarden",
       };
     },
   },
@@ -252,35 +382,86 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
       );
       if (eligibleBasics.length === 0) return;
 
-      // AI or single eligible Basic: keep auto-pick. Same shape as the
-      // previous greedy resolve — Stage 1 then optional Stage 2, with a
-      // final shuffle.
-      if (pl.isAI || eligibleBasics.length === 1) {
-        const basic = eligibleBasics[0];
-        const idx = pl.deck.findIndex(
-          (c) =>
-            c.supertype === "Pokémon" &&
-            c.subtypes.includes("Stage 1") &&
-            c.evolvesFrom === basic.card.name,
-        );
-        if (idx < 0) return;
-        const [s1] = pl.deck.splice(idx, 1) as [PokemonCard];
-        basic.evolvedFrom.push(basic.card);
-        basic.card = s1;
-        basic.evolvedThisTurn = true;
-        basic.abilityUsedThisTurn = false;
-        logEvent(state, player, `Grand Tree: evolves into ${s1.name}.`);
-        const s2idx = pl.deck.findIndex(
-          (c) =>
-            c.supertype === "Pokémon" &&
-            c.subtypes.includes("Stage 2") &&
-            c.evolvesFrom === basic.card.name,
-        );
-        if (s2idx >= 0) {
-          const [s2] = pl.deck.splice(s2idx, 1) as [PokemonCard];
-          basic.evolvedFrom.push(basic.card);
-          basic.card = s2;
-          logEvent(state, player, `Grand Tree: evolves into ${s2.name}.`);
+      // AI: keep the existing greedy auto-resolve (Stage 1 + auto-Stage 2
+      // when available). AI's Stage 2 evaluation is a Phase 1+ improvement.
+      if (pl.isAI) {
+        // Candidate scoring: enumerate every (Basic, Stage 1, optional
+        // Stage 2) chain reachable from the current eligible Basics +
+        // deck. Score each chain by the final form's HP + summed attack
+        // damage, with a small Active-spot bonus. Pick the highest-scoring
+        // chain. If the best Stage 2 isn't strictly an upgrade over its
+        // Stage 1 (HP drop or no attacks), stop the chain at Stage 1.
+        type Chain = {
+          basic: PokemonInPlay;
+          s1: PokemonCard;
+          s1Idx: number;
+          s2: PokemonCard | null;
+          s2Idx: number;
+          score: number;
+        };
+        const sumAttack = (card: PokemonCard): number => {
+          let total = 0;
+          for (const a of card.attacks ?? []) {
+            const d = typeof a.damage === "number" ? a.damage : 0;
+            if (d > total) total = d;
+          }
+          return total;
+        };
+        const chains: Chain[] = [];
+        for (const basic of eligibleBasics) {
+          const s1Idx = pl.deck.findIndex(
+            (c) =>
+              c.supertype === "Pokémon" &&
+              c.subtypes.includes("Stage 1") &&
+              c.evolvesFrom === basic.card.name,
+          );
+          if (s1Idx < 0) continue;
+          const s1 = pl.deck[s1Idx] as PokemonCard;
+          const s2CandIdx = pl.deck.findIndex(
+            (c) =>
+              c.supertype === "Pokémon" &&
+              c.subtypes.includes("Stage 2") &&
+              c.evolvesFrom === s1.name,
+          );
+          const s2 = s2CandIdx >= 0 ? (pl.deck[s2CandIdx] as PokemonCard) : null;
+          // Stop-at-Stage-1 rule: chain to Stage 2 only when it is a strict
+          // HP upgrade over Stage 1. Equal/regressive HP holds at Stage 1
+          // until the scorer grows a richer attack/ability comparison.
+          const useS2 =
+            s2 !== null && (s2.hp ?? 0) > (s1.hp ?? 0);
+          const finalForm = useS2 ? s2! : s1;
+          let score = (finalForm.hp ?? 0) + sumAttack(finalForm) * 2;
+          if (basic === pl.active) score += 40; // Active-spot bonus
+          chains.push({
+            basic,
+            s1,
+            s1Idx,
+            s2: useS2 ? s2 : null,
+            s2Idx: useS2 ? s2CandIdx : -1,
+            score,
+          });
+        }
+        if (chains.length === 0) return;
+        chains.sort((a, b) => b.score - a.score);
+        const best = chains[0];
+        // Splice cards out — Stage 2 first since it's later in the deck
+        // (largest index), so removing it doesn't shift Stage 1's index.
+        if (best.s2 && best.s2Idx >= 0) {
+          // Stage 2 may sit before Stage 1 in the deck; splice the larger
+          // index first regardless to keep both lookups valid.
+          const [hi, lo] = best.s2Idx > best.s1Idx
+            ? [best.s2Idx, best.s1Idx]
+            : [best.s1Idx, best.s2Idx];
+          const isHiS2 = hi === best.s2Idx;
+          const [hiCard] = pl.deck.splice(hi, 1) as [PokemonCard];
+          const [loCard] = pl.deck.splice(lo, 1) as [PokemonCard];
+          const s1Card = isHiS2 ? loCard : hiCard;
+          const s2Card = isHiS2 ? hiCard : loCard;
+          applyGrandTreeEvolution(state, player, best.basic, s1Card);
+          applyGrandTreeEvolution(state, player, best.basic, s2Card);
+        } else {
+          const [s1Card] = pl.deck.splice(best.s1Idx, 1) as [PokemonCard];
+          applyGrandTreeEvolution(state, player, best.basic, s1Card);
         }
         // Shuffle per "Then, that player shuffles their deck."
         const arr = pl.deck;
@@ -291,10 +472,13 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
         return;
       }
 
-      // Human with multiple eligible Basics: open the chained picker.
-      // Step 1 captures which Basic. Step 2 (deck search for Stage 1) is
-      // opened by resolveInPlayTarget's "grandTreeBasicTarget" handler,
-      // which also queues the optional Stage 2 chain step.
+      // Human (single or multiple eligible Basics): open the chained
+      // picker. Step 1 captures which Basic; the resolveInPlayTarget
+      // handler for "grandTreeBasicTarget" opens the Stage 1 deck search,
+      // and that pick's afterPick chain offers the optional (skippable)
+      // Stage 2 search. Single-basic case still goes through this picker
+      // so the human gets the optional Stage 2 prompt instead of an
+      // automatic Stage 2 evolution.
       state.pendingInPlayTarget = {
         player,
         label: "Grand Tree: pick a Basic Pokémon in play to evolve",
@@ -343,8 +527,37 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
         .filter((b) => b.p.card.types.includes("Water"));
       if (waterBench.length === 0) return;
 
-      // Single Water bench OR AI: short-circuit to the first match.
-      if (pl.isAI || waterBench.length === 1) {
+      // Single Water bench: short-circuit. AI: rank Water bench by
+      // estimated attack readiness (most attached Energy first, then
+      // highest base damage), so we don't promote a 0-Energy Basic when
+      // a powered attacker is also on the bench.
+      if (pl.isAI) {
+        const ranked = waterBench
+          .map((b) => {
+            const energyCount = b.p.attachedEnergy.length;
+            const maxDamage = (b.p.card.attacks ?? []).reduce(
+              (m, a) => Math.max(m, a.damage),
+              0,
+            );
+            return { ...b, score: energyCount * 100 + maxDamage };
+          })
+          .sort((a, b) => b.score - a.score);
+        const idx = ranked[0].idx;
+        const incoming = pl.bench.splice(idx, 1)[0];
+        const outgoing = pl.active;
+        outgoing.statuses = [];
+        pl.active = incoming;
+        pl.bench.push(outgoing);
+        logEvent(
+          state,
+          player,
+          `Surfing Beach: switches ${outgoing.card.name} → ${incoming.card.name}.`,
+        );
+        fireTriggeredOnMoveToActive(state, player, incoming);
+        fireTriggeredOnMoveToBench(state, player, outgoing);
+        return;
+      }
+      if (waterBench.length === 1) {
         const { idx } = waterBench[0];
         const incoming = pl.bench.splice(idx, 1)[0];
         const outgoing = pl.active;
@@ -407,9 +620,75 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
     },
     run: (state, player) => {
       const pl = state.players[player];
-      // AI: keep the existing first-2 auto-discard.
+      // AI lane: discard the 2 lowest-immediate-use hand cards. Protect
+      // immediate setup pieces — never the only Energy that would close
+      // a ready attack cost this turn or the only matching evolution
+      // for an in-play Basic eligible to evolve.
       if (pl.isAI) {
-        const [a, b] = pl.hand.splice(0, 2);
+        const allies = [pl.active, ...pl.bench].filter(
+          (p): p is PokemonInPlay => !!p,
+        );
+        const eligibleEvolveBasics = new Set(
+          allies
+            .filter((p) => p.card.subtypes.includes("Basic") && !p.playedThisTurn)
+            .map((p) => p.card.name),
+        );
+        const wantedTypes = new Set<string>();
+        for (const a of allies) {
+          for (const atk of a.card.attacks ?? []) {
+            for (const c of atk.cost) if (c !== "Colorless") wantedTypes.add(c);
+          }
+        }
+        const score = (c: Card, idxInHand: number): number => {
+          // Lower score = better discard candidate.
+          if (c.supertype === "Energy") {
+            const provides = (c as { provides?: string[] }).provides ?? [];
+            const wanted = provides.some((p) => wantedTypes.has(p));
+            // Count copies of this type still in hand.
+            let dupCount = 0;
+            for (let j = 0; j < pl.hand.length; j++) {
+              if (j === idxInHand) continue;
+              const h = pl.hand[j];
+              if (h.supertype === "Energy") {
+                const hp = (h as { provides?: string[] }).provides ?? [];
+                if (hp.some((t) => provides.includes(t))) dupCount++;
+              }
+            }
+            // Wanted singleton type — protect.
+            if (wanted && dupCount === 0) return 90;
+            if (wanted) return 30;
+            return 10; // unwanted Energy — fine to discard
+          }
+          if (c.supertype === "Pokémon") {
+            const evolvesFrom = (c as PokemonCard).evolvesFrom;
+            if (evolvesFrom && eligibleEvolveBasics.has(evolvesFrom)) {
+              // Count copies still in hand for that evolution.
+              const dup =
+                pl.hand.filter(
+                  (h, j) =>
+                    j !== idxInHand &&
+                    h.supertype === "Pokémon" &&
+                    (h as PokemonCard).evolvesFrom === evolvesFrom,
+                ).length;
+              if (dup === 0) return 85; // singleton evolution piece — protect
+              return 35;
+            }
+            // Duplicate of in-play Pokémon → fine to discard.
+            const inPlayDup = allies.some((p) => p.card.name === c.name);
+            return inPlayDup ? 15 : 45;
+          }
+          // Trainer.
+          const subs = c.subtypes ?? [];
+          if (subs.includes("Supporter")) return 60;
+          return 25; // Items & Stadiums are moderate
+        };
+        const handIdxs = pl.hand.map((_, i) => i);
+        handIdxs.sort((a, b) => score(pl.hand[a], a) - score(pl.hand[b], b));
+        const [iA, iB] = handIdxs.slice(0, 2);
+        // Splice in descending order to keep indexes valid.
+        const [hi, lo] = iA > iB ? [iA, iB] : [iB, iA];
+        const a = pl.hand.splice(hi, 1)[0];
+        const b = pl.hand.splice(lo, 1)[0];
         pl.discard.push(a, b);
         const drawn = pl.deck.shift();
         if (drawn) pl.hand.push(drawn);
@@ -427,6 +706,7 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
         filter: "any",
         action: "discard",
         postAction: { kind: "drawCards", count: 1 },
+        effectKind: "prismTower",
       };
     },
   },
