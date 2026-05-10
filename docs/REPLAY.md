@@ -17,7 +17,7 @@ The header captured at game start:
 
 ```ts
 {
-  schemaVersion: 1,           // bump when GameCommand shape changes
+  schemaVersion: 2,           // current; bump policy below
   appVersion,                 // src/version.ts → APP_VERSION
   dataVersion,                // src/data/cards.ts → datasetAsOf
   createdAt,                  // ISO timestamp
@@ -27,6 +27,13 @@ The header captured at game start:
     setupOptions,
   },
   commands: [],
+  // Populated when the engine reaches phase=gameOver. Absent on in-flight
+  // replays and on v1 replays loaded by a v2 build.
+  outcome?: {
+    winner: PlayerId | null,  // null covers aborted / draw endings
+    completedAt,              // ISO timestamp at finalization
+    gameMode: "vsCPU" | "local",
+  },
 }
 ```
 
@@ -51,9 +58,11 @@ path AND the same card dataset**. Specifically:
 - **Newer `schemaVersion`**: replay is REJECTED with
   `{ ok: false, kind: "newer-schema" }`. The loader cannot interpret a
   command shape that was added after this build was compiled.
-- **Older `schemaVersion`**: replay is REJECTED with
-  `{ ok: false, kind: "older-schema" }`. A future migration tool may
-  upgrade older replays; today they're flagged for manual conversion.
+- **Older `schemaVersion`**: v1 replays are accepted via an in-memory
+  shim (`outcome: undefined`), then loaded as v2. Schema v0 or below
+  is REJECTED with `{ ok: false, kind: "older-schema" }`. The loader
+  also accepts `unknown` at the boundary and runtime-validates shape;
+  malformed input returns `{ ok: false, kind: "malformed" }`.
 - **Missing card ids**: replay is REJECTED with
   `{ ok: false, kind: "missing-cards" }`. The pool may have rotated since
   the replay was recorded.
@@ -68,6 +77,8 @@ path AND the same card dataset**. Specifically:
 | ------ | ------ |
 | New `GameCommand.kind` added | Bump `schemaVersion` |
 | Existing `GameCommand.kind` changes shape | Bump `schemaVersion` |
+| Header gains a NEW required field | Bump `schemaVersion` |
+| Header gains an optional field that older builds can ignore | Bump only if newer builds rely on it (v2 added optional `outcome`; bumped because the cloud aggregator filters by it) |
 | Engine behavior changes but commands don't | DO NOT bump (warn via `appVersion` mismatch instead) |
 | Card behavior changes | DO NOT bump (warn via `dataVersion` mismatch instead) |
 | Card pool rotation | DO NOT bump; older replays surface as `missing-cards` |
@@ -75,6 +86,22 @@ path AND the same card dataset**. Specifically:
 The loader **must** reject newer schemas cleanly with a typed error rather
 than attempting to silently degrade. Silent misinterpretation of an unknown
 command kind is the worst possible failure mode.
+
+### v1 → v2 migration
+
+v1 (the initial Phase 5 schema) carried no `outcome`. v2 adds it as
+optional. The loader accepts v1 in-memory by shimming
+`outcome: undefined`, which is the correct "in-flight" semantics — v1
+replays didn't track game-end. Aggregators that filter by outcome will
+just see no v1 rows in the corpus, which is fine since cloud upload is
+v2-only by RLS policy.
+
+v2 also notes the historical inconsistency that v2.2 shipped 3 setup-phase
+`GameCommand` kinds (`resolveCoinGuess` / `chooseFirstPlayer` /
+`completeSetup`) without bumping the version. The v2 bump retroactively
+covers them; v1 replays naturally don't include those kinds, but the
+dispatcher still accepts them so a v1 → v2 migrated replay with setup
+commands will load.
 
 ## Prompt coverage
 
@@ -97,6 +124,45 @@ enumerates them and the dispatcher in `gameCommands.ts` handles each:
 Engine continuations (`pendingPromoteQueue`, `pendingSecondAttack`,
 `onPromoteResolved`) advance internally and intentionally do NOT appear in
 the command stream — they're scheduling state, not player decisions.
+
+## Cloud aggregation (opt-in)
+
+v2.4 / Phase D adds an opt-in pipeline that uploads completed games to a
+shared Supabase corpus. The intent: collect human play data the AI can
+later be trained / tuned against. Setup recipe is in
+[REPLAY_BACKEND.md](REPLAY_BACKEND.md).
+
+How it works on the client:
+
+1. Every completed game is saved to IndexedDB as a `StoredReplay`
+   (Phase B). Local-only by default.
+2. When the user opts in via Game menu → "Cloud upload", the next
+   completed game's row is uploaded to Supabase. A consent modal
+   precedes the first opt-in describing exactly what's sent.
+3. Failures stamp `uploadError` on the local row so the
+   `ReplayHistoryModal` can offer a manual retry button. The opt-in flag
+   is a one-flip kill switch.
+
+What goes up the wire:
+
+- Decklists as **card IDs** (the schema has no deck-name field).
+- The full successful command stream.
+- `outcome.winner` / `completedAt` / `gameMode`.
+- `appVersion` and `dataVersion` so the corpus can filter by build.
+- An anonymous `client_id` (UUID generated once on the device, persisted
+  to `localStorage["tcgvibes.clientId.v1"]`).
+
+What does NOT go up the wire:
+
+- Names, emails, IP addresses, login tokens. There's no auth.
+- Custom deck labels — the recorder schema doesn't store them.
+- Per-command RNG state — see "Recording" above for why.
+
+Local-only deletion limit: a user who deletes a row from
+`ReplayHistoryModal` removes it from THIS device. Uploaded copies
+remain in the corpus. The consent modal must say so explicitly.
+Self-serve deletion would require either real auth or a per-replay
+deletion token; both are documented as Phase E follow-ups.
 
 ## Optional checkpoints (future)
 

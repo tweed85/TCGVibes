@@ -2697,6 +2697,56 @@ button.secondary:hover:not(:disabled) {
   line-height: 1;
 }
 .modal-close:hover { color: var(--text); }
+
+.replay-history-modal {
+  max-width: 720px;
+  width: 90vw;
+}
+.replay-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.replay-table th,
+.replay-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+.replay-table th {
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: var(--text-xs, 11px);
+  letter-spacing: 0.04em;
+}
+.replay-row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.replay-row-actions button {
+  padding: 4px 8px;
+  font-size: var(--text-sm);
+}
+.replay-row-actions button.danger {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+}
+.cloud-upload-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: var(--text-sm);
+  color: var(--text);
+  cursor: pointer;
+}
+.cloud-upload-toggle input[type="checkbox"] {
+  cursor: pointer;
+}
 .variant-picker-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));

@@ -13,7 +13,7 @@ import {
 } from "./engine/actions";
 import type { TrainerTarget } from "./engine/actions";
 import type { GameCommand } from "./engine/gameCommands";
-import { newReplay, type GameReplay } from "./engine/replay";
+import { finalizeReplayIfDone, newReplay, type GameReplay } from "./engine/replay";
 import { activateAbility } from "./engine/abilities";
 import { computePlayerPlayability } from "./engine/preflight";
 import { activePrompt } from "./engine/prompts";
@@ -46,7 +46,17 @@ import type { Ability, Card, GameState, LogEntry, PlayerId, PokemonInPlay } from
 import { buildDeck, validateDeckForPlay, validatedDeckSpecs } from "./data/decks";
 import { datasetAsOf, datasetFormat } from "./data/cards";
 import { getAttackEffects } from "./data/effectPatterns";
-import { loadImportedDecks, saveImportedDecks, type PersistedImport } from "./data/persistence";
+import {
+  loadImportedDecks,
+  markReplayUploaded,
+  markReplayUploadError,
+  saveImportedDecks,
+  saveReplay,
+  type PersistedImport,
+  type StoredReplay,
+} from "./data/persistence";
+import { getOrCreateClientId } from "./data/identity";
+import { uploadReplay } from "./data/replayUpload";
 import {
   buildDeckFromEntries,
   importDecklist,
@@ -60,6 +70,9 @@ const DeckBuilderModal = lazy(() => import("./ui/DeckBuilderModal"));
 // Deck Doctor — same lazy split. The analyzer + helpers (~30KB) and the
 // modal UI (~10KB) only load when a user opens the doctor.
 const DeckDoctorModal = lazy(() => import("./ui/DeckDoctorModal"));
+// Replay history — lazy-loaded so the persistence + modal cost lands
+// only when the user actually opens it from the Game menu.
+const ReplayHistoryModal = lazy(() => import("./ui/ReplayHistoryModal"));
 
 type Selection =
   | { kind: "hand"; index: number }
@@ -92,6 +105,9 @@ interface PersistedSettings {
   myDeckId?: string;
   oppDeckId?: string;
   aiSpeed?: AiSpeed;
+  /** v2.4 (Phase D): user has opted in to cloud replay aggregation. Default
+   *  false; flipping true requires the consent modal first. */
+  cloudUpload?: boolean;
 }
 
 // Per-step delay (ms) between AI decisions. "instant" runs the whole turn
@@ -181,6 +197,11 @@ export default function App() {
   // on each `onReset`; commands are appended only after the engine returns
   // ok: true (recordCmd below).
   const replayRef = useRef<GameReplay | null>(null);
+  // Guards against back-to-back saveReplay invocations on the same localId.
+  // finalizeReplayIfDone synchronously stamps `outcome` so subsequent renders
+  // short-circuit, but a render that fires before the first `await` resolves
+  // could still race; the boolean closes that window.
+  const finalizingRef = useRef(false);
 
   // Resolve "__random__" to a concrete preset id at game start time, so we
   // can log / banner the deck that was rolled. Pass-through for other ids.
@@ -268,6 +289,11 @@ export default function App() {
     }, 2500 - elapsed);
   };
   const [openHands, setOpenHands] = useState(savedSettings.openHands ?? false);
+  // Cloud upload opt-in. Default false; flipping true is gated behind a
+  // consent modal so the user always reads the privacy summary before
+  // their first replay leaves the device.
+  const [cloudUpload, setCloudUpload] = useState(savedSettings.cloudUpload ?? false);
+  const [cloudConsentOpen, setCloudConsentOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [buildOpen, setBuildOpen] = useState(false);
   // Deck Doctor — null when closed. Optional `initial` pre-populates the
@@ -275,6 +301,8 @@ export default function App() {
   const [doctorOpen, setDoctorOpen] = useState<
     null | { initial?: { source: "preset" | "saved"; id: string } }
   >(null);
+  // Replay history modal — open/close only.
+  const [replayHistoryOpen, setReplayHistoryOpen] = useState(false);
   // Gate the game behind a pre-game deck selection step. Nothing runs (AI
   // setup, turn-1 draw, opening modal) until the player clicks Start.
   const [preGameOpen, setPreGameOpen] = useState(true);
@@ -337,8 +365,71 @@ export default function App() {
 
   // Persist UI settings (gameMode, openHands, last-selected decks).
   useEffect(() => {
-    saveSettings({ openHands, gameMode, myDeckId, oppDeckId, aiSpeed });
-  }, [openHands, gameMode, myDeckId, oppDeckId, aiSpeed]);
+    saveSettings({ openHands, gameMode, myDeckId, oppDeckId, aiSpeed, cloudUpload });
+  }, [openHands, gameMode, myDeckId, oppDeckId, aiSpeed, cloudUpload]);
+
+  // Outcome capture — fires after every state-affecting render. Several
+  // engine paths (aiStep, resolveAiPendingPromote, AI auto-resolved picks,
+  // onPromoteResolved continuations) bypass `handle()` entirely, so we
+  // can't hook the capture there. The render-keyed effect catches every
+  // path because every state mutation calls `rerender()`.
+  //
+  // Determinism: `finalizeReplayIfDone` is idempotent (returns null if
+  // outcome is already set or game isn't over); `finalizingRef` plus the
+  // synchronous outcome-stamp on `replayRef.current` close the gap
+  // between this render and the next when `saveReplay` is mid-await.
+  useEffect(() => {
+    const replay = replayRef.current;
+    if (!replay) return;
+    if (replay.outcome) return;
+    if (state.phase !== "gameOver") return;
+    if (finalizingRef.current) return;
+    const updated = finalizeReplayIfDone(replay, state, gameMode);
+    if (!updated) return;
+    finalizingRef.current = true;
+    // Synchronously stamp outcome on the live ref so the NEXT render's
+    // effect sees `replay.outcome` set and short-circuits via the
+    // helper's "already set" guard. THEN kick off the async save so
+    // back-to-back renders during the await don't double-fire.
+    replayRef.current = updated;
+    const localId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random()}`;
+    const stored: StoredReplay = {
+      localId,
+      replay: updated,
+      uploaded: false,
+    };
+    void saveReplay(stored)
+      .then(async () => {
+        // Cloud upload: only when the user has opted in. Best-effort —
+        // failures land in `uploadError` for the manual retry button on
+        // the row in ReplayHistoryModal.
+        if (!cloudUpload) return;
+        const clientId = getOrCreateClientId();
+        try {
+          const r = await uploadReplay(stored, clientId);
+          if (r.ok) {
+            await markReplayUploaded(stored.localId, r.remoteId);
+          } else {
+            await markReplayUploadError(stored.localId, r.reason);
+          }
+        } catch (e) {
+          await markReplayUploadError(
+            stored.localId,
+            e instanceof Error ? e.message : String(e),
+          );
+        }
+      })
+      .catch(() => {
+        // saveReplay swallows IDB errors silently; this catch is for the
+        // upload.then path. Failures already wrote `uploadError` above.
+      })
+      .finally(() => {
+        finalizingRef.current = false;
+      });
+  }, [state.phase, state.winner, state.log.length, gameMode, cloudUpload]);
 
   // Wire the global card-zoom handler (CardView calls it on shift+click).
   useEffect(() => {
@@ -1652,6 +1743,32 @@ export default function App() {
               >
                 Export Replay
               </button>
+              <button
+                className="secondary"
+                onClick={() => setReplayHistoryOpen(true)}
+                title="Past games saved on this device"
+              >
+                Replays
+              </button>
+              <label
+                className="cloud-upload-toggle"
+                title="Share completed games with the shared corpus (used to train the AI)"
+              >
+                <input
+                  type="checkbox"
+                  checked={cloudUpload}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      // Toggling ON requires consent first. The modal flips
+                      // the state itself when accepted.
+                      setCloudConsentOpen(true);
+                    } else {
+                      setCloudUpload(false);
+                    }
+                  }}
+                />
+                Cloud upload
+              </label>
             </div>
           </details>
           <button className="primary" onClick={onReset}>New Game</button>
@@ -1935,6 +2052,40 @@ export default function App() {
             imports={imports}
             initial={doctorOpen.initial}
             onClose={() => setDoctorOpen(null)}
+          />
+        </Suspense>
+      )}
+
+      {cloudConsentOpen && (
+        <CloudConsentModal
+          onCancel={() => setCloudConsentOpen(false)}
+          onAccept={() => {
+            setCloudUpload(true);
+            setCloudConsentOpen(false);
+          }}
+        />
+      )}
+
+      {replayHistoryOpen && (
+        <Suspense fallback={
+          <div className="modal-backdrop">
+            <div className="modal" style={{ maxWidth: 360, textAlign: "center" }}>
+              <div className="muted" style={{ padding: 16 }}>Loading replays…</div>
+            </div>
+          </div>
+        }>
+          <ReplayHistoryModal
+            onClose={() => setReplayHistoryOpen(false)}
+            cloudUploadEnabled={cloudUpload}
+            onUpload={async (row) => {
+              const clientId = getOrCreateClientId();
+              const r = await uploadReplay(row, clientId);
+              if (r.ok) {
+                await markReplayUploaded(row.localId, r.remoteId);
+              } else {
+                await markReplayUploadError(row.localId, r.reason);
+              }
+            }}
           />
         </Suspense>
       )}
@@ -3105,6 +3256,59 @@ function CoinResultBanner({
         <p className="modal-hint">
           You called <b>{guess}</b>. CPU won the toss — they'll choose who goes first.
         </p>
+      </div>
+    </div>
+  );
+}
+
+function CloudConsentModal({
+  onAccept,
+  onCancel,
+}: {
+  onAccept: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Share replays with the corpus?</h2>
+        </div>
+        <div className="mulligan-body">
+          <p>
+            When you finish a game, the replay can be uploaded to a shared
+            corpus that may be used to train the AI. This is opt-in and
+            you can turn it off any time.
+          </p>
+          <p>
+            <strong>What gets uploaded:</strong>
+          </p>
+          <ul>
+            <li>Both decklists, as card IDs (no custom deck names — the
+              schema only stores card IDs)</li>
+            <li>The full sequence of plays you and the opponent made</li>
+            <li>The outcome (winner, completion time, vsCPU vs hot-seat)</li>
+            <li>App and dataset version, an anonymous device ID generated
+              once on this device</li>
+          </ul>
+          <p>
+            <strong>What does NOT get uploaded:</strong> your name, email,
+            IP address, or any account info. There's no sign-in.
+          </p>
+          <p className="muted">
+            Note: <strong>local delete on this device does NOT remove
+            uploaded copies.</strong> Anonymous uploads have no deletion
+            mechanism in v1 — if you want a cloud row removed, email and
+            we'll delete it server-side. Future versions may add a
+            self-serve deletion token.
+          </p>
+        </div>
+        <div className="modal-actions">
+          <button onClick={onCancel}>Cancel</button>
+          <button className="primary" onClick={onAccept}>
+            I understand, opt me in
+          </button>
+        </div>
       </div>
     </div>
   );

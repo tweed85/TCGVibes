@@ -2,6 +2,11 @@
 
 Detailed rundown of attacks, abilities, trainers, stadiums, and tools wired into the engine. See [../CLAUDE.md](../CLAUDE.md) for the project entry point.
 
+For the coverage guardrail and new-effect checklist, see
+[EFFECT_AUDIT.md](EFFECT_AUDIT.md). That audit is backed by a Vitest
+inventory hash so adding a new effect kind requires an explicit coverage
+decision.
+
 - **Attacks**: ~70 effect kinds — coin-flip variants, per-energy /
   per-bench / per-counter scaling, status, heal, snipe, multi-target,
   draw, locks, retreat manipulation. Bespoke: `distributeDamage`

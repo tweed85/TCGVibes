@@ -1,6 +1,6 @@
 # Test suite
 
-**Vitest — 758 tests passing across 45 files** (3 skipped, AI_BENCH-gated).
+**Vitest — 789 tests passing across 49 files** (3 skipped, AI_BENCH-gated).
 See [../CLAUDE.md](../CLAUDE.md) for the project entry point.
 
 ## Engine tests — [../src/engine/__tests__/](../src/engine/__tests__/)

@@ -15,15 +15,19 @@ import {
   type GameCommand,
 } from "../gameCommands";
 import {
+  finalizeReplayIfDone,
   loadReplay,
   newReplay,
   REPLAY_SCHEMA_VERSION,
   type GameReplay,
+  type GameReplayV1,
+  type GameReplayV2,
 } from "../replay";
 import { setupGame } from "../rules";
 import { makeRng } from "../rng";
 import { buildDeck, DECK_SPECS } from "../../data/decks";
 import { cardsById } from "../../data/cards";
+import type { GameState } from "../types";
 
 const SEED = 12345;
 
@@ -106,13 +110,58 @@ describe("replay — recorder + loader", () => {
   });
 
   it("rejects newer schema versions with kind=newer-schema", () => {
-    const replay: GameReplay = {
+    // Cast through unknown — the loader takes unknown and validates, so this
+    // exercises the rejection path the way real callers will hit it.
+    const replay = {
       ...newReplay([], [], SEED),
-      schemaVersion: (REPLAY_SCHEMA_VERSION + 1) as 1,
-    };
+      schemaVersion: REPLAY_SCHEMA_VERSION + 1,
+    } as unknown;
     const r = loadReplay(replay, cardsById);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.kind).toBe("newer-schema");
+  });
+
+  it("v1 replay loads as v2 with outcome=undefined (migration shim)", () => {
+    const live = freshSetup();
+    const v1: GameReplayV1 = {
+      schemaVersion: 1,
+      appVersion: "0.0.0-old",
+      dataVersion: "0001-01-01",
+      createdAt: new Date().toISOString(),
+      initial: {
+        p1CardIds: live.players.p1.deck.map((c) => c.id),
+        p2CardIds: live.players.p2.deck.map((c) => c.id),
+        rngSeed: SEED,
+        setupOptions: { p2IsAI: false },
+      },
+      commands: [],
+    };
+    const r = loadReplay(v1, cardsById);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // The state is reconstructed via setupGame; the migrated replay has
+    // outcome=undefined which is the correct "in-flight" semantics for v1.
+    expect(r.appVersionMatch).toBe(false);
+    expect(r.warnings.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("schemaVersion: 0 still rejects (kind=older-schema)", () => {
+    const replay = {
+      ...newReplay([], [], SEED),
+      schemaVersion: 0,
+    } as unknown;
+    const r = loadReplay(replay, cardsById);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.kind).toBe("older-schema");
+  });
+
+  it("malformed input (non-object, missing fields) rejects with kind=malformed", () => {
+    expect(loadReplay(null, cardsById).ok).toBe(false);
+    expect(loadReplay("not a replay", cardsById).ok).toBe(false);
+    expect(loadReplay({ schemaVersion: 2 }, cardsById).ok).toBe(false);
+    const r = loadReplay({}, cardsById);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.kind).toBe("malformed");
   });
 
   it("missing card ids surface as kind=missing-cards", () => {
@@ -157,6 +206,61 @@ describe("replay — recorder + loader", () => {
     const r = loadReplay(replay, cardsById);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.kind).toBe("malformed");
+  });
+
+  describe("finalizeReplayIfDone", () => {
+    function makeReplay(): GameReplayV2 {
+      return newReplay([], [], SEED, { p2IsAI: true });
+    }
+    function fakeState(opts: { phase: GameState["phase"]; winner: GameState["winner"] }): GameState {
+      // Minimal state stub — finalizeReplayIfDone only reads phase + winner.
+      // Cast is fine because the function's input contract is narrow.
+      return {
+        phase: opts.phase,
+        winner: opts.winner,
+      } as unknown as GameState;
+    }
+    const fixedClock = () => "2026-05-09T12:00:00.000Z";
+
+    it("returns the updated replay when state.winner is set and game is over", () => {
+      const replay = makeReplay();
+      const state = fakeState({ phase: "gameOver", winner: "p1" });
+      const updated = finalizeReplayIfDone(replay, state, "vsCPU", fixedClock);
+      expect(updated).not.toBeNull();
+      expect(updated!.outcome).toEqual({
+        winner: "p1",
+        completedAt: "2026-05-09T12:00:00.000Z",
+        gameMode: "vsCPU",
+      });
+      // Pure: input replay isn't mutated.
+      expect(replay.outcome).toBeUndefined();
+    });
+
+    it("returns null when outcome is already set (idempotent)", () => {
+      const replay = makeReplay();
+      replay.outcome = {
+        winner: "p1",
+        completedAt: "2026-01-01T00:00:00.000Z",
+        gameMode: "vsCPU",
+      };
+      const state = fakeState({ phase: "gameOver", winner: "p2" });
+      expect(finalizeReplayIfDone(replay, state, "vsCPU", fixedClock)).toBeNull();
+    });
+
+    it("returns null when game isn't over", () => {
+      const replay = makeReplay();
+      const state = fakeState({ phase: "main", winner: null });
+      expect(finalizeReplayIfDone(replay, state, "vsCPU", fixedClock)).toBeNull();
+    });
+
+    it("populates winner=null when phase is gameOver but winner is null (draw / aborted)", () => {
+      const replay = makeReplay();
+      const state = fakeState({ phase: "gameOver", winner: null });
+      const updated = finalizeReplayIfDone(replay, state, "local", fixedClock);
+      expect(updated).not.toBeNull();
+      expect(updated!.outcome?.winner).toBeNull();
+      expect(updated!.outcome?.gameMode).toBe("local");
+    });
   });
 
   it("every user-resolvable prompt field has a corresponding GameCommand kind", () => {
