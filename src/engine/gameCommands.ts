@@ -27,6 +27,7 @@ import {
   resolveInPlayTarget,
   resolveHandReveal,
   resolveRareCandyChoice,
+  skipPrimeCatcherSelfSwitch,
 } from "./trainerEffects";
 import { useStadium } from "./stadiumActivated";
 import { endTurn } from "./actions";
@@ -70,7 +71,11 @@ export type GameCommand =
   | { kind: "resolveSwitchTarget"; player: PlayerId; benchIndex: number }
   | { kind: "resolveInPlayTarget"; player: PlayerId; targetOwner: PlayerId; instanceId: string }
   | { kind: "resolveHandReveal"; player: PlayerId; pickedHandIndexes: number[] }
-  | { kind: "resolveRareCandyChoice"; player: PlayerId; handIndex: number };
+  | { kind: "resolveRareCandyChoice"; player: PlayerId; handIndex: number }
+  // Optional-prompt skip — Prime Catcher's "If you do, you may switch your
+  // Active." Without an explicit skip command, exported replays would stall
+  // on the optional prompt.
+  | { kind: "skipPrimeCatcherSelfSwitch"; player: PlayerId };
 
 /**
  * Apply a command to the live game state. Thin dispatcher over the
@@ -146,6 +151,10 @@ export function applyGameCommand(state: GameState, c: GameCommand): ActionResult
     case "resolveRareCandyChoice": {
       const r = resolveRareCandyChoice(state, c.player, c.handIndex);
       return r.ok ? { ok: true } : { ok: false, reason: r.reason ?? "Rare Candy failed." };
+    }
+    case "skipPrimeCatcherSelfSwitch": {
+      const r = skipPrimeCatcherSelfSwitch(state, c.player);
+      return r.ok ? { ok: true } : { ok: false, reason: r.reason ?? "Skip failed." };
     }
   }
 }

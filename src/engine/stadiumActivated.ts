@@ -4,8 +4,8 @@
 // take its action on their turn.
 
 import { fireTriggeredOnMoveToActive, fireTriggeredOnMoveToBench } from "./abilities";
-import { endTurn, logEvent } from "./rules";
-import { setDeckSearchPick } from "./pendingPick";
+import { endTurn, isPlayersFirstTurn, logEvent } from "./rules";
+import { setDeckSearchPick, setDiscardRecoveryPick } from "./pendingPick";
 import type {
   Card,
   GameState,
@@ -39,12 +39,24 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
       return null;
     },
     run: (state, player) => {
-      // Put a card from hand on top of deck. Auto-pick the first — real use
-      // would want a picker, but this keeps scope tight.
       const pl = state.players[player];
-      const [c] = pl.hand.splice(0, 1);
-      pl.deck.unshift(c);
-      logEvent(state, player, `Academy at Night: places ${c.name} on top of deck.`);
+      // AI: keep auto-pick of the first hand card.
+      if (pl.isAI) {
+        const [c] = pl.hand.splice(0, 1);
+        pl.deck.unshift(c);
+        logEvent(state, player, `Academy at Night: places ${c.name} on top of deck.`);
+        return;
+      }
+      // Human: open a hand picker; resolver routes the chosen card to deck top.
+      state.pendingHandReveal = {
+        player,
+        target: player,
+        label: "Academy at Night: pick a card from your hand to put on top of your deck",
+        min: 1,
+        max: 1,
+        filter: "any",
+        action: "toTopOfDeck",
+      };
     },
   },
 
@@ -68,31 +80,39 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
   "Levincia": {
     precheck: () => null,
     run: (state, player) => {
-      // Put up to 2 Basic Lightning Energy from discard into hand.
       const pl = state.players[player];
-      const kept: Card[] = [];
-      const pulled: Card[] = [];
-      for (const c of pl.discard) {
-        if (
-          pulled.length < 2 &&
-          c.supertype === "Energy" &&
-          c.subtypes.includes("Basic") &&
-          c.provides.includes("Lightning")
-        ) {
-          pulled.push(c);
-        } else {
-          kept.push(c);
+      const isBasicLightning = (c: Card) =>
+        c.supertype === "Energy" &&
+        c.subtypes.includes("Basic") &&
+        c.provides.includes("Lightning");
+
+      // AI: keep the existing greedy auto-pull of up to 2.
+      if (pl.isAI) {
+        const kept: Card[] = [];
+        const pulled: Card[] = [];
+        for (const c of pl.discard) {
+          if (pulled.length < 2 && isBasicLightning(c)) pulled.push(c);
+          else kept.push(c);
         }
+        pl.discard = kept;
+        pl.hand.push(...pulled);
+        logEvent(
+          state,
+          player,
+          pulled.length
+            ? `Levincia: recovers ${pulled.length} basic Lightning Energy.`
+            : "Levincia: no basic Lightning Energy in discard.",
+        );
+        return;
       }
-      pl.discard = kept;
-      pl.hand.push(...pulled);
-      logEvent(
-        state,
-        player,
-        pulled.length
-          ? `Levincia: recovers ${pulled.length} basic Lightning Energy.`
-          : "Levincia: no basic Lightning Energy in discard.",
-      );
+
+      // Human: open a discard-recovery picker (up to 2).
+      if (!setDiscardRecoveryPick(
+        state, player, isBasicLightning, 2,
+        "Levincia: pick up to 2 Basic Lightning Energy from your discard pile",
+      )) {
+        logEvent(state, player, "Levincia: no basic Lightning Energy in discard.");
+      }
     },
   },
 
@@ -140,30 +160,48 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
     },
     run: (state, player) => {
       const pl = state.players[player];
-      // Discard an Energy from hand.
-      const idx = pl.hand.findIndex((c) => c.supertype === "Energy");
-      if (idx < 0) return;
-      const [e] = pl.hand.splice(idx, 1);
-      pl.discard.push(e);
-      // Draw until hand size == # Psychic Pokémon you have in play.
+      // Psychic-Pokémon-in-play count drives the eventual hand-size target.
       const allies = [pl.active, ...pl.bench].filter(
         (p): p is PokemonInPlay => !!p,
       );
       const psychicCount = allies.filter((p) =>
         p.card.types.includes("Psychic"),
       ).length;
-      let drawn = 0;
-      while (pl.hand.length < psychicCount) {
-        const c = pl.deck.shift();
-        if (!c) break;
-        pl.hand.push(c);
-        drawn++;
+
+      // AI: keep the existing first-Energy auto-discard + drawUntilHand.
+      if (pl.isAI) {
+        const idx = pl.hand.findIndex((c) => c.supertype === "Energy");
+        if (idx < 0) return;
+        const [e] = pl.hand.splice(idx, 1);
+        pl.discard.push(e);
+        let drawn = 0;
+        while (pl.hand.length < psychicCount) {
+          const c = pl.deck.shift();
+          if (!c) break;
+          pl.hand.push(c);
+          drawn++;
+        }
+        logEvent(
+          state,
+          player,
+          `Mystery Garden: discards ${e.name}, draws ${drawn} card(s).`,
+        );
+        return;
       }
-      logEvent(
-        state,
+
+      // Human: open a hand picker for the Energy to discard. The resolver
+      // discards the picked card BEFORE applying drawUntilHand, so the
+      // draw count is computed against the post-discard hand size.
+      state.pendingHandReveal = {
         player,
-        `Mystery Garden: discards ${e.name}, draws ${drawn} card(s).`,
-      );
+        target: player,
+        label: "Mystery Garden: pick an Energy from your hand to discard",
+        min: 1,
+        max: 1,
+        filter: "energy",
+        action: "discard",
+        postAction: { kind: "drawUntilHand", targetSize: psychicCount },
+      };
     },
   },
 
@@ -177,7 +215,11 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
         (p) => p.card.subtypes.includes("Basic") && !p.playedThisTurn && !p.evolvedThisTurn,
       );
       if (eligibleBasics.length === 0) return "No eligible Basic Pokémon in play.";
-      if (state.turn === 1) return "Grand Tree can't evolve a Basic on your first turn.";
+      // Per-player first-turn gate (matches every other "no evolution on
+      // your first turn" check in the engine).
+      if (isPlayersFirstTurn(state, player)) {
+        return "Grand Tree can't evolve a Basic on your first turn.";
+      }
       const hasStage1Match = pl.deck.some(
         (c) =>
           c.supertype === "Pokémon" &&
@@ -194,37 +236,53 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
       //  Pokémon was evolved in this way, you may search your deck for a
       //  Stage 2 Pokémon that evolves from that Pokémon and put it onto
       //  that Pokémon to evolve it."
-      // Implementation auto-picks the first eligible Basic + matching Stage 1
-      // (interactive picker would be a multi-step pendingInPlayTarget — kept
-      // out of scope for this pass).
       const pl = state.players[player];
       const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
       const eligibleBasics = allies.filter(
-        (p) => p.card.subtypes.includes("Basic") && !p.playedThisTurn && !p.evolvedThisTurn,
+        (p) =>
+          p.card.subtypes.includes("Basic") &&
+          !p.playedThisTurn &&
+          !p.evolvedThisTurn &&
+          pl.deck.some(
+            (c) =>
+              c.supertype === "Pokémon" &&
+              c.subtypes.includes("Stage 1") &&
+              c.evolvesFrom === p.card.name,
+          ),
       );
-      // Stage 1 search.
-      let evolved: PokemonInPlay | null = null;
-      for (const basic of eligibleBasics) {
+      if (eligibleBasics.length === 0) return;
+
+      // AI or single eligible Basic: keep auto-pick. Same shape as the
+      // previous greedy resolve — Stage 1 then optional Stage 2, with a
+      // final shuffle.
+      if (pl.isAI || eligibleBasics.length === 1) {
+        const basic = eligibleBasics[0];
         const idx = pl.deck.findIndex(
           (c) =>
             c.supertype === "Pokémon" &&
             c.subtypes.includes("Stage 1") &&
             c.evolvesFrom === basic.card.name,
         );
-        if (idx >= 0) {
-          const [s1] = pl.deck.splice(idx, 1) as [PokemonCard];
+        if (idx < 0) return;
+        const [s1] = pl.deck.splice(idx, 1) as [PokemonCard];
+        basic.evolvedFrom.push(basic.card);
+        basic.card = s1;
+        basic.evolvedThisTurn = true;
+        basic.abilityUsedThisTurn = false;
+        logEvent(state, player, `Grand Tree: evolves into ${s1.name}.`);
+        const s2idx = pl.deck.findIndex(
+          (c) =>
+            c.supertype === "Pokémon" &&
+            c.subtypes.includes("Stage 2") &&
+            c.evolvesFrom === basic.card.name,
+        );
+        if (s2idx >= 0) {
+          const [s2] = pl.deck.splice(s2idx, 1) as [PokemonCard];
           basic.evolvedFrom.push(basic.card);
-          basic.card = s1;
-          basic.evolvedThisTurn = true;
-          basic.abilityUsedThisTurn = false;
-          evolved = basic;
-          logEvent(state, player, `Grand Tree: evolves into ${s1.name}.`);
-          break;
+          basic.card = s2;
+          logEvent(state, player, `Grand Tree: evolves into ${s2.name}.`);
         }
-      }
-      if (!evolved) {
-        logEvent(state, player, "Grand Tree: no Stage 1 found.");
-        // Still shuffle deck per "Then, that player shuffles their deck."
+        // Shuffle per "Then, that player shuffles their deck."
         const arr = pl.deck;
         for (let i = arr.length - 1; i > 0; i--) {
           const j = state.rng.int(i + 1);
@@ -232,28 +290,19 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
         }
         return;
       }
-      // Stage 2 search — only if the just-evolved Stage 1 has a matching
-      // Stage 2 in deck. Auto-applies the second evolution.
-      const s2idx = pl.deck.findIndex(
-        (c) =>
-          c.supertype === "Pokémon" &&
-          c.subtypes.includes("Stage 2") &&
-          c.evolvesFrom === evolved!.card.name,
-      );
-      if (s2idx >= 0) {
-        const [s2] = pl.deck.splice(s2idx, 1) as [PokemonCard];
-        evolved.evolvedFrom.push(evolved.card);
-        evolved.card = s2;
-        // Stage 1 → Stage 2 in the same activation; per rule we keep
-        // evolvedThisTurn true.
-        logEvent(state, player, `Grand Tree: evolves into ${s2.name}.`);
-      }
-      // Shuffle deck after.
-      const arr = pl.deck;
-      for (let i = arr.length - 1; i > 0; i--) {
-        const j = state.rng.int(i + 1);
-        [arr[i], arr[j]] = [arr[j], arr[i]];
-      }
+
+      // Human with multiple eligible Basics: open the chained picker.
+      // Step 1 captures which Basic. Step 2 (deck search for Stage 1) is
+      // opened by resolveInPlayTarget's "grandTreeBasicTarget" handler,
+      // which also queues the optional Stage 2 chain step.
+      state.pendingInPlayTarget = {
+        player,
+        label: "Grand Tree: pick a Basic Pokémon in play to evolve",
+        scope: "own",
+        slot: "anywhere",
+        filter: "isBasic",
+        action: { kind: "grandTreeBasicTarget" },
+      };
     },
   },
 
@@ -289,23 +338,39 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
     run: (state, player) => {
       const pl = state.players[player];
       if (!pl.active) return;
-      const benchIdx = pl.bench.findIndex((p) =>
-        p.card.types.includes("Water"),
-      );
-      if (benchIdx < 0) return;
-      const incoming = pl.bench.splice(benchIdx, 1)[0];
-      const outgoing = pl.active;
-      // Switch rule: outgoing Pokémon recovers from all Special Conditions.
-      outgoing.statuses = [];
-      pl.active = incoming;
-      pl.bench.push(outgoing);
-      logEvent(
-        state,
+      const waterBench = pl.bench
+        .map((p, idx) => ({ p, idx }))
+        .filter((b) => b.p.card.types.includes("Water"));
+      if (waterBench.length === 0) return;
+
+      // Single Water bench OR AI: short-circuit to the first match.
+      if (pl.isAI || waterBench.length === 1) {
+        const { idx } = waterBench[0];
+        const incoming = pl.bench.splice(idx, 1)[0];
+        const outgoing = pl.active;
+        outgoing.statuses = [];
+        pl.active = incoming;
+        pl.bench.push(outgoing);
+        logEvent(
+          state,
+          player,
+          `Surfing Beach: switches ${outgoing.card.name} → ${incoming.card.name}.`,
+        );
+        fireTriggeredOnMoveToActive(state, player, incoming);
+        fireTriggeredOnMoveToBench(state, player, outgoing);
+        return;
+      }
+
+      // Human with multiple Water bench: open a picker. The Water-type
+      // narrowing happens inside the surfingBeachSwitch action handler.
+      state.pendingInPlayTarget = {
         player,
-        `Surfing Beach: switches ${outgoing.card.name} → ${incoming.card.name}.`,
-      );
-      fireTriggeredOnMoveToActive(state, player, incoming);
-      fireTriggeredOnMoveToBench(state, player, outgoing);
+        label: "Surfing Beach: pick a Benched Water Pokémon to switch into the Active spot",
+        scope: "own",
+        slot: "bench",
+        filter: "anyPokemon",
+        action: { kind: "surfingBeachSwitch" },
+      };
     },
   },
 
@@ -342,12 +407,27 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
     },
     run: (state, player) => {
       const pl = state.players[player];
-      // Auto-discard the first 2 (UI picker is a future improvement).
-      const [a, b] = pl.hand.splice(0, 2);
-      pl.discard.push(a, b);
-      const drawn = pl.deck.shift();
-      if (drawn) pl.hand.push(drawn);
-      logEvent(state, player, `Prism Tower: discards 2, draws 1.`);
+      // AI: keep the existing first-2 auto-discard.
+      if (pl.isAI) {
+        const [a, b] = pl.hand.splice(0, 2);
+        pl.discard.push(a, b);
+        const drawn = pl.deck.shift();
+        if (drawn) pl.hand.push(drawn);
+        logEvent(state, player, `Prism Tower: discards 2, draws 1.`);
+        return;
+      }
+      // Human: open a hand picker for the 2 discards; the post-action
+      // draws 1 card after the discards apply.
+      state.pendingHandReveal = {
+        player,
+        target: player,
+        label: "Prism Tower: pick 2 cards from your hand to discard, then draw 1",
+        min: 2,
+        max: 2,
+        filter: "any",
+        action: "discard",
+        postAction: { kind: "drawCards", count: 1 },
+      };
     },
   },
 };

@@ -1032,6 +1032,12 @@ export function precheckTrainerEffect(
     return "No Active Pokémon to attach Energy to.";
   }
 
+  // Crispin — one basic Energy can be taken to hand; if a second is chosen,
+  // it must be a different type and attaches through the target picker.
+  if (id === "searchBasicEnergyX" && !pl.deck.some(isBasicEnergy)) {
+    return "Crispin: no basic Energy in deck.";
+  }
+
   // Night Stretcher — needs a Pokémon or basic Energy in your discard.
   // Without this gate the Item gets played and discarded for no effect.
   if (id === "nightStretcher") {
@@ -2247,39 +2253,53 @@ export function applyTrainerEffect(
 
     case "searchBasicEnergyX": {
       // Crispin — 2 different Basic Energy types; put 1 in hand, attach 1 to a Pokémon.
-      // Simplification: grab the first 2 different-type Basic Energies, put one
-      // in hand, attach the other to Active.
-      const pulled: EnergyCard[] = [];
-      const rest: Card[] = [];
-      const seenTypes = new Set<string>();
-      for (const c of pl.deck) {
-        if (pulled.length < 2 && isBasicEnergy(c)) {
-          const t = c.provides[0];
-          if (t && !seenTypes.has(t)) {
-            pulled.push(c);
-            seenTypes.add(t);
-            continue;
+      if (pl.isAI) {
+        // AI keeps the fast deterministic path: first Energy goes to hand,
+        // first different-type Energy attaches to the Active.
+        const pulled: EnergyCard[] = [];
+        const rest: Card[] = [];
+        const seenTypes = new Set<string>();
+        for (const c of pl.deck) {
+          if (pulled.length < 2 && isBasicEnergy(c)) {
+            const t = c.provides[0];
+            if (t && !seenTypes.has(t)) {
+              pulled.push(c);
+              seenTypes.add(t);
+              continue;
+            }
           }
+          rest.push(c);
         }
-        rest.push(c);
-      }
-      pl.deck = rest;
-      if (pulled.length === 0) {
-        logEvent(state, player, "finds no basic Energy.");
+        pl.deck = rest;
+        if (pulled.length === 0) {
+          logEvent(state, player, "finds no basic Energy.");
+          shuffleDeck(state, player);
+          return;
+        }
+        pl.hand.push(pulled[0]);
+        if (pulled[1] && pl.active) {
+          pl.active.attachedEnergy.push(pulled[1]);
+          logEvent(state, player, `takes ${pulled[0].name}; attaches ${pulled[1].name}.`);
+        } else if (pulled[1]) {
+          pl.hand.push(pulled[1]);
+          logEvent(state, player, `takes ${pulled.map((c) => c.name).join(", ")}.`);
+        } else {
+          logEvent(state, player, `takes ${pulled[0].name}.`);
+        }
         shuffleDeck(state, player);
         return;
       }
-      pl.hand.push(pulled[0]);
-      if (pulled[1] && pl.active) {
-        pl.active.attachedEnergy.push(pulled[1]);
-        logEvent(state, player, `takes ${pulled[0].name}; attaches ${pulled[1].name}.`);
-      } else if (pulled[1]) {
-        pl.hand.push(pulled[1]);
-        logEvent(state, player, `takes ${pulled.map((c) => c.name).join(", ")}.`);
-      } else {
-        logEvent(state, player, `takes ${pulled[0].name}.`);
+
+      if (!setDeckSearchPick(
+        state,
+        player,
+        isBasicEnergy,
+        1,
+        "Crispin (1 of 2): pick a basic Energy to put into your hand",
+        { afterPick: { kind: "crispinHandEnergy" } },
+      )) {
+        logEvent(state, player, "finds no basic Energy.");
       }
-      shuffleDeck(state, player);
       return;
     }
 
@@ -2453,8 +2473,20 @@ export function applyTrainerEffect(
     case "kofuBottom2Draw4": {
       // Kofu: put 2 cards from your hand on the bottom of your deck in any
       // order, then draw 4. Precheck already verified the hand size.
-      // Auto-pick: put the leftmost 2 cards (non-Supporter-preferring to
-      // avoid dumping high-value plays, but scope is small — just take first).
+      if (!pl.isAI) {
+        state.pendingHandReveal = {
+          player,
+          target: player,
+          label: "Kofu: pick 2 cards from your hand to put on the bottom of your deck",
+          min: 2,
+          max: 2,
+          filter: "any",
+          action: "toBottomOfDeck",
+          postAction: { kind: "drawCards", count: 4 },
+        };
+        return;
+      }
+      // AI auto-pick: put the leftmost 2 cards on bottom.
       for (let i = 0; i < 2; i++) {
         const c = pl.hand.shift();
         if (!c) break;
@@ -2500,6 +2532,19 @@ export function applyTrainerEffect(
         logEvent(state, player, "deck is empty.");
         return;
       }
+      if (!pl.isAI) {
+        state.pendingPick = {
+          player,
+          label: "Explorer's Guidance: pick 2 cards to put into your hand; discard the rest",
+          pool: top,
+          min: Math.min(2, top.length),
+          max: Math.min(2, top.length),
+          unpicked: "discard",
+          source: "deckTop",
+        };
+        state.phase = "pick";
+        return;
+      }
       // Auto-pick the two most-useful (Pokémon first, then Trainers, then Energy).
       const score = (c: Card) => c.supertype === "Pokémon" ? 2 : c.supertype === "Trainer" ? 1 : 0;
       top.sort((a, b) => score(b) - score(a));
@@ -2513,6 +2558,25 @@ export function applyTrainerEffect(
 
     case "ciphermaniacSearch": {
       // Ciphermaniac's Codebreaking — search 2 cards, put them on top of deck.
+      if (!pl.isAI) {
+        if (!setDeckSearchPick(
+          state,
+          player,
+          () => true,
+          2,
+          "Ciphermaniac's Codebreaking: pick 2 cards to put on top of your deck",
+          { min: 2 },
+        )) {
+          logEvent(state, player, "Ciphermaniac's Codebreaking: deck is empty.");
+          return;
+        }
+        if (state.pendingPick) {
+          state.pendingPick.pickedDestination = "topOfDeck";
+          state.pendingPick.min = Math.min(2, state.pendingPick.pool.length);
+          state.pendingPick.max = Math.min(2, state.pendingPick.pool.length);
+        }
+        return;
+      }
       const pulled: Card[] = [];
       const remaining: Card[] = [];
       for (const c of pl.deck) {
@@ -2644,50 +2708,82 @@ export function applyTrainerEffect(
 
     case "searchAnyBasicsToBench": {
       // Precious Trolley — any number of Basic Pokémon to bench.
-      const cap = pl.bench.length;
-      const slots = 5 - cap;
+      const slots = 5 - pl.bench.length;
       if (slots <= 0) {
         logEvent(state, player, "bench is full.");
         return;
       }
-      const rest: Card[] = [];
-      let added = 0;
-      for (const c of pl.deck) {
-        if (added < slots && c.supertype === "Pokémon" && c.subtypes.includes("Basic")) {
-          pl.bench.push(makePokemonInPlay(c as PokemonCard));
-          added++;
-        } else {
-          rest.push(c);
+      const isBasicPoke = (c: Card) =>
+        c.supertype === "Pokémon" && c.subtypes.includes("Basic");
+
+      // AI: keep the existing greedy auto-bench so AI turns stay fast.
+      if (pl.isAI) {
+        const rest: Card[] = [];
+        let added = 0;
+        for (const c of pl.deck) {
+          if (added < slots && isBasicPoke(c)) {
+            pl.bench.push(makePokemonInPlay(c as PokemonCard));
+            added++;
+          } else {
+            rest.push(c);
+          }
         }
+        pl.deck = rest;
+        shuffleDeck(state, player);
+        logEvent(state, player, `benches ${added} Basic Pokémon.`);
+        return;
       }
-      pl.deck = rest;
-      shuffleDeck(state, player);
-      logEvent(state, player, `benches ${added} Basic Pokémon.`);
+
+      // Human: open an interactive deck-search picker. The picker's
+      // `toBench: true` mode benches each picked Basic on resolve.
+      if (!setDeckSearchPick(
+        state, player, isBasicPoke, slots,
+        `Precious Trolley: pick up to ${slots} Basic Pokémon to bench`,
+        { toBench: true },
+      )) {
+        logEvent(state, player, "finds no Basic Pokémon.");
+      }
       return;
     }
 
     case "searchEnergyVariety": {
       // Energy Search Pro — any number of Basic Energies of different types.
-      const seen = new Set<string>();
-      const pulled: Card[] = [];
-      const rest: Card[] = [];
-      for (const c of pl.deck) {
-        if (isBasicEnergy(c)) {
-          const t = c.provides[0];
-          if (t && !seen.has(t)) {
-            seen.add(t);
-            pulled.push(c);
-            continue;
+
+      // AI: keep the existing one-of-each-type auto-pull for speed.
+      if (pl.isAI) {
+        const seen = new Set<string>();
+        const pulled: Card[] = [];
+        const rest: Card[] = [];
+        for (const c of pl.deck) {
+          if (isBasicEnergy(c)) {
+            const t = c.provides[0];
+            if (t && !seen.has(t)) {
+              seen.add(t);
+              pulled.push(c);
+              continue;
+            }
           }
+          rest.push(c);
         }
-        rest.push(c);
+        pl.deck = rest;
+        pl.hand.push(...pulled);
+        shuffleDeck(state, player);
+        logEvent(state, player, pulled.length
+          ? `takes ${pulled.length} basic Energy (one of each type).`
+          : "finds no basic Energy.");
+        return;
       }
-      pl.deck = rest;
-      pl.hand.push(...pulled);
-      shuffleDeck(state, player);
-      logEvent(state, player, pulled.length
-        ? `takes ${pulled.length} basic Energy (one of each type).`
-        : "finds no basic Energy.");
+
+      // Human: open a deck-search picker over basic Energy. The picker
+      // pool may include duplicates of the same type; the resolver
+      // enforces the "different types" constraint.
+      if (!setDeckSearchPick(
+        state, player, isBasicEnergy, 9,
+        "Energy Search Pro: pick any number of basic Energy of different types",
+        { uniqueByEnergyType: true },
+      )) {
+        logEvent(state, player, "finds no basic Energy.");
+      }
       return;
     }
 
@@ -2787,21 +2883,38 @@ export function applyTrainerEffect(
     }
 
     case "primeCatcher": {
-      // Gust an opp Benched to Active, then switch your Active with bench.
-      // Auto-picks the highest-HP opp bench (most impactful gust target).
-      // TODO: ACE SPEC — for humans with 2+ opp bench, open a picker for
-      //       the gust target. Multi-step (gust then own-switch) so it
-      //       requires a chained pendingInPlayTarget; left as auto for now.
+      // Gust an opp Benched to Active. "If you do," optionally switch your
+      // Active with one of your Bench Pokémon. Both legs are optional in
+      // the sense that empty-bench short-circuits skip them gracefully.
       const opp = state.players[oppId];
-      if (opp.active && opp.bench.length > 0) {
+      if (!opp.active || opp.bench.length === 0) {
+        logEvent(state, player, "Prime Catcher: no opposing Bench Pokémon to gust.");
+        return;
+      }
+
+      // AI: keep the existing heuristic — gust highest-HP opp bench, then
+      // switch with bench[0] if available.
+      if (pl.isAI) {
         const benchedTarget = opp.bench.slice().sort((a, b) => b.card.hp - a.card.hp)[0];
         const idx = opp.bench.indexOf(benchedTarget);
         const r = performGust(state, oppId, idx);
         if (r) logEvent(state, player, `gusts ${r.pulled.card.name} to Active.`);
+        if (pl.active && pl.bench.length > 0) {
+          performSwitch(state, player, 0);
+        }
+        return;
       }
-      if (pl.active && pl.bench.length > 0) {
-        performSwitch(state, player, 0);
-      }
+
+      // Human: open the gust picker. The chain into the optional
+      // self-switch lives in resolveInPlayTarget's "primeCatcherGust" case.
+      state.pendingInPlayTarget = {
+        player,
+        label: "Prime Catcher: pick an opposing Bench Pokémon to switch into the Active spot",
+        scope: "opp",
+        slot: "bench",
+        filter: "anyPokemon",
+        action: { kind: "primeCatcherGust" },
+      };
       return;
     }
 
@@ -2850,15 +2963,31 @@ export function applyTrainerEffect(
 
     case "scrambleSwitch": {
       if (!pl.active || pl.bench.length === 0) return;
-      performSwitch(state, player, 0);
-      // Move all energy from the outgoing (now at end of bench) to the new Active.
-      const prev = pl.bench[pl.bench.length - 1];
-      if (pl.active && prev) {
-        pl.active.attachedEnergy.push(...prev.attachedEnergy);
-        prev.attachedEnergy = [];
-        logEvent(state, player, `switches + transfers Energy to ${pl.active.card.name}.`);
+
+      // AI or single-bench: keep the existing auto-bench[0] + move-all path.
+      if (pl.isAI || pl.bench.length === 1) {
+        performSwitch(state, player, 0);
+        const prev = pl.bench[pl.bench.length - 1];
+        if (pl.active && prev) {
+          pl.active.attachedEnergy.push(...prev.attachedEnergy);
+          prev.attachedEnergy = [];
+          logEvent(state, player, `switches + transfers Energy to ${pl.active.card.name}.`);
+        }
+        enforceSpecialEnergyAttachRules(state);
+        return;
       }
-      enforceSpecialEnergyAttachRules(state);
+
+      // Human with multiple bench: open the switch-target picker. Energy
+      // transfer is deferred to the resolver (and uses the always-move-all
+      // approximation — see docs/ITEM_AUDIT.md).
+      state.pendingInPlayTarget = {
+        player,
+        label: "Scramble Switch: pick a Benched Pokémon to switch into the Active spot",
+        scope: "own",
+        slot: "bench",
+        filter: "anyPokemon",
+        action: { kind: "scrambleSwitchTarget" },
+      };
       return;
     }
 
@@ -2927,16 +3056,43 @@ export function applyTrainerEffect(
       const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
       const hasTera = allies.some((p) => p.card.subtypes.includes("Tera"));
       if (!hasTera) { logEvent(state, player, "needs a Tera Pokémon in play."); return; }
-      const colorless = pl.bench.filter((p) => p.card.types.includes("Colorless")).slice(0, 2);
-      let attached = 0;
-      for (const c of colorless) {
-        const idx = pl.discard.findIndex(isBasicEnergy);
-        if (idx < 0) break;
-        const [e] = pl.discard.splice(idx, 1) as [EnergyCard];
-        c.attachedEnergy.push(e);
-        attached++;
+      const colorlessBench = pl.bench.filter((p) => p.card.types.includes("Colorless"));
+      if (colorlessBench.length === 0) {
+        logEvent(state, player, "Glass Trumpet: no Benched Colorless Pokémon.");
+        return;
       }
-      logEvent(state, player, `attaches ${attached} basic Energy to Benched Colorless Pokémon.`);
+
+      // AI: keep the existing greedy first-2-Energy → first-2-Colorless flow.
+      if (pl.isAI) {
+        const colorless = colorlessBench.slice(0, 2);
+        let attached = 0;
+        for (const c of colorless) {
+          const idx = pl.discard.findIndex(isBasicEnergy);
+          if (idx < 0) break;
+          const [e] = pl.discard.splice(idx, 1) as [EnergyCard];
+          c.attachedEnergy.push(e);
+          attached++;
+        }
+        logEvent(state, player, `attaches ${attached} basic Energy to Benched Colorless Pokémon.`);
+        return;
+      }
+
+      // Human: open a discard-recovery picker. The afterPick handler stashes
+      // the chosen Energy on `pendingAttachQueue` (so it never lands in
+      // hand) and opens the per-Bench attach picker.
+      if (!setDiscardRecoveryPick(
+        state, player, isBasicEnergy, 2,
+        "Glass Trumpet: pick up to 2 Basic Energy from your discard pile",
+      )) {
+        logEvent(state, player, "Glass Trumpet: no basic Energy in discard.");
+        return;
+      }
+      // setDiscardRecoveryPick doesn't take afterPick yet — set it manually
+      // since pendingPick is now in state. (Keeps the public helper signature
+      // narrow.)
+      if (state.pendingPick) {
+        state.pendingPick.afterPick = { kind: "glassTrumpetStash" };
+      }
       return;
     }
 
@@ -3045,18 +3201,7 @@ export function applyTrainerEffect(
           c.supertype === "Pokémon" &&
           (c.subtypes ?? []).includes("Basic")
         ) {
-          opp.bench.push({
-            instanceId: `af-${Date.now()}-${Math.random()}`,
-            card: c as PokemonCard,
-            damage: 0,
-            attachedEnergy: [],
-            evolvedFrom: [],
-            tools: [],
-            playedThisTurn: false,
-            evolvedThisTurn: false,
-            statuses: [],
-            abilityUsedThisTurn: false,
-          });
+          opp.bench.push(makePokemonInPlay(c as PokemonCard));
           benched++;
         } else {
           rest.push(c);
@@ -3945,6 +4090,14 @@ export function resolveInPlayTarget(
   const clickerPl = state.players[clicker];
 
   switch (pending.action.kind) {
+    case "crispinAttachEnergy": {
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      target.attachedEnergy.push(pending.action.energy);
+      logEvent(state, clicker, `Crispin: attaches ${pending.action.energy.name} to ${target.card.name}.`);
+      enforceSpecialEnergyAttachRules(state);
+      state.pendingInPlayTarget = null;
+      return { ok: true };
+    }
     case "enhancedHammer": {
       const idx = target.attachedEnergy.findIndex((e) => e.subtypes.includes("Special"));
       if (idx < 0) return { ok: false, reason: "No Special Energy on target." };
@@ -4448,7 +4601,228 @@ export function resolveInPlayTarget(
       state.pendingInPlayTarget = null;
       return { ok: true };
     }
+    case "primeCatcherGust": {
+      // Step 1: gust the clicked opp Bench Pokémon. Then chain into the
+      // optional self-switch picker if own bench has any Pokémon.
+      if (!isOpp) return { ok: false, reason: "Pick an opposing Pokémon." };
+      if (fromActive) return { ok: false, reason: "Pick a Benched Pokémon." };
+      const opp = state.players[targetOwner];
+      const idx = opp.bench.findIndex((p) => p.instanceId === instanceId);
+      if (idx < 0) {
+        state.pendingInPlayTarget = null;
+        return { ok: false, reason: "Target not on opp Bench." };
+      }
+      const r = performGust(state, targetOwner, idx);
+      if (r) logEvent(state, clicker, `Prime Catcher: gusts ${r.pulled.card.name} to Active.`);
+      // Optional step 2: self-switch. Only open if own bench has anyone.
+      if (clickerPl.bench.length > 0) {
+        state.pendingInPlayTarget = {
+          player: clicker,
+          label: "Prime Catcher: optionally pick one of your Bench Pokémon to swap with your Active (or skip)",
+          scope: "own",
+          slot: "bench",
+          filter: "anyPokemon",
+          action: { kind: "primeCatcherSelfSwitch" },
+        };
+      } else {
+        state.pendingInPlayTarget = null;
+      }
+      return { ok: true };
+    }
+    case "primeCatcherSelfSwitch": {
+      // Step 2: swap Active with the clicked Bench Pokémon. Optional —
+      // see `skipPrimeCatcherSelfSwitch` for the skip path.
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      if (fromActive) return { ok: false, reason: "Pick a Benched Pokémon." };
+      const idx = clickerPl.bench.findIndex((p) => p.instanceId === instanceId);
+      if (idx < 0) {
+        state.pendingInPlayTarget = null;
+        return { ok: false, reason: "Target not on your Bench." };
+      }
+      performSwitch(state, clicker, idx);
+      state.pendingInPlayTarget = null;
+      return { ok: true };
+    }
+    case "surfingBeachSwitch": {
+      // Surfing Beach: bench target must be Water-typed.
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      if (fromActive) return { ok: false, reason: "Pick a Benched Pokémon." };
+      if (!target.card.types.includes("Water")) {
+        return { ok: false, reason: "Surfing Beach: must pick a Water-type Pokémon." };
+      }
+      const idx = clickerPl.bench.findIndex((p) => p.instanceId === instanceId);
+      if (idx < 0) {
+        state.pendingInPlayTarget = null;
+        return { ok: false, reason: "Target not on your Bench." };
+      }
+      const incoming = clickerPl.bench.splice(idx, 1)[0];
+      const outgoing = clickerPl.active!;
+      // Switch rule: outgoing recovers from all Special Conditions.
+      outgoing.statuses = [];
+      clickerPl.active = incoming;
+      clickerPl.bench.push(outgoing);
+      logEvent(
+        state,
+        clicker,
+        `Surfing Beach: switches ${outgoing.card.name} → ${incoming.card.name}.`,
+      );
+      fireTriggeredOnMoveToActive(state, clicker, incoming);
+      fireTriggeredOnMoveToBench(state, clicker, outgoing);
+      state.pendingInPlayTarget = null;
+      return { ok: true };
+    }
+    case "glassTrumpetAttach": {
+      // Each click attaches one queued Energy to the clicked Bench
+      // Colorless Pokémon. Closes when the queue empties.
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      if (fromActive) return { ok: false, reason: "Pick a Benched Pokémon." };
+      if (!target.card.types.includes("Colorless")) {
+        return { ok: false, reason: "Glass Trumpet: target must be a Colorless Pokémon." };
+      }
+      const queue = state.pendingAttachQueue;
+      if (!queue || queue.energies.length === 0) {
+        state.pendingAttachQueue = null;
+        state.pendingInPlayTarget = null;
+        return { ok: false, reason: "No queued Energy to attach." };
+      }
+      const energy = queue.energies.shift()!;
+      target.attachedEnergy.push(energy);
+      logEvent(
+        state,
+        clicker,
+        `Glass Trumpet: attaches ${energy.name} to ${target.card.name}.`,
+      );
+      enforceSpecialEnergyAttachRules(state);
+      if (queue.energies.length === 0) {
+        state.pendingAttachQueue = null;
+        state.pendingInPlayTarget = null;
+      } else {
+        state.pendingInPlayTarget = {
+          player: clicker,
+          label: `Glass Trumpet: pick a Benched Colorless Pokémon to attach ${queue.energies[0].name}`,
+          scope: "own",
+          slot: "bench",
+          filter: "anyPokemon",
+          action: { kind: "glassTrumpetAttach", remaining: queue.energies.length },
+        };
+      }
+      return { ok: true };
+    }
+    case "handheldFanPick": {
+      // Defender resolves — the click target lives on the attacker's bench.
+      // Move 1 Energy from the attacker's Active to the clicked bench.
+      const fan = state.pendingHandheldFan;
+      if (!fan || fan.defenderId !== clicker) {
+        state.pendingInPlayTarget = null;
+        return { ok: false, reason: "Handheld Fan: no pending pick." };
+      }
+      if (targetOwner !== fan.attackerSideId) {
+        return { ok: false, reason: "Pick a Benched Pokémon on the opponent's side." };
+      }
+      if (fromActive) return { ok: false, reason: "Pick a Benched Pokémon." };
+      const attackerSide = state.players[fan.attackerSideId];
+      if (!attackerSide.active || attackerSide.active.attachedEnergy.length === 0) {
+        // Attacker's Active is gone or has no energy — nothing to move.
+        state.pendingHandheldFan = null;
+        state.pendingInPlayTarget = null;
+        if (state.phase !== "gameOver") endTurnRule(state);
+        return { ok: true };
+      }
+      const idx = attackerSide.bench.findIndex((p) => p.instanceId === instanceId);
+      if (idx < 0) {
+        return { ok: false, reason: "Target not on the attacker's Bench." };
+      }
+      const en = attackerSide.active.attachedEnergy.shift()!;
+      attackerSide.bench[idx].attachedEnergy.push(en);
+      logEvent(
+        state,
+        clicker,
+        `Handheld Fan: ${en.name} moves from ${attackerSide.active.card.name} to ${attackerSide.bench[idx].card.name}.`,
+      );
+      enforceSpecialEnergyAttachRules(state);
+      state.pendingHandheldFan = null;
+      state.pendingInPlayTarget = null;
+      // Resume the deferred attacker turn-end.
+      if (state.phase !== "gameOver") endTurnRule(state);
+      return { ok: true };
+    }
+    case "scrambleSwitchTarget": {
+      // Step 1: switch the chosen Bench Pokémon into the Active spot.
+      // APPROXIMATION: card text says "you may move any amount of Energy"
+      // from the previous Active. This implementation always moves all
+      // Energy (matches the prior behavior and covers the dominant
+      // strategic case). Granular per-Energy choice is deferred — see
+      // docs/ITEM_AUDIT.md.
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      if (fromActive) return { ok: false, reason: "Pick a Benched Pokémon." };
+      const idx = clickerPl.bench.findIndex((p) => p.instanceId === instanceId);
+      if (idx < 0) {
+        state.pendingInPlayTarget = null;
+        return { ok: false, reason: "Target not on your Bench." };
+      }
+      performSwitch(state, clicker, idx);
+      const prev = clickerPl.bench[clickerPl.bench.length - 1];
+      if (clickerPl.active && prev) {
+        clickerPl.active.attachedEnergy.push(...prev.attachedEnergy);
+        prev.attachedEnergy = [];
+        logEvent(state, clicker, `Scramble Switch: transfers Energy to ${clickerPl.active.card.name}.`);
+      }
+      enforceSpecialEnergyAttachRules(state);
+      state.pendingInPlayTarget = null;
+      return { ok: true };
+    }
+    case "grandTreeBasicTarget": {
+      // Step 1: capture the chosen Basic instance ID, then open a deck
+      // search for a matching Stage 1. The `targetInstanceId` flows
+      // through to the afterPick callback so the evolution applies to
+      // the same chosen ally rather than a re-found first-match.
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      if (!target.card.subtypes.includes("Basic")) {
+        return { ok: false, reason: "Pick a Basic Pokémon." };
+      }
+      if (target.playedThisTurn || target.evolvedThisTurn) {
+        return { ok: false, reason: "That Pokémon can't evolve this turn." };
+      }
+      const basicName = target.card.name;
+      const targetInstanceId = target.instanceId;
+      const stage1Pred = (c: import("./types").Card) =>
+        c.supertype === "Pokémon" &&
+        (c.subtypes ?? []).includes("Stage 1") &&
+        (c as import("./types").PokemonCard).evolvesFrom === basicName;
+      state.pendingInPlayTarget = null;
+      if (!setDeckSearchPick(
+        state, clicker, stage1Pred, 1,
+        `Grand Tree: pick a Stage 1 that evolves from ${basicName}`,
+        {
+          min: 1,
+          afterPick: { kind: "grandTreeApplyStage1", targetInstanceId },
+        },
+      )) {
+        logEvent(state, clicker, "Grand Tree: no matching Stage 1 in deck.");
+      }
+      return { ok: true };
+    }
   }
+}
+
+// Skip the optional Prime Catcher self-switch step. The gust already
+// applied; this just clears the pending picker. Replay-recorded as an
+// explicit `skipPrimeCatcherSelfSwitch` GameCommand so exports don't stall
+// on the optional prompt.
+export function skipPrimeCatcherSelfSwitch(
+  state: GameState,
+  player: PlayerId,
+): { ok: boolean; reason?: string } {
+  const pending = state.pendingInPlayTarget;
+  if (!pending || pending.player !== player) {
+    return { ok: false, reason: "No Prime Catcher self-switch pending." };
+  }
+  if (pending.action.kind !== "primeCatcherSelfSwitch") {
+    return { ok: false, reason: "Pending action is not Prime Catcher's self-switch." };
+  }
+  state.pendingInPlayTarget = null;
+  logEvent(state, player, "Prime Catcher: skips self-switch.");
+  return { ok: true };
 }
 
 // Cancel a pending in-play target (user backed out / the UI dismissed it).
@@ -4461,9 +4835,10 @@ export function cancelInPlayTarget(state: GameState): void {
 
 // -------- Hand-reveal resolver -------------------------------------------
 
-function handCardMatches(c: Card, filter: "item" | "tool" | "itemOrTool" | "supporter" | "pokemon" | "any"): boolean {
+function handCardMatches(c: Card, filter: "item" | "tool" | "itemOrTool" | "supporter" | "pokemon" | "energy" | "any"): boolean {
   if (filter === "any") return true;
   if (filter === "pokemon") return c.supertype === "Pokémon";
+  if (filter === "energy") return c.supertype === "Energy";
   if (c.supertype !== "Trainer") return false;
   const subs = c.subtypes ?? [];
   switch (filter) {
@@ -4508,6 +4883,11 @@ export function resolveHandReveal(
     logEvent(state, clicker, picked.length
       ? `discards ${picked.map((c) => c.name).join(", ")} from ${targetPl.name}'s hand.`
       : `finds nothing to discard in ${targetPl.name}'s hand.`);
+  } else if (pending.action === "toTopOfDeck") {
+    targetPl.deck.unshift(...picked);
+    logEvent(state, clicker, picked.length
+      ? `puts ${picked.map((c) => c.name).join(", ")} on top of ${targetPl.name}'s deck.`
+      : `puts nothing on top of ${targetPl.name}'s deck.`);
   } else {
     // toBottomOfDeck
     targetPl.deck.push(...picked);
@@ -4521,6 +4901,8 @@ export function resolveHandReveal(
     const clickerPl = state.players[clicker];
     const toDraw = Math.max(0, postAction.targetSize - clickerPl.hand.length);
     if (toDraw > 0) drawUpTo(state, clicker, toDraw);
+  } else if (postAction?.kind === "drawCards") {
+    drawUpTo(state, clicker, postAction.count);
   } else if (postAction?.kind === "searchDeckAnyPokemon") {
     // Perrin: "search for the SAME number of Pokémon" — cap by actual reveal
     // count, not the upfront max. Other callers (Ultra Ball etc.) use the

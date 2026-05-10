@@ -2185,6 +2185,15 @@ export function cloneStateForSearchWithSeed(state: GameState, seed: number): Gam
     pendingHeavyBaton: state.pendingHeavyBaton
       ? { ...state.pendingHeavyBaton, energies: [...state.pendingHeavyBaton.energies] }
       : null,
+    pendingAttachQueue: state.pendingAttachQueue
+      ? { ...state.pendingAttachQueue, energies: [...state.pendingAttachQueue.energies] }
+      : null,
+    pendingHandheldFan: state.pendingHandheldFan
+      ? { ...state.pendingHandheldFan }
+      : null,
+    pendingAmuletOfHope: state.pendingAmuletOfHope
+      ? { ...state.pendingAmuletOfHope }
+      : null,
     onPromoteResolved: state.onPromoteResolved,
     pendingSecondAttack: state.pendingSecondAttack ? { ...state.pendingSecondAttack } : null,
     pendingPick: state.pendingPick ? { ...state.pendingPick, pool: [...state.pendingPick.pool] } : null,

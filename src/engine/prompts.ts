@@ -93,7 +93,7 @@ export interface HandRevealPrompt extends BasePrompt {
   /** Whose hand is being revealed (the `target` player). The `player` on
    *  the prompt is who clicks to resolve it. */
   target: PlayerId;
-  filter: "item" | "tool" | "itemOrTool" | "supporter" | "pokemon" | "any";
+  filter: "item" | "tool" | "itemOrTool" | "supporter" | "pokemon" | "energy" | "any";
   min: number;
   max: number;
 }

@@ -2,6 +2,14 @@
 
 Detailed rundown of attacks, abilities, trainers, stadiums, and tools wired into the engine. See [../CLAUDE.md](../CLAUDE.md) for the project entry point.
 
+Focused audits:
+
+- [Effect audit](./EFFECT_AUDIT.md)
+- [Item audit](./ITEM_AUDIT.md)
+- [Supporter audit](./SUPPORTER_AUDIT.md)
+- [Tool audit](./TOOL_AUDIT.md)
+- [Stadium audit](./STADIUM_AUDIT.md)
+
 For the coverage guardrail and new-effect checklist, see
 [EFFECT_AUDIT.md](EFFECT_AUDIT.md). That audit is backed by a Vitest
 inventory hash so adding a new effect kind requires an explicit coverage
@@ -39,7 +47,8 @@ decision.
   with multiple bench targets; AI / single-target paths resolve inline.
   **Lunar Cycle** (Lunatone) carries a cross-copy lock so 2 Lunatones
   in play can't both fire it the same turn.
-- **Trainers**: 100+ effects. Hilda + Dawn chained pickers,
+- **Trainers**: 100+ effects, including 82 Standard Item names audited.
+  Hilda + Dawn chained pickers,
   **Colress's Tenacity** (Stadium → Energy chain), **Salvatore**
   (interactive Evolution via `toEvolve`), **Perrin** (interactive
   hand-reveal → search same count via `useRevealedCount` postAction),
@@ -58,12 +67,18 @@ decision.
   prizes), **Xerosic's Machinations** (opp discards down to 3 cards),
   **Secret Box ACE SPEC** (chained Item → Tool → Supporter → Stadium
   pickers), Unfair Stamp ACE SPEC, all Standard staples. AI keeps the
-  auto-resolve path on each.
-- **Stadiums**: most passives wired. Activated framework exists;
-  per-Stadium UI buttons partial. Includes **Postwick** (mirror-
-  symmetric +30 dmg for BOTH players' Hop's-prefix attacks) and
-  **Spikemuth Gym** (item-lock-immune Marnie's-prefix search).
-- **Tools**: ~24 — HP boosters, retreat helpers, damage boosters,
+  auto-resolve path on each. Current Item follow-up risk is
+  human-choice fidelity for high-impact auto-resolved Items such as
+  Prime Catcher, Scramble Switch, Glass Trumpet, Energy Search Pro, and
+  Precious Trolley; see [Item audit](./ITEM_AUDIT.md).
+- **Stadiums**: 29 Standard Stadium names audited. Most passives are
+  wired, and the activated framework is shared with preflight via
+  `precheckStadium()`. Includes **Postwick** (mirror-symmetric +30
+  dmg for BOTH players' Hop's-prefix attacks) and **Spikemuth Gym**
+  (item-lock-immune Marnie's-prefix search). Current follow-up risk is
+  human-choice fidelity for activated Stadiums that still auto-pick the
+  first legal card or target; see [Stadium audit](./STADIUM_AUDIT.md).
+- **Tools**: 34 Standard Tool names audited — HP boosters, retreat helpers, damage boosters,
   berries with auto-discard, KO-triggered (Survival Brace, Lillie's
   Pearl, Amulet of Hope, **Heavy Baton** — interactive Bench-target
   picker that fires after the holder's owner promotes). On-damage

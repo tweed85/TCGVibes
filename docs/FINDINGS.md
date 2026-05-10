@@ -31,6 +31,9 @@ Pressure-test findings, MVP scope cuts, and deferred AI overhaul phases. See [..
 
 ## Deferred AI work (Phases 2c, 2e, 7-12 of the AI overhaul plan)
 
+Concrete build plan: [AI_CPU_BUILD_PLAN.md](AI_CPU_BUILD_PLAN.md). Use that
+doc for implementation sequencing; this section is the older backlog map.
+
 - **2c. Multi-action reordering** — replace fixed greedy step order
   with a score-then-pick loop.
 - **2e. Ability scoring tuning** — defaults at 50-65 across ~70 kinds;

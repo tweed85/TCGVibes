@@ -9,6 +9,7 @@ import {
   importDecklist,
 } from "../decklistParser";
 import { validateDeckForPlay, buildDeck, DECK_SPECS } from "../decks";
+import { findByName } from "../cards";
 import type { Card, PokemonCard, EnergyCard } from "../../engine/types";
 
 describe("parseDecklist — text tokenization", () => {
@@ -151,6 +152,7 @@ describe("validateDeckForPlay — pre-game deck legality gate", () => {
       name,
       supertype: "Pokémon",
       subtypes: ["Basic"],
+      regulationMark: "H",
       hp: 70,
       types: ["Colorless"],
       attacks: [],
@@ -193,5 +195,31 @@ describe("validateDeckForPlay — pre-game deck legality gate", () => {
     const issue = validateDeckForPlay(deck);
     expect(issue).not.toBeNull();
     expect(issue!.toLowerCase()).toContain("basic");
+  });
+
+  it("rejects explicitly rotated regulation marks even when the deck has 60 cards and a Basic", () => {
+    const rotatedBasic = {
+      ...mkBasic("Rotated Basic"),
+      regulationMark: "G",
+    } as PokemonCard;
+    const deck: Card[] = [rotatedBasic, ...Array(59).fill(mkEnergy())];
+    const issue = validateDeckForPlay(deck);
+    expect(issue).not.toBeNull();
+    expect(issue!).toContain("regulation mark G");
+  });
+
+  it("allows a current legal reprint card object even when the card name existed before rotation", () => {
+    // Legality follows the resolved card object's regulation mark, not the
+    // historical name. This mirrors the parser fallback that may resolve an
+    // old pasted printing to a legal current reprint.
+    const legalUltraBall = findByName("Ultra Ball");
+    expect(legalUltraBall).toBeDefined();
+    expect(legalUltraBall!.regulationMark).toBeTruthy();
+    const deck: Card[] = [
+      mkBasic("Legal Basic"),
+      { ...legalUltraBall! },
+      ...Array(58).fill(mkEnergy()),
+    ];
+    expect(validateDeckForPlay(deck)).toBeNull();
   });
 });

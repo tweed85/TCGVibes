@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyDamage, knockOut, makePokemonInPlay, setupGame } from "../rules";
+import { applyDamage, knockOut, makePokemonInPlay, prizeValue, setupGame } from "../rules";
 import { makeRng } from "../rng";
 import type { Card, EnergyCard, PokemonCard, TrainerCard } from "../types";
 
@@ -97,5 +97,28 @@ describe("KO cause gates opponent-attack-only effects", () => {
     expect(state.players.p2.bench[0].attachedEnergy).toHaveLength(0);
     expect(state.players.p2.discard.map((c) => c.name)).toContain("Basic Grass Energy");
     expect(state.log.some((e) => /Heavy Baton moves/.test(e.text))).toBe(false);
+  });
+});
+
+describe("rule-box prize values", () => {
+  it("treats Mega Evolution ex as 3 prizes before the generic ex fallback", () => {
+    expect(prizeValue(pokemon("Mega Lucario ex", { subtypes: ["Stage 1", "MEGA", "ex"] }))).toBe(3);
+    expect(prizeValue(pokemon("Synthetic Mega ex", { subtypes: ["Stage 1", "Mega", "ex"] }))).toBe(3);
+    expect(prizeValue(pokemon("Regular ex", { subtypes: ["Basic", "ex"] }))).toBe(2);
+  });
+
+  it("awards 3 prizes when a Mega Evolution ex is Knocked Out", () => {
+    const state = boot();
+    state.players.p2.active = makePokemonInPlay(
+      pokemon("Mega Lucario ex", {
+        subtypes: ["Stage 1", "MEGA", "ex"],
+        hp: 330,
+      }),
+    );
+
+    knockOut(state, "p2");
+
+    expect(state.players.p1.prizes).toHaveLength(3);
+    expect(state.log.filter((e) => /takes a Prize/.test(e.text))).toHaveLength(3);
   });
 });

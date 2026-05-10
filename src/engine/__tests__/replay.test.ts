@@ -287,6 +287,7 @@ describe("replay — recorder + loader", () => {
       "resolveInPlayTarget",
       "resolveHandReveal",
       "resolveRareCandyChoice",
+      "skipPrimeCatcherSelfSwitch",
     ];
     // Force the type-system to enumerate every kind: if a future kind is
     // added without listing it here, the assertion below catches it.
@@ -309,6 +310,7 @@ describe("replay — recorder + loader", () => {
       resolveInPlayTarget: true,
       resolveHandReveal: true,
       resolveRareCandyChoice: true,
+      skipPrimeCatcherSelfSwitch: true,
     };
     for (const k of expectedKinds) expect(dummy[k]).toBe(true);
   });

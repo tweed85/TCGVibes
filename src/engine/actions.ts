@@ -486,6 +486,13 @@ export function playTrainer(
     if (state.stadium && state.stadium.card.name === t.name) {
       return fail(`Can't play ${t.name} — a Stadium with the same name is already in play.`);
     }
+    // Ange Floette can only be played by discarding Prism Tower from play.
+    // Same-turn replacement is fine because Prism Tower and Ange Floette
+    // have different names (the same-name gate above doesn't trigger).
+    if (t.name === "Ange Floette" &&
+        (!state.stadium || state.stadium.card.name !== "Prism Tower")) {
+      return fail("Ange Floette can only be played by discarding Prism Tower.");
+    }
     if (state.stadium) {
       const prev = state.stadium;
       state.players[prev.controller].discard.push(prev.card);
@@ -674,6 +681,26 @@ export function promoteBenchToActive(
     // No bench (rare race): drop the energies to discard.
     owner.discard.push(...state.pendingHeavyBaton.energies);
     state.pendingHeavyBaton = null;
+  }
+
+  // Amulet of Hope (mid-KO interactive picker): open the deck-search picker
+  // for up to 3 cards once promote ordering is stable. Picker's
+  // `endTurnOnResolve` is NOT set — the resolver chains back into the
+  // onPromoteResolved continuation via the same shape Heavy Baton uses.
+  if (
+    (state.phase as string) !== "gameOver" &&
+    state.pendingAmuletOfHope &&
+    state.pendingAmuletOfHope.ownerId === player
+  ) {
+    state.pendingAmuletOfHope = null;
+    if (setDeckSearchPick(
+      state, player, () => true, 3,
+      "Amulet of Hope: pick up to 3 cards from your deck",
+      { afterPick: { kind: "amuletOfHopeResume" } },
+    )) {
+      return ok;
+    }
+    // No cards in deck (extremely rare) — fall through to the continuation.
   }
 
   const cont = state.onPromoteResolved;
@@ -982,9 +1009,14 @@ function executeAttackHit(
         // Handheld Fan: move 1 Energy from the attacker to one of the
         // attacker's Bench Pokémon. Even if our holder is KO'd by the
         // hit, this still fires (per card text "even if this Pokémon is
-        // Knocked Out"). Auto-pick: the attacker's first bench Pokémon.
+        // Knocked Out").
         const attackerSide = state.players[player];
-        if (atk.attachedEnergy.length > 0 && attackerSide.bench.length > 0) {
+        const defenderSide = state.players[defOwner];
+        if (atk.attachedEnergy.length === 0 || attackerSide.bench.length === 0) {
+          // No legal move — skip silently.
+        } else if (defenderSide.isAI || attackerSide.bench.length === 1) {
+          // AI defender or single bench target: auto-pick the first Energy
+          // and the first bench Pokémon.
           const en = atk.attachedEnergy.shift()!;
           attackerSide.bench[0].attachedEnergy.push(en);
           logEvent(
@@ -992,6 +1024,10 @@ function executeAttackHit(
             "system",
             `Handheld Fan: ${en.name} moves from ${atk.card.name} to ${attackerSide.bench[0].card.name}.`,
           );
+        } else {
+          // Human defender + 2+ bench: defer the move to a defender-side
+          // picker. finishHit() opens the prompt and gates endTurn on it.
+          state.pendingHandheldFan = { defenderId: defOwner, attackerSideId: player };
         }
       }
     }
@@ -1106,6 +1142,21 @@ function finishHit(
       state.pendingInPlayTarget.action.kind === "attachEnergyFromDiscardPicker") &&
     state.pendingInPlayTarget.action.finishTurn
   ) {
+    return;
+  }
+  // Handheld Fan: human defender hasn't picked the bench target yet. Open
+  // the picker now and gate endTurn on it (resolveInPlayTarget's
+  // "handheldFanPick" case fires endTurn after the move applies).
+  if (state.pendingHandheldFan) {
+    const fan = state.pendingHandheldFan;
+    state.pendingInPlayTarget = {
+      player: fan.defenderId,
+      label: "Handheld Fan: pick a Benched Pokémon (opponent's side) to receive 1 Energy",
+      scope: "opp",
+      slot: "bench",
+      filter: "anyPokemon",
+      action: { kind: "handheldFanPick" },
+    };
     return;
   }
   const phaseAfter: string = state.phase;

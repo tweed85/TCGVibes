@@ -7,7 +7,7 @@
 // returned at whatever count it could assemble — games won't start under 60
 // cards, so validatedDeckSpecs() filters those out from the UI dropdown.
 
-import { cardsByName } from "./cards";
+import { cardsByName, legalMarks } from "./cards";
 import { importDecklist } from "./decklistParser";
 import type { Card } from "../engine/types";
 
@@ -490,6 +490,14 @@ export function validateDeckForPlay(cards: Card[]): string | null {
   if (cards.length !== 60) return `Deck has ${cards.length} cards (needs 60).`;
   if (!cards.some((c) => c.supertype === "Pokémon" && (c.subtypes ?? []).includes("Basic"))) {
     return "Deck has no Basic Pokémon — game cannot start.";
+  }
+  if (legalMarks.length > 0) {
+    const illegal = cards.find(
+      (c) => c.regulationMark && !legalMarks.includes(c.regulationMark),
+    );
+    if (illegal) {
+      return `${illegal.name} has regulation mark ${illegal.regulationMark}, which is not legal in the current Standard card pool (${legalMarks.join("/")}).`;
+    }
   }
   return null;
 }

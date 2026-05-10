@@ -6,10 +6,11 @@
 // is pending, the game is paused (phase = "pick"); other player actions are
 // blocked until the pick resolves.
 
-import { applyEvolveSideEffects, endTurn as endTurnRule, logEvent, makePokemonInPlay } from "./rules";
+import { applyEvolveSideEffects, endTurn as endTurnRule, finishEndTurn, logEvent, makePokemonInPlay } from "./rules";
 import { fireTriggeredOnBench, fireTriggeredOnEvolve } from "./abilities";
 import type {
   Card,
+  EnergyCard,
   GameState,
   PlayerId,
 } from "./types";
@@ -28,6 +29,14 @@ function shuffleDeck(state: GameState, pl: PlayerId): void {
     const j = state.rng.int(i + 1);
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
+}
+
+function isBasicEnergy(c: Card): c is EnergyCard {
+  return c.supertype === "Energy" && (c.subtypes ?? []).includes("Basic");
+}
+
+function energyTypes(c: EnergyCard): string[] {
+  return c.provides.length > 0 ? c.provides : [c.name];
 }
 
 // ---------------------------------------------------------------------------
@@ -61,6 +70,10 @@ export function setDeckSearchPick(
     // and Wondrous-Patch-style flows. Only meaningful when the predicate
     // restricts to Energy.
     attachToInstanceId?: string;
+    afterPick?: import("./types").PendingPick["afterPick"];
+    // Enforce different basic Energy types in the picked set (Energy
+    // Search Pro). Resolver rejects duplicates.
+    uniqueByEnergyType?: boolean;
   } = {},
 ): boolean {
   const pl = state.players[player];
@@ -100,6 +113,8 @@ export function setDeckSearchPick(
     toEvolve: options.toEvolve,
     postResolveChain: options.postResolveChain,
     attachToInstanceId: options.attachToInstanceId,
+    afterPick: options.afterPick,
+    uniqueByEnergyType: options.uniqueByEnergyType,
     // Snapshot the non-matching deck cards so the UI's "All" tab can show
     // the entire deck during the search. Slice() to avoid sharing state with
     // pl.deck (which gets mutated when the pick resolves).
@@ -230,6 +245,177 @@ function applyChainStep(
         c.supertype === "Energy" && (c.subtypes ?? []).includes("Basic");
       if (!setDeckSearchPick(state, player, pred, 1, "Larry's Skill (3 of 3): pick a Basic Energy")) {
         logEvent(state, player, "Larry's Skill: no Basic Energy in deck.");
+      }
+      break;
+    }
+  }
+}
+
+function applyAfterPick(
+  state: GameState,
+  player: PlayerId,
+  afterPick: NonNullable<import("./types").PendingPick["afterPick"]>,
+  picked: Card[],
+): void {
+  const pl = state.players[player];
+  switch (afterPick.kind) {
+    case "crispinHandEnergy": {
+      const handEnergy = picked.find(isBasicEnergy);
+      if (!handEnergy) return;
+      const pickedTypes = new Set(energyTypes(handEnergy));
+      const pred = (c: Card): boolean =>
+        isBasicEnergy(c) && energyTypes(c).every((t) => !pickedTypes.has(t));
+      if (!setDeckSearchPick(
+        state,
+        player,
+        pred,
+        1,
+        "Crispin (2 of 2): pick a different basic Energy to attach",
+        { afterPick: { kind: "crispinAttachEnergy" } },
+      )) {
+        logEvent(state, player, "Crispin: no different basic Energy in deck to attach.");
+      }
+      break;
+    }
+    case "crispinAttachEnergy": {
+      const attachEnergy = picked.find(isBasicEnergy);
+      if (!attachEnergy) return;
+      const handIdx = pl.hand.lastIndexOf(attachEnergy);
+      if (handIdx >= 0) pl.hand.splice(handIdx, 1);
+      const allies = [pl.active, ...pl.bench].filter((p): p is import("./types").PokemonInPlay => !!p);
+      if (allies.length === 0) {
+        pl.hand.push(attachEnergy);
+        logEvent(state, player, "Crispin: no Pokémon in play to attach Energy to.");
+        return;
+      }
+      state.pendingInPlayTarget = {
+        player,
+        label: `Crispin: pick one of your Pokémon to attach ${attachEnergy.name}`,
+        scope: "own",
+        slot: "anywhere",
+        filter: "anyPokemon",
+        action: { kind: "crispinAttachEnergy", energy: attachEnergy },
+      };
+      break;
+    }
+    case "amuletOfHopeResume": {
+      // Picker has resolved; the picked cards are already in hand. Resume
+      // the deferred onPromoteResolved continuation (set by the attacker's
+      // finishHit or by the test that triggered the KO).
+      const cont = state.onPromoteResolved;
+      state.onPromoteResolved = null;
+      if (cont === "endTurn") endTurnRule(state);
+      // Other continuations (passTurn, secondAttack) live in actions.ts and
+      // would need a lazy import to invoke here. The common case
+      // (opponent-attack KO) sets "endTurn" so this covers the audit path.
+      break;
+    }
+    case "powerglassAttach": {
+      // Pull the picked basic Energy out of hand (resolvePendingPick put
+      // it there as the default destination), attach to Active, then
+      // resume the deferred endTurn body.
+      const energy = picked.find(isBasicEnergy);
+      if (energy) {
+        const handIdx = pl.hand.lastIndexOf(energy);
+        if (handIdx >= 0) {
+          pl.hand.splice(handIdx, 1);
+          if (pl.active) {
+            pl.active.attachedEnergy.push(energy);
+            logEvent(state, player, `Powerglass attaches ${energy.name} to ${pl.active.card.name}.`);
+          } else {
+            pl.discard.push(energy);
+          }
+        }
+      }
+      // Resume endTurn from the post-Powerglass body.
+      finishEndTurn(state);
+      break;
+    }
+    case "glassTrumpetStash": {
+      // Pull the picked basic Energy back out of hand (resolvePendingPick
+      // deposited them there as the default destination), stash on
+      // pendingAttachQueue, and open the per-Colorless-Bench attach
+      // picker. This way the Energy never visibly transits the hand.
+      const energies: EnergyCard[] = [];
+      for (const c of picked) {
+        if (!isBasicEnergy(c)) continue;
+        const idx = pl.hand.lastIndexOf(c);
+        if (idx >= 0) {
+          pl.hand.splice(idx, 1);
+          energies.push(c);
+        }
+      }
+      if (energies.length === 0) return;
+      state.pendingAttachQueue = {
+        ownerId: player,
+        energies,
+        sourceLabel: "Glass Trumpet",
+      };
+      state.pendingInPlayTarget = {
+        player,
+        label: `Glass Trumpet: pick a Benched Colorless Pokémon to attach ${energies[0].name}`,
+        scope: "own",
+        slot: "bench",
+        filter: "anyPokemon",
+        action: { kind: "glassTrumpetAttach", remaining: energies.length },
+      };
+      break;
+    }
+    case "grandTreeApplyStage1":
+    case "grandTreeApplyStage2": {
+      const stageEvo = picked.find(
+        (c) =>
+          c.supertype === "Pokémon" &&
+          !!(c as import("./types").PokemonCard).evolvesFrom,
+      ) as import("./types").PokemonCard | undefined;
+      if (!stageEvo) return;
+      const handIdx = pl.hand.lastIndexOf(stageEvo);
+      if (handIdx < 0) return;
+      const ally = [pl.active, ...pl.bench]
+        .filter((p): p is import("./types").PokemonInPlay => !!p)
+        .find((p) => p.instanceId === afterPick.targetInstanceId);
+      if (!ally) {
+        // Captured ally is gone (KO'd between steps?) — leave the card in
+        // hand as a defensive fallback.
+        return;
+      }
+      if (ally.card.name !== stageEvo.evolvesFrom) {
+        // Mismatch (the captured ally evolved out from under us). Bail.
+        return;
+      }
+      pl.hand.splice(handIdx, 1);
+      ally.evolvedFrom.push(ally.card);
+      ally.card = stageEvo;
+      applyEvolveSideEffects(state, ally);
+      logEvent(state, player, `Grand Tree: evolves into ${stageEvo.name}.`);
+      fireTriggeredOnEvolve(state, player, ally);
+
+      // After Stage 1 lands, optionally chain into the Stage 2 search.
+      if (afterPick.kind === "grandTreeApplyStage1") {
+        const targetInstanceId = afterPick.targetInstanceId;
+        const stage2Pred = (c: Card) =>
+          c.supertype === "Pokémon" &&
+          (c.subtypes ?? []).includes("Stage 2") &&
+          (c as import("./types").PokemonCard).evolvesFrom === ally.card.name;
+        if (
+          !setDeckSearchPick(
+            state,
+            player,
+            stage2Pred,
+            1,
+            `Grand Tree (optional): pick a Stage 2 that evolves from ${ally.card.name}`,
+            {
+              afterPick: { kind: "grandTreeApplyStage2", targetInstanceId },
+            },
+          )
+        ) {
+          // No Stage 2 in deck — log and shuffle.
+          logEvent(state, player, "Grand Tree: no matching Stage 2 in deck.");
+          shuffleDeck(state, player);
+        }
+      } else {
+        // After the optional Stage 2, shuffle once.
+        shuffleDeck(state, player);
       }
       break;
     }
@@ -371,9 +557,25 @@ export function resolvePendingPick(
     else unpicked.push(pick.pool[i]);
   }
 
+  // Different-basic-Energy-types constraint (Energy Search Pro). The UI
+  // may grey out same-type tiles, but the resolver is the correctness
+  // layer — reject duplicates here even if a future UI bug allows them.
+  if (pick.uniqueByEnergyType) {
+    const seen = new Set<string>();
+    for (const c of picked) {
+      if (!isBasicEnergy(c)) continue;
+      for (const t of energyTypes(c)) {
+        if (seen.has(t)) return fail("Energy types must be different.");
+        seen.add(t);
+      }
+    }
+  }
+
   const pl = state.players[player];
   if (pick.pickedDestination === "discard") {
     pl.discard.push(...picked);
+  } else if (pick.pickedDestination === "topOfDeck") {
+    // Routed after unpicked cards are returned/shuffled below.
   } else {
     pl.hand.push(...picked);
   }
@@ -414,9 +616,16 @@ export function resolvePendingPick(
     case "topOfDeck":
       pl.deck.unshift(...unpicked);
       break;
+    case "discard":
+      pl.discard.push(...unpicked);
+      break;
     case "returnToDiscard":
       pl.discard.push(...unpicked);
       break;
+  }
+
+  if (pick.pickedDestination === "topOfDeck" && picked.length > 0) {
+    pl.deck.unshift(...picked);
   }
 
   if (picked.length) {
@@ -486,6 +695,7 @@ export function resolvePendingPick(
 
   const shouldEndTurn = pick.endTurnOnResolve === true;
   const chain = pick.postResolveChain;
+  const afterPick = pick.afterPick;
   state.pendingPick = null;
   state.phase = "main";
   // Fire triggered-on-bench abilities *after* clearing pendingPick so any
@@ -495,6 +705,7 @@ export function resolvePendingPick(
   // the current pool is returned/shuffled so the next stage's predicate
   // searches the freshly-updated deck.
   if (chain) applyChainStep(state, player, chain);
+  if (afterPick) applyAfterPick(state, player, afterPick, picked);
   if (shouldEndTurn) endTurnRule(state);
   return ok;
 }

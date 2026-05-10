@@ -142,6 +142,9 @@ export function setupGame(
     pendingPromote: null,
     pendingPromoteQueue: [],
     pendingHeavyBaton: null,
+    pendingAttachQueue: null,
+    pendingHandheldFan: null,
+    pendingAmuletOfHope: null,
     onPromoteResolved: null,
     pendingSecondAttack: null,
     pendingPick: null,
@@ -675,7 +678,7 @@ export function prizeValue(card: PokemonCard): number {
   // Mega Evolution ex Rule: "When your Mega Evolution Pokémon ex is Knocked
   // Out, your opponent takes 3 Prize cards." Cards mark this with both "MEGA"
   // (or "Mega ...") and "ex" subtypes — check Mega first.
-  if (subs.some((s) => /^MEGA$/i.test(s) || /^Mega /.test(s))) return 3;
+  if (subs.some((s) => /^mega(?:\s|$)/i.test(s))) return 3;
   if (subs.includes("VMAX")) return 3;
   if (subs.includes("VSTAR")) return 2;
   if (subs.includes("V")) return 2;
@@ -728,38 +731,45 @@ export function knockOut(
   for (const act of byOpponentAttack ? toolOnKoActions(state, ko) : []) {
     if (act.kind === "searchDeckAnyN") {
       // Amulet of Hope — search your deck for up to N cards. Mid-KO we can't
-      // open an interactive pick (pendingPromote needs the phase), so we do
-      // a priority-based auto-search: Basic Pokémon first (so the promoted
-      // Active has backup), then draw-Supporters (Iono / Professor's), then
-      // Pokémon evolutions, then anything else. Still shuffles afterward.
-      const priority = (c: Card): number => {
-        if (c.supertype === "Pokémon" && c.subtypes.includes("Basic")) return 4;
-        if (c.supertype === "Trainer" && c.subtypes.includes("Supporter")) return 3;
-        if (c.supertype === "Pokémon") return 2;
-        if (c.supertype === "Energy") return 1;
-        return 0;
-      };
-      const sortedIdxs = owner.deck
-        .map((c, i) => ({ i, prio: priority(c) }))
-        .sort((a, b) => b.prio - a.prio)
-        .slice(0, act.count)
-        .map((x) => x.i)
-        .sort((a, b) => b - a); // splice from high to low index
-      const taken: Card[] = [];
-      for (const i of sortedIdxs) taken.push(...owner.deck.splice(i, 1));
-      owner.hand.push(...taken);
-      if (taken.length > 0) {
-        logEvent(
-          state,
-          ownerId,
-          `Amulet of Hope: searches deck for ${taken.map((c) => c.name).join(", ")}.`,
-        );
-      }
-      // Shuffle afterwards per the card text.
-      const arr = owner.deck;
-      for (let i = arr.length - 1; i > 0; i--) {
-        const j = state.rng.int(i + 1);
-        [arr[i], arr[j]] = [arr[j], arr[i]];
+      // open an interactive pick (pendingPromote needs the phase), so:
+      //   - AI owner: keep the priority-based auto-search (Basic → Supporter
+      //     → Pokémon → Energy → other), preserved unchanged.
+      //   - Human owner: stash on `pendingAmuletOfHope` and defer the picker
+      //     until after `promoteBenchToActive` completes. Mirrors Heavy
+      //     Baton's pause-and-resume pattern.
+      if (owner.isAI) {
+        const priority = (c: Card): number => {
+          if (c.supertype === "Pokémon" && c.subtypes.includes("Basic")) return 4;
+          if (c.supertype === "Trainer" && c.subtypes.includes("Supporter")) return 3;
+          if (c.supertype === "Pokémon") return 2;
+          if (c.supertype === "Energy") return 1;
+          return 0;
+        };
+        const sortedIdxs = owner.deck
+          .map((c, i) => ({ i, prio: priority(c) }))
+          .sort((a, b) => b.prio - a.prio)
+          .slice(0, act.count)
+          .map((x) => x.i)
+          .sort((a, b) => b - a); // splice from high to low index
+        const taken: Card[] = [];
+        for (const i of sortedIdxs) taken.push(...owner.deck.splice(i, 1));
+        owner.hand.push(...taken);
+        if (taken.length > 0) {
+          logEvent(
+            state,
+            ownerId,
+            `Amulet of Hope: searches deck for ${taken.map((c) => c.name).join(", ")}.`,
+          );
+        }
+        const arr = owner.deck;
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = state.rng.int(i + 1);
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+      } else {
+        // Human: defer the picker until after the promote completes.
+        state.pendingAmuletOfHope = { ownerId };
+        logEvent(state, ownerId, "Amulet of Hope: pick up to 3 cards from your deck after you promote.");
       }
     } else if (act.kind === "moveEnergyToBench") {
       // Heavy Baton — move Energy from the KO'd Pokémon to a Benched ally.
@@ -1108,20 +1118,52 @@ export function endTurn(state: GameState): void {
 
   const prev = state.players[state.activePlayer];
   // Powerglass end-of-turn attach: Active with this Tool gets a Basic Energy
-  // from discard attached to it.
-  if (prev.active) {
-    const hasPowerglass = prev.active.tools.some((t) => t.name === "Powerglass");
-    if (hasPowerglass) {
-      const idx = prev.discard.findIndex(
-        (c) => c.supertype === "Energy" && c.subtypes.includes("Basic"),
-      );
-      if (idx >= 0) {
-        const [e] = prev.discard.splice(idx, 1);
+  // from discard attached to it. "You may attach" — humans get a picker
+  // (min 0 / max 1). AI keeps the existing first-Energy auto-attach.
+  if (prev.active && prev.active.tools.some((t) => t.name === "Powerglass")) {
+    const basicEnergyIdxs: number[] = [];
+    prev.discard.forEach((c, i) => {
+      if (c.supertype === "Energy" && c.subtypes.includes("Basic")) basicEnergyIdxs.push(i);
+    });
+    if (basicEnergyIdxs.length > 0) {
+      if (prev.isAI) {
+        // AI: auto-pick the first Basic Energy.
+        const [e] = prev.discard.splice(basicEnergyIdxs[0], 1);
         prev.active.attachedEnergy.push(e as import("./types").EnergyCard);
         logEvent(state, prev.id, `Powerglass attaches ${e.name} to ${prev.active.card.name}.`);
+      } else {
+        // Human: open a picker and pause endTurn. resolvePendingPick's
+        // `powerglassAttach` afterPick handler resumes by calling
+        // `finishEndTurn` after the chosen Energy is attached.
+        const pool = basicEnergyIdxs.map((i) => prev.discard[i]);
+        const rest = prev.discard.filter((_, i) => !basicEnergyIdxs.includes(i));
+        prev.discard = rest;
+        state.pendingPick = {
+          player: prev.id,
+          label: "Powerglass: optionally attach 1 Basic Energy from discard to your Active",
+          pool,
+          min: 0,
+          max: 1,
+          unpicked: "returnToDiscard",
+          source: "discard",
+          afterPick: { kind: "powerglassAttach" },
+        };
+        state.phase = "pick";
+        return;
       }
     }
   }
+  finishEndTurn(state);
+}
+
+// Continuation of endTurn after Powerglass's optional picker resolves.
+// Called inline when no picker is needed (AI / no Powerglass / no Basic
+// Energy in discard) and from the `powerglassAttach` afterPick handler
+// once the human picker resolves.
+export function finishEndTurn(state: GameState): void {
+  if (state.phase === "gameOver") return;
+  if (state.pendingPromote) return;
+  const prev = state.players[state.activePlayer];
   // Ignition Energy: "If this card is attached to your Active Pokémon,
   // discard it at the end of your turn." Scope is the ACTIVE only, not bench
   // — bench-attached Ignition Energy persists across turns until that

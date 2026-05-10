@@ -1293,6 +1293,7 @@ export type PendingPickFallback =
   | "shuffleIntoDeck" // search / top-peek effects
   | "bottomOfDeck" // a few peek effects
   | "topOfDeck" // peek-and-discard: kept cards go back on top in pool order
+  | "discard" // Explorer's Guidance: unpicked top cards are discarded
   | "returnToDiscard"; // discard-recovery effects
 
 // Reveal-opponent's-hand prompt. The initiator (`player`) picks which cards
@@ -1304,14 +1305,15 @@ export interface PendingHandReveal {
   label: string;
   min: number;
   max: number;
-  filter: "item" | "tool" | "itemOrTool" | "supporter" | "pokemon" | "any";
-  action: "discard" | "toBottomOfDeck";
+  filter: "item" | "tool" | "itemOrTool" | "supporter" | "pokemon" | "energy" | "any";
+  action: "discard" | "toBottomOfDeck" | "toTopOfDeck";
   // Optional follow-up run by the resolver after the pick completes.
   // `useRevealedCount` (Perrin): when set, the post-search caps at the
   // number of cards the player actually revealed instead of the fixed max
   // (Perrin: "search for the SAME number of Pokémon").
   postAction?:
-    | { kind: "drawUntilHand"; targetSize: number } // Naveen
+    | { kind: "drawUntilHand"; targetSize: number } // Naveen / Mystery Garden
+    | { kind: "drawCards"; count: number } // Kofu / Prism Tower
     | { kind: "searchDeckAnyPokemon"; max: number; label: string; useRevealedCount?: boolean }
     | { kind: "secretBoxStartItemSearch" }; // Secret Box: kicks off Item → Tool → Supporter → Stadium chain
 }
@@ -1360,6 +1362,9 @@ export interface PendingInPlayTarget {
     // Ability: attach the stashed basic Energy from discard to the clicked
     // own Pokémon. (Blaziken ex Seething Spirit.)
     | { kind: "abilityAttachEnergyFromDiscard"; energyIndexInDiscard: number; ownerId: PlayerId; abilityName: string }
+    // Crispin — after choosing the attach Energy from deck, click one of
+    // your Pokémon to receive it.
+    | { kind: "crispinAttachEnergy"; energy: EnergyCard }
     // Shaymin "Send Flowers" — first-step picker. Player clicks a Benched
     // Pokémon of `pokemonType`; resolver chains into a deck-search-pick that
     // attaches the chosen Energy to the clicked instance via `attachToInstanceId`.
@@ -1376,7 +1381,33 @@ export interface PendingInPlayTarget {
     | { kind: "attachEnergyFromDiscardPicker"; remaining: number; energyType: EnergyType; attackName: string; finishTurn?: boolean }
     // Heavy Baton: the energies were stashed mid-KO; the player picks one of
     // their Bench Pokémon to receive them all at once.
-    | { kind: "heavyBatonPick" };
+    | { kind: "heavyBatonPick" }
+    // Prime Catcher step 1: pick the opp Benched Pokémon to gust to Active.
+    | { kind: "primeCatcherGust" }
+    // Prime Catcher step 2 (optional): pick own Benched Pokémon to swap with
+    // own Active. Skipped via `skipPrimeCatcherSelfSwitch`.
+    | { kind: "primeCatcherSelfSwitch" }
+    // Surfing Beach: pick which Water-typed Benched Pokémon to switch into
+    // the Active spot.
+    | { kind: "surfingBeachSwitch" }
+    // Grand Tree step 1: pick the Basic in play to evolve. The chain
+    // captures the chosen instance ID and then opens a deck search for
+    // matching Stage 1 / Stage 2 cards.
+    | { kind: "grandTreeBasicTarget" }
+    // Glass Trumpet step 2 (after the discard-recovery picker stashed
+    // basic Energy in `pendingAttachQueue`): each click on a Benched
+    // Colorless Pokémon attaches one queued Energy. `remaining` decrements;
+    // when 0 OR queue is empty, the picker closes.
+    | { kind: "glassTrumpetAttach"; remaining: number }
+    // Scramble Switch step 1: pick the Bench Pokémon to switch into the
+    // Active spot. Step 2 (energy transfer) is currently always-move-all
+    // — see APPROXIMATION comment in trainerEffects.ts.
+    | { kind: "scrambleSwitchTarget" }
+    // Handheld Fan: defender picks one of the attacker's Bench Pokémon to
+    // receive an Energy moved off the attacker's Active. This runs on the
+    // defender's side during the attacker's turn — `player` on the
+    // pending prompt is the defender; `targetOwner` is the attacker.
+    | { kind: "handheldFanPick" };
 }
 
 export interface PendingPick {
@@ -1405,8 +1436,9 @@ export interface PendingPick {
   // (Nest Ball, Buddy-Buddy Poffin, Hop's Bag, Lumiose City).
   toBench?: boolean;
   // Where picked cards go. Default "hand". "discard" routes picks straight to
-  // the discard pile (Raifort: "discard any number of them").
-  pickedDestination?: "hand" | "discard";
+  // the discard pile (Raifort). "topOfDeck" routes search picks to the top
+  // after shuffling the unpicked cards back (Ciphermaniac's Codebreaking).
+  pickedDestination?: "hand" | "discard" | "topOfDeck";
   // If true, picked Pokémon are applied as an evolution onto a matching ally
   // (Salvatore: search for an Evolution, put it onto the Pokémon it evolves
   // from). Falls back to depositing in hand if no eligible ally is found.
@@ -1421,6 +1453,34 @@ export interface PendingPick {
   // resolves. Used by multi-stage search supporters like Dawn (Basic → Stage
   // 1 → Stage 2) where each stage has a different predicate.
   postResolveChain?: DeckSearchChainStep;
+  // If true, the picker enforces "different basic Energy types" — the
+  // resolver rejects a selection whose picked basic-Energy cards include
+  // any duplicate `provides` type. UI may grey out same-type tiles after
+  // the first selection, but the resolver is the correctness layer.
+  // (Energy Search Pro.)
+  uniqueByEnergyType?: boolean;
+  // Effect-specific continuation that needs the cards selected by this pick.
+  afterPick?:
+    | { kind: "crispinHandEnergy" }
+    | { kind: "crispinAttachEnergy" }
+    // Grand Tree step 2: apply the picked Stage 1 (in hand) onto the
+    // captured Basic instance, run applyEvolveSideEffects, then open the
+    // optional Stage 2 search keyed off the same instance.
+    | { kind: "grandTreeApplyStage1"; targetInstanceId: string }
+    // Grand Tree step 3: apply the optional picked Stage 2 onto the
+    // already-evolved Stage 1 instance.
+    | { kind: "grandTreeApplyStage2"; targetInstanceId: string }
+    // Glass Trumpet step 2: pull the selected basic Energy out of the
+    // discard-recovery hand-deposit, stash them on `pendingAttachQueue`,
+    // and open the per-Colorless-Bench attach picker.
+    | { kind: "glassTrumpetStash" }
+    // Powerglass: pull the picked basic Energy out of hand, attach it to
+    // the Active, and resume endTurn via `finishEndTurn`.
+    | { kind: "powerglassAttach" }
+    // Amulet of Hope: after the post-promote picker resolves, run the
+    // deferred onPromoteResolved continuation (typically endTurn from the
+    // attacker's attack flow).
+    | { kind: "amuletOfHopeResume" };
 }
 
 // Next step in a chained deck search — keyed by a symbolic id so the
@@ -1434,7 +1494,12 @@ export type DeckSearchChainStep =
   | { kind: "secret-box-supporter" } // Secret Box step 3 of 4
   | { kind: "secret-box-stadium" } // Secret Box step 4 of 4
   | { kind: "larry-skill-supporter" } // Larry's Skill: after the Pokémon, pick a Supporter
-  | { kind: "larry-skill-energy" }; // Larry's Skill: after the Supporter, pick a Basic Energy
+  | { kind: "larry-skill-energy" } // Larry's Skill: after the Supporter, pick a Basic Energy
+  // Grand Tree: after the Basic was chosen + Stage 1 search opened, this
+  // step optionally opens the Stage 2 search keyed off the just-evolved
+  // instance. `targetInstanceId` is the captured ally so the chain
+  // evolves the user's chosen Basic, not the first matching ally.
+  | { kind: "grand-tree-stage2"; targetInstanceId: string };
 
 // Short "hey, heads up" modal shown between chained deck searches when the
 // current stage has no qualifying cards. Lets the player acknowledge the
@@ -1492,6 +1557,28 @@ export interface GameState {
   // energies. Auto-resolves for AI and for humans with only one bench.
   pendingHeavyBaton:
     | { ownerId: PlayerId; energies: EnergyCard[]; max: number }
+    | null;
+  // Glass Trumpet (and any "pick from discard, then place in play" effect):
+  // discard-recovery picker parks selected Energy here, then a follow-up
+  // pendingInPlayTarget routes them onto chosen Bench targets without ever
+  // putting the cards in hand.
+  pendingAttachQueue:
+    | { ownerId: PlayerId; energies: EnergyCard[]; sourceLabel: string }
+    | null;
+  // Handheld Fan: when the holder takes damage during opponent's attack and
+  // the holder's owner (defender) is human + the attacker has 2+ bench,
+  // defer the auto-move so the defender can pick which of the attacker's
+  // Bench Pokémon receives the Energy. The attacker's `endTurn` is gated
+  // on this picker resolving (mirrors the Heavy Baton pause pattern).
+  pendingHandheldFan:
+    | { defenderId: PlayerId; attackerSideId: PlayerId }
+    | null;
+  // Amulet of Hope: when the holder is KO'd by an opponent attack, the
+  // owner gets to search up to 3 cards from their deck. Defer the picker
+  // until AFTER promoteBenchToActive completes so KO/promote ordering is
+  // stable (mirrors Heavy Baton).
+  pendingAmuletOfHope:
+    | { ownerId: PlayerId }
     | null;
   // What to do once the promote resolves.
   //  - "endTurn": KO happened during attack, run endTurn next

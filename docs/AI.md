@@ -4,6 +4,11 @@ Two AI versions, gated per-player by `PlayerState.aiVersion` (default
 `"v1"`). MCTS is a separate opt-in via `PlayerState.mctsBudgetMs > 0`.
 See [../CLAUDE.md](../CLAUDE.md) for the project entry point.
 
+For the implementation roadmap to make the CPU a stronger player, see
+[AI_CPU_BUILD_PLAN.md](AI_CPU_BUILD_PLAN.md). That doc is written as a
+Claude-ready build plan with phases, exact files, required tests, and
+per-change guardrails.
+
 ## v1 (always-on)
 
 - Greedy step loop + 1-ply lookahead minimax for attack choice (clone
