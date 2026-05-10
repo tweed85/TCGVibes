@@ -1169,6 +1169,16 @@ button, select, input, [role="button"] {
   box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.35), var(--shadow-card-hover);
   transform: translateY(-1px);
 }
+/* Phase 1 preflight: hand cards with no legal play this turn render dimmed.
+   Click still fires (and the engine returns the same reason); the dim is
+   purely advisory. The reason text shows in the title tooltip. */
+.card.illegal:not(.selected) {
+  opacity: 0.55;
+  filter: grayscale(0.4);
+}
+.card.illegal:hover:not(.selected) {
+  opacity: 0.75;
+}
 /* Legal drop target for whatever's selected in hand — pulsing green halo so
    the player can see at a glance where the selected card can be played. */
 .card.legal-target {

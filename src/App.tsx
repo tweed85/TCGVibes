@@ -13,6 +13,7 @@ import {
 } from "./engine/actions";
 import type { TrainerTarget } from "./engine/actions";
 import { activateAbility } from "./engine/abilities";
+import { computePlayerPlayability } from "./engine/preflight";
 import { aiStep, resolveAiCoinChoice, resolveAiPendingPromote, resolveAiSetup } from "./engine/ai";
 import { resolvePendingPick, resolvePendingSearchNotice } from "./engine/pendingPick";
 import {
@@ -1096,6 +1097,33 @@ export default function App() {
     rerender();
   };
 
+  // Phase 1 preflight: compute playability for the viewing player so hand
+  // cards get a `illegalReason` tooltip and a dimmed visual when no legal
+  // play is available. Click handlers still fire — the engine returns the
+  // same reason via ActionResult.reason (preflightContract.test.ts pins
+  // the parity).
+  //
+  // PREFLIGHT_UI_ENABLED gates the visual treatment so we can flip back
+  // to v0 behavior without touching the engine extraction. Default true.
+  const PREFLIGHT_UI_ENABLED = true;
+  const playability = useMemo(
+    () => (PREFLIGHT_UI_ENABLED ? computePlayerPlayability(state, viewingPlayer) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      state.log.length,
+      state.turn,
+      state.activePlayer,
+      state.phase,
+      viewingPlayer,
+      me.hand.length,
+      me.energyAttachedThisTurn,
+      me.supporterPlayedThisTurn,
+      me.retreatedThisTurn,
+      me.active?.card,
+      me.bench.length,
+    ],
+  );
+
   // Memoized on a coarse render epoch (state.log.length advances on every
   // logged action). The previous "don't memoize" comment was about evolution
   // mutating PokemonInPlay.card — covered here by including
@@ -1812,18 +1840,29 @@ export default function App() {
           </span>
         </div>
         <div className="my-hand-row">
-          {me.hand.map((c: Card, i) => (
-            <CardView
-              key={`${c.id}-${i}`}
-              card={c}
-              selected={selected?.kind === "hand" && selected.index === i}
-              onClick={() => onHandClick(i)}
-              onDragStart={(ev) => onHandDragStart(i, ev)}
-              onDragMove={onHandDragMove}
-              onDragEnd={onHandDragEnd}
-              dragging={dragging?.handIndex === i}
-            />
-          ))}
+          {me.hand.map((c: Card, i) => {
+            // Only dim cards belonging to the active player when it's their
+            // turn (otherwise everything's "Not your turn." which is noise).
+            const entry = playability?.hand[i];
+            const showIllegal =
+              !!entry &&
+              !entry.ok &&
+              myTurn &&
+              !preGameOpen;
+            return (
+              <CardView
+                key={`${c.id}-${i}`}
+                card={c}
+                selected={selected?.kind === "hand" && selected.index === i}
+                onClick={() => onHandClick(i)}
+                onDragStart={(ev) => onHandDragStart(i, ev)}
+                onDragMove={onHandDragMove}
+                onDragEnd={onHandDragEnd}
+                dragging={dragging?.handIndex === i}
+                illegalReason={showIllegal ? entry.reason : undefined}
+              />
+            );
+          })}
           {me.hand.length === 0 && <span className="muted">—</span>}
         </div>
       </div>

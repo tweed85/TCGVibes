@@ -22,6 +22,11 @@ import {
 } from "./abilities";
 import { findByName } from "../data/cards";
 import {
+  recoverFromDiscardToHand,
+  searchDeckToBench,
+  searchDeckToHand,
+} from "./effectPrefabs";
+import {
   setDeckSearchPick,
   setDiscardRecoveryPick,
   setTopPeekPick,
@@ -1201,7 +1206,7 @@ export function applyTrainerEffect(
         logEvent(state, player, "bench is full — Poffin has no effect.");
         return;
       }
-      if (!setDeckSearchPick(state, player, isBasicPokemonUpTo70Hp, 2, "Buddy-Buddy Poffin: pick up to 2 Basic Pokémon (70 HP or less) to Bench", { toBench: true })) {
+      if (!searchDeckToBench(state, player, isBasicPokemonUpTo70Hp, 2, "Buddy-Buddy Poffin: pick up to 2 Basic Pokémon (70 HP or less) to Bench")) {
         logEvent(state, player, "finds no Basic Pokémon (70 HP or less).");
       }
       return;
@@ -1285,7 +1290,7 @@ export function applyTrainerEffect(
       return;
     }
     case "searchBasicEnergy1":
-      if (!setDeckSearchPick(state, player, isBasicEnergy, 1, "Energy Search: pick 1 basic Energy")) {
+      if (!searchDeckToHand(state, player, isBasicEnergy, 1, "Energy Search: pick 1 basic Energy")) {
         logEvent(state, player, "finds no basic Energy.");
       }
       return;
@@ -2038,7 +2043,7 @@ export function applyTrainerEffect(
     case "recoverFromDiscardLana": {
       const pred = (c: Card) =>
         (c.supertype === "Pokémon" && !hasRuleBox(c)) || isBasicEnergy(c);
-      if (!setDiscardRecoveryPick(state, player, pred, 3, "Lana's Aid: pick up to 3 non-Rule-Box Pokémon or basic Energy from discard")) {
+      if (!recoverFromDiscardToHand(state, player, pred, 3, "Lana's Aid: pick up to 3 non-Rule-Box Pokémon or basic Energy from discard")) {
         logEvent(state, player, "finds nothing eligible in discard.");
       }
       return;

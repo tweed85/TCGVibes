@@ -427,6 +427,10 @@ interface Props {
   onDragEnd?: (ev: PointerEvent<HTMLElement>) => void;
   /** Visual cue while the user is mid-drag from this card. */
   dragging?: boolean;
+  /** Phase 1 preflight: when set, the card is illegal to play right now and
+   *  the reason should appear in the tooltip. Click handler still fires —
+   *  the engine returns the same reason via ActionResult.reason. */
+  illegalReason?: string;
 }
 
 // Compact tooltip text describing the whole card, shown via the `title`
@@ -559,12 +563,17 @@ function CardViewInner({
   onDragMove,
   onDragEnd,
   dragging,
+  illegalReason,
 }: Props) {
   const cls =
     `card card-imaged` +
     (selected ? " selected" : "") +
-    (dragging ? " drag-source" : "");
-  const tip = cardTooltip(card) + "\n\nShift+click (or long-press) to zoom";
+    (dragging ? " drag-source" : "") +
+    (illegalReason ? " illegal" : "");
+  const tip =
+    (illegalReason ? `${illegalReason}\n\n` : "") +
+    cardTooltip(card) +
+    "\n\nShift+click (or long-press) to zoom";
   const { pointerProps, consumeNextClick } = useCardGesture(card, {
     onDragStart,
     onDragMove,
@@ -602,7 +611,8 @@ export const CardView = memo(
   (prev, next) =>
     prev.card === next.card &&
     prev.selected === next.selected &&
-    prev.dragging === next.dragging,
+    prev.dragging === next.dragging &&
+    prev.illegalReason === next.illegalReason,
 );
 
 const STATUS_LABELS: Record<string, string> = {

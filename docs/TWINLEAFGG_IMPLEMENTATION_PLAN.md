@@ -4,6 +4,22 @@ Source repo: https://github.com/the-epsd/twinleafgg
 
 Purpose: turn the Twinleaf review into a Claude-ready implementation plan for the parts that fit TCGVibes. This is not a port plan. TCGVibes should keep its local-first React + TypeScript app, pure engine functions, seeded RNG, undo snapshots, Deck Doctor, and current card data model. Twinleaf is most useful as a reference for rules-engine structure, reusable effect helpers, prompts, replay infrastructure, card test ergonomics, and deck-editor polish.
 
+## Status — all 7 phases shipped
+
+| Phase | Status | What landed |
+| ----- | ------ | ----------- |
+| 4 — Test DSL | ✅ shipped | [`src/engine/__tests__/helpers/gameTestHelpers.ts`](../src/engine/__tests__/helpers/gameTestHelpers.ts) — `setupTestGame`, `playTrainerByName`, `attachEnergyByName`, `useAttackByName`, `useAbilityByName`, `resolvePickByName`, `expectDamage`. Routes through production action surface (does NOT bypass preflight). [`dslSmoke.test.ts`](../src/engine/__tests__/dslSmoke.test.ts) covers it. |
+| 1 — Preflight | ✅ shipped | [`src/engine/preflight.ts`](../src/engine/preflight.ts) — `canBenchBasic / canEvolve / canAttachEnergy / canPlayTrainer / canRetreat / computePlayerPlayability`, re-exporting `attackPreflight`. `canPlayTrainer` shares logic with `precheckTrainerEffect`. App.tsx hand cards dim + tooltip the reason; gated by `PREFLIGHT_UI_ENABLED` constant. [`preflightContract.test.ts`](../src/engine/__tests__/preflightContract.test.ts) pins reason parity. |
+| 7 — Format-aware legality | ✅ shipped | `format?: "Standard" \| "Expanded" \| "Retro"` field on `DeckInput` (defaults to Standard). `formatLimits()` helper makes ACE SPEC / Radiant gates ready to relax per-format. `format` cited at the report level, not per-finding. |
+| 6 — Deck builder polish | ✅ shipped | Keyboard affordances: `/` focuses search, Enter / `+` add the previewed card, `-` removes a copy, Esc closes variant picker first then modal. Single global window keydown handler, skipped while typing in inputs. |
+| 5 — Replay | ✅ shipped | [`src/version.ts`](../src/version.ts) (`APP_VERSION`), [`src/engine/gameCommands.ts`](../src/engine/gameCommands.ts) (`GameCommand` union covering 15 kinds incl. all user-resolvable prompts + dispatcher), [`src/engine/replay.ts`](../src/engine/replay.ts) (`newReplay`, `loadReplay`, schema with `appVersion`/`dataVersion`/`schemaVersion` and typed errors). [`replay.test.ts`](../src/engine/__tests__/replay.test.ts) — 6 tests including the every-prompt-has-a-command guard. See [REPLAY.md](REPLAY.md) for the determinism contract. |
+| 3 — Effect prefabs | ✅ shipped | [`src/engine/effectPrefabs.ts`](../src/engine/effectPrefabs.ts) — `searchDeckToBench`, `searchDeckToHand`, `recoverFromDiscardToHand`. Buddy-Buddy Poffin / Energy Search / Lana's Aid migrated. [`prefabBehavior.test.ts`](../src/engine/__tests__/prefabBehavior.test.ts) — 6 direct-behavior pins written **before** migration so byte-equivalent is objectively verified. |
+| 2 — Prompt adapter | ✅ shipped | [`src/engine/prompts.ts`](../src/engine/prompts.ts) — full 9-kind `PendingPrompt` union (deckPick / discardPick / inPlayTarget / switch / promote / handReveal / searchNotice / rareCandyChoice / heavyBaton). `activePrompt(state, viewer?)` projection adapter. Engine continuations (`pendingPromoteQueue`, `pendingSecondAttack`, `onPromoteResolved`) intentionally excluded. [`prompts.test.ts`](../src/engine/__tests__/prompts.test.ts) covers projection. |
+
+Verified state at landing: `npm run typecheck` clean, `npm run test` 742 passed (3 skipped), `npm run e2e` 5/5, `npm run build` clean.
+
+The phase content below is preserved as the original plan + reviewer-refined guidance, so future re-reads can audit what was intended versus what shipped.
+
 ## Non-goals
 
 - Do not import Twinleaf's Socket.IO server, database layer, Angular client, or full card implementation set.

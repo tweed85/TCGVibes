@@ -1,6 +1,6 @@
 # Test suite
 
-**Vitest — 625 tests across 37 files** (+ 3 AI_BENCH-gated).
+**Vitest — 742 tests passing across 44 files** (3 skipped, AI_BENCH-gated).
 See [../CLAUDE.md](../CLAUDE.md) for the project entry point.
 
 ## Engine tests — [../src/engine/__tests__/](../src/engine/__tests__/)
@@ -43,6 +43,32 @@ See [../CLAUDE.md](../CLAUDE.md) for the project entry point.
   attacks → DIFFERENT keys via the dataset's two Abras with different
   attacks; per-printing identity through setupGame
 
+### Twinleaf-inspired phases (all 7 shipped)
+
+- **dslSmoke** — Phase 4 sanity: `setupTestGame` reaches main / turn ≥ 2;
+  `useAttackByName` returns the engine's `ActionResult`;
+  `attachEnergyByName` resolves both `Grass Energy` and `Basic Grass Energy`.
+- **preflightContract** — Phase 1 reason-parity contract: for every
+  illegal-action fixture (out-of-phase, supporter-already-played,
+  non-evolution card, energy-already-attached, retreat-after-retreat,
+  no-bench, etc.), `preflight.canX(...).reason === actions.X(...).reason`.
+  Drift between dim/tooltip UI and engine fails this loudly.
+- **prefabBehavior** — Phase 3 pre-migration pins for Buddy-Buddy Poffin /
+  Energy Search / Lana's Aid: pendingPick shape (min/max/predicate/
+  destination), zone changes after resolution, log-text-equivalent
+  Trainer discard. Locks "byte-equivalent" for the prefab migration.
+- **prompts** — Phase 2 projection adapter: `state.pendingPick` /
+  `pendingInPlayTarget` / etc. project into `PendingPrompt` discriminated
+  union without losing min / max / pool / destination / source. Engine
+  continuations (`pendingPromoteQueue`, `pendingSecondAttack`,
+  `onPromoteResolved`) are NOT prompts and stay out of the union.
+- **replay** — Phase 5: short command stream reconstructs state via
+  `applyGameCommand`; loader rejects newer schemas with `kind:
+  "newer-schema"`; missing card ids → `kind: "missing-cards"`;
+  appVersion / dataVersion mismatch warns but loads; corrupt stream →
+  `kind: "malformed"`; static check that every `GameCommand["kind"]` is
+  in the dispatcher.
+
 ## Data tests — [../src/data/__tests__/](../src/data/__tests__/)
 
 - decklistParser
@@ -64,10 +90,14 @@ See [../CLAUDE.md](../CLAUDE.md) for the project entry point.
   "N arts" badge, click-to-pick / click-to-swap, rule-of-4 across
   printings
 
-## E2E tests — [../e2e/smoke.spec.ts](../e2e/smoke.spec.ts)
+## E2E tests — [../e2e/](../e2e/)
 
-**Playwright — 3 e2e tests.** Headless Chromium against the dev server:
-boot path, Undo round-trip, mobile viewport (375px) sanity.
+**Playwright — 5 e2e tests.** Headless Chromium against the dev server:
+
+- `smoke.spec.ts` — boot path, Undo round-trip, mobile viewport (375px) sanity.
+- `deck-doctor.spec.ts` — Deck Doctor opens from PreGameModal, analyzes a
+  preset, closes back to pre-game (no game started); Meta tab renders the
+  snapshot grade banner with no fixture-leakage.
 
 ## Test environment
 

@@ -4,7 +4,7 @@
 // First-page traffic doesn't need the full ~2,693-card scan + filter UI, so
 // this module is code-split and fetched only when the user opens it.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Card } from "../engine/types";
 import { allCards, cardsByName } from "../data/cards";
 import {
@@ -93,6 +93,10 @@ export default function DeckBuilderModal({
   // panel. Updated on tile hover/focus and on hovering a deck-list row.
   // Click/right-click on tiles keeps their existing add/zoom behavior.
   const [previewCard, setPreviewCard] = useState<Card | null>(null);
+  // Phase 6 keyboard affordances: refs + effect for "/" → focus search,
+  // Esc → close (variant picker first, then modal), and Enter / "+" / "-"
+  // operate on the focused / preview card.
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const selectedCards: Array<{ card: Card; count: number }> = useMemo(() => {
     const out: Array<{ card: Card; count: number }> = [];
@@ -236,6 +240,68 @@ export default function DeckBuilderModal({
     validation.deck.length === 60 &&
     !nameExists(name);
 
+  // Phase 6 keyboard affordances. Listens at the window so the bindings
+  // work whether the focus is on the grid, the deck panel, or nowhere.
+  // Skips when the user is typing in an input/textarea (except for Esc,
+  // which always closes the appropriate layer). Mutating helpers
+  // (setVariantPicker / changeCount / setPreviewCard / onClose) are stable
+  // closures captured by ref so the effect dep list stays small.
+  const kbStateRef = useRef({
+    effectivePreview,
+    variantPickerOpen: !!variantPicker,
+    onClose,
+  });
+  kbStateRef.current = {
+    effectivePreview,
+    variantPickerOpen: !!variantPicker,
+    onClose,
+  };
+  useEffect(() => {
+    const isTypingTarget = (el: EventTarget | null): boolean => {
+      if (!(el instanceof HTMLElement)) return false;
+      const tag = el.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+      return el.isContentEditable;
+    };
+    const handler = (ev: KeyboardEvent) => {
+      const { effectivePreview, variantPickerOpen, onClose } = kbStateRef.current;
+      // Escape: close variant picker first, then the modal.
+      if (ev.key === "Escape") {
+        if (variantPickerOpen) {
+          ev.preventDefault();
+          setVariantPicker(null);
+          return;
+        }
+        ev.preventDefault();
+        onClose();
+        return;
+      }
+      // Other shortcuts are skipped while the user is typing.
+      if (isTypingTarget(ev.target)) return;
+      if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+      if (ev.key === "/") {
+        ev.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select?.();
+        return;
+      }
+      if (!effectivePreview) return;
+      if (ev.key === "Enter" || ev.key === "+" || ev.key === "=") {
+        ev.preventDefault();
+        changeCount(effectivePreview.id, 1);
+        return;
+      }
+      if (ev.key === "-" || ev.key === "_") {
+        ev.preventDefault();
+        changeCount(effectivePreview.id, -1);
+        return;
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const saveAndAssign = (assignTo: "me" | "opp" | "both" | "none") => {
     onSave(name.trim(), validation.entries, validation.deck, assignTo);
   };
@@ -267,11 +333,12 @@ export default function DeckBuilderModal({
             />
           </label>
           <input
+            ref={searchInputRef}
             className="builder-search"
             type="text"
             value={filter.search}
             onChange={(e) => setFilter((f) => ({ ...f, search: e.target.value }))}
-            placeholder="Search card name…"
+            placeholder="Search card name… (press /)"
           />
           <select
             value={filter.supertype}

@@ -32,10 +32,21 @@ export interface DoctorContext {
   gameplayKey: (c: Card) => string;
 }
 
+/**
+ * Format the deck is built for. Used by Phase 7 format-aware legality gates
+ * (ACE SPEC, Radiant). Defaults to "Standard" when absent — TCGVibes only
+ * has Standard cards in the dataset today, so the default is correct for
+ * every existing path.
+ */
+export type DeckFormat = "Standard" | "Expanded" | "Retro";
+
 export interface DeckInput {
   cards: Card[];
   source: "preset" | "saved" | "paste";
   sourceName?: string;
+  /** Defaults to "Standard". Findings cite the assumed format once at the
+   *  report level, not per-finding. */
+  format?: DeckFormat;
   // PTCGL paste metadata (only when source === "paste"):
   entries?: DeckListEntry[];
   parseErrors?: string[];
@@ -117,6 +128,10 @@ export interface DeckComposition {
 
 export interface DeckAnalysis {
   source: { kind: DeckInput["source"]; name?: string };
+  /** Format the analysis was run against. Defaults to "Standard" when
+   *  `DeckInput.format` is absent. Cited once at the report level so users
+   *  know which legality assumptions are in play. */
+  format: DeckFormat;
   archetype: { id: Archetype; confidence: Confidence };
   composition: DeckComposition;
   findings: Finding[];
@@ -505,6 +520,21 @@ export interface AnalyzeOpts {
   disableExceptions?: boolean;
 }
 
+/**
+ * Per-format hard limits for legality findings. Same values for all formats
+ * today (Standard, Expanded, Retro all enforce 1 ACE SPEC / 1 Radiant), but
+ * the helper makes future relaxations a single-line change.
+ */
+function formatLimits(format: DeckFormat): { aceSpecMax: number; radiantMax: number } {
+  switch (format) {
+    case "Standard":
+    case "Expanded":
+    case "Retro":
+    default:
+      return { aceSpecMax: 1, radiantMax: 1 };
+  }
+}
+
 export function analyzeDeck(
   input: DeckInput,
   ctx: DoctorContext,
@@ -512,6 +542,8 @@ export function analyzeDeck(
 ): DeckAnalysis {
   const findings: Finding[] = [];
   const suppressions: SuppressionNote[] = [];
+  const format = input.format ?? "Standard";
+  const limits = formatLimits(format);
 
   // Archetype detection (used by main-attacker classification, energy plan,
   // archetype-aware findings, suppression of expected exceptions).
@@ -583,31 +615,39 @@ export function analyzeDeck(
         evidence: [`Pasted: ${n.pastedCount}`, "Allowed: 4"],
       });
     } else if (n.kind === "ace-spec") {
-      emit({
-        id: "legal.ace-spec-overage",
-        severity: "error",
-        confidence: "high",
-        actionability: "high",
-        scope: "deck",
-        category: "Legal",
-        title: "More than one ACE SPEC card",
-        detail: "A deck may contain only 1 ACE SPEC card.",
-        cards: n.cardNames,
-        evidence: n.cardNames,
-      });
+      // Format-aware: today every supported format enforces ≤1 ACE SPEC,
+      // so the gate just checks the count against the format's limit.
+      // When a future format relaxes this, formatLimits returns a higher
+      // ceiling and the finding stops firing.
+      if (n.cardNames.length > limits.aceSpecMax) {
+        emit({
+          id: "legal.ace-spec-overage",
+          severity: "error",
+          confidence: "high",
+          actionability: "high",
+          scope: "deck",
+          category: "Legal",
+          title: `More than ${limits.aceSpecMax} ACE SPEC card${limits.aceSpecMax === 1 ? "" : "s"}`,
+          detail: `${format} format allows ${limits.aceSpecMax} ACE SPEC card per deck.`,
+          cards: n.cardNames,
+          evidence: n.cardNames,
+        });
+      }
     } else if (n.kind === "radiant") {
-      emit({
-        id: "legal.radiant-overage",
-        severity: "error",
-        confidence: "high",
-        actionability: "high",
-        scope: "deck",
-        category: "Legal",
-        title: "More than one Radiant Pokémon",
-        detail: "A deck may contain only 1 Radiant Pokémon.",
-        cards: n.cardNames,
-        evidence: n.cardNames,
-      });
+      if (n.cardNames.length > limits.radiantMax) {
+        emit({
+          id: "legal.radiant-overage",
+          severity: "error",
+          confidence: "high",
+          actionability: "high",
+          scope: "deck",
+          category: "Legal",
+          title: `More than ${limits.radiantMax} Radiant Pokémon`,
+          detail: `${format} format allows ${limits.radiantMax} Radiant Pokémon per deck.`,
+          cards: n.cardNames,
+          evidence: n.cardNames,
+        });
+      }
     } else if (n.kind === "name-only-match") {
       const candidates = n.candidates ?? [];
       const evidence: string[] = [`Pasted: ${n.pastedEntry}`];
@@ -1148,6 +1188,7 @@ export function analyzeDeck(
 
   return {
     source: { kind: input.source, name: input.sourceName },
+    format: input.format ?? "Standard",
     archetype,
     composition,
     findings,
