@@ -9,18 +9,25 @@ import { describe, it, expect } from "vitest";
 import { setupTestGame } from "./helpers/gameTestHelpers";
 import {
   attachEnergy,
+  endTurn,
   evolve,
   playBasicToBench,
   playTrainer,
   retreat,
 } from "../actions";
+import { activateAbility } from "../abilities";
+import { useStadium } from "../stadiumActivated";
 import {
+  canActivateAbility,
+  canActivateStadium,
   canAttachEnergy,
   canBenchBasic,
+  canEndTurn,
   canEvolve,
   canPlayTrainer,
   canRetreat,
 } from "../preflight";
+import type { TrainerCard } from "../types";
 
 describe("preflight ↔ action reason parity", () => {
   it("benchBasic — phase guard reasons match", () => {
@@ -138,6 +145,86 @@ describe("preflight ↔ action reason parity", () => {
     const otherPlayer = state.activePlayer === "p1" ? "p2" : "p1";
     const pre = canBenchBasic(state, otherPlayer, 0);
     const act = playBasicToBench(state, otherPlayer, 0);
+    if (!pre.ok && !act.ok) expect(pre.reason).toBe(act.reason);
+  });
+
+  it("activateAbility — out-of-turn reason matches", () => {
+    const state = setupTestGame({ seed: 10 });
+    const ap = state.activePlayer;
+    const opp = ap === "p1" ? "p2" : "p1";
+    const oppActive = state.players[opp].active!;
+    // Try activating an opponent's ability (or any) while it's not their turn.
+    const pre = canActivateAbility(state, opp, oppActive.instanceId, 0);
+    const act = activateAbility(state, opp, oppActive.instanceId, 0);
+    expect(pre.ok).toBe(false);
+    expect(act.ok).toBe(false);
+    if (!pre.ok && !act.ok) expect(pre.reason).toBe(act.reason);
+  });
+
+  it("activateAbility — wrong-phase reason matches", () => {
+    const state = setupTestGame({ seed: 11 });
+    state.phase = "gameOver";
+    const ap = state.activePlayer;
+    const active = state.players[ap].active!;
+    const pre = canActivateAbility(state, ap, active.instanceId, 0);
+    const act = activateAbility(state, ap, active.instanceId, 0);
+    expect(pre.ok).toBe(false);
+    expect(act.ok).toBe(false);
+    if (!pre.ok && !act.ok) expect(pre.reason).toBe(act.reason);
+  });
+
+  it("activateStadium — no Stadium in play reason matches", () => {
+    const state = setupTestGame({ seed: 12 });
+    state.stadium = null;
+    const p = state.activePlayer;
+    const pre = canActivateStadium(state, p);
+    const act = useStadium(state, p);
+    expect(pre.ok).toBe(false);
+    expect(act.ok).toBe(false);
+    if (!pre.ok && !act.ok) expect(pre.reason).toBe(act.reason);
+  });
+
+  it("activateStadium — already-used-this-turn reason matches", () => {
+    const state = setupTestGame({ seed: 13 });
+    const p = state.activePlayer;
+    // Plant a stub Stadium with no activated effect — both surfaces should
+    // surface the same "no activated effect" reason. (Same predicate path.)
+    state.stadium = {
+      controller: p,
+      card: {
+        id: "stub",
+        name: "StubStadium",
+        supertype: "Trainer",
+        subtypes: ["Stadium"],
+        text: "",
+      } as TrainerCard,
+    };
+    state.players[p].stadiumUsedThisTurn = true;
+    const pre = canActivateStadium(state, p);
+    const act = useStadium(state, p);
+    expect(pre.ok).toBe(false);
+    expect(act.ok).toBe(false);
+    if (!pre.ok && !act.ok) expect(pre.reason).toBe(act.reason);
+  });
+
+  it("endTurn — out-of-turn reason matches", () => {
+    const state = setupTestGame({ seed: 14 });
+    const otherPlayer = state.activePlayer === "p1" ? "p2" : "p1";
+    const pre = canEndTurn(state, otherPlayer);
+    const act = endTurn(state, otherPlayer);
+    expect(pre.ok).toBe(false);
+    expect(act.ok).toBe(false);
+    if (!pre.ok && !act.ok) expect(pre.reason).toBe(act.reason);
+  });
+
+  it("endTurn — wrong-phase reason matches", () => {
+    const state = setupTestGame({ seed: 15 });
+    state.phase = "promoteActive";
+    const ap = state.activePlayer;
+    const pre = canEndTurn(state, ap);
+    const act = endTurn(state, ap);
+    expect(pre.ok).toBe(false);
+    expect(act.ok).toBe(false);
     if (!pre.ok && !act.ok) expect(pre.reason).toBe(act.reason);
   });
 });

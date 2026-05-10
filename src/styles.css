@@ -949,6 +949,25 @@ button, select, input, [role="button"] {
   box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.16);
 }
 
+/* v2.4 prompt banner — additive surface for the viewer's active pending
+   prompt label. Sits just above the action bar; the ActionBar's own
+   statusMsg cascade keeps working for transient toasts. */
+.prompt-banner {
+  grid-area: action;
+  align-self: end;
+  margin-bottom: 2px;
+  background: rgba(56, 189, 248, 0.18);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  color: #e0f2fe;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+.prompt-banner-label {
+  display: inline-block;
+}
+
 .action-bar .status-line {
   display: flex;
   justify-content: space-between;

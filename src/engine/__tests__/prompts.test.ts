@@ -96,7 +96,11 @@ describe("PendingPrompt projection", () => {
     expect(activePrompt(state)).toBeNull();
   });
 
-  it("activePrompt(state, viewer) prefers prompts owned by viewer", () => {
+  it("activePrompt(state, viewer) returns ONLY viewer-owned prompts (no fallback)", () => {
+    // The viewer-scoped form is privacy-safe for hot-seat / open-hands-off:
+    // a P1-owned prompt must NOT leak into P2's view via fallback. v2.4
+    // tightened the contract from "fall back to first" to "null when not
+    // owned by viewer."
     const state = setupTestGame({ seed: 500 });
     const p = state.activePlayer;
     const card = findByName("Buddy-Buddy Poffin");
@@ -112,10 +116,8 @@ describe("PendingPrompt projection", () => {
     playTrainerByName(state, p, "Buddy-Buddy Poffin");
     const ownPrompt = activePrompt(state, p);
     expect(ownPrompt?.player).toBe(p);
-    // Viewer = opponent → no prompt belongs to them, so it falls back to
-    // the first available (which still has player = p).
+    // Viewer = opponent → no prompt belongs to them. No fallback now: returns null.
     const opp = p === "p1" ? "p2" : "p1";
-    const fallback = activePrompt(state, opp);
-    expect(fallback?.player).toBe(p);
+    expect(activePrompt(state, opp)).toBeNull();
   });
 });

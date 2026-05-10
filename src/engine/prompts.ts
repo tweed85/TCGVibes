@@ -75,6 +75,9 @@ export interface InPlayTargetPrompt extends BasePrompt {
   side: "own" | "opp" | "either";
   /** Optional list of legal candidate instance ids; UI filters its highlight. */
   candidateInstanceIds?: string[];
+  /** Live click count remaining on a multi-pick action (Phantom Dive snipe,
+   *  Aura Jab, etc.). Surfaced via the picker label as " — N left". */
+  remaining?: number;
 }
 
 export interface SwitchPrompt extends BasePrompt {
@@ -117,13 +120,19 @@ export interface HeavyBatonPrompt extends BasePrompt {
 
 // ---- Adapters -------------------------------------------------------------
 
-/** Most-active prompt for the player. Returns null when no prompt is open. */
+/**
+ * Most-active prompt for the viewer. When `viewer` is supplied, returns ONLY
+ * prompts owned by that viewer — never falls back to opponent-owned prompts.
+ *
+ * The viewer-scoped form is the safe choice for any per-player surface (the
+ * UI's prompt banner, hot-seat hand-off, "open hands off" privacy modes). A
+ * P1-owned prompt label leaking into P2's view would be a real privacy bug
+ * in hot-seat. Use the un-viewered `activePrompts(state)` form when you need
+ * the engine-side enumeration of all open prompts.
+ */
 export function activePrompt(state: GameState, viewer?: PlayerId): PendingPrompt | null {
   const all = activePrompts(state);
-  if (viewer) {
-    const owned = all.find((p) => p.player === viewer);
-    if (owned) return owned;
-  }
+  if (viewer) return all.find((p) => p.player === viewer) ?? null;
   return all[0] ?? null;
 }
 
@@ -222,11 +231,22 @@ export function pendingInPlayTargetToPrompt(p: PendingInPlayTarget): InPlayTarge
   // "both"); we map "both" to "either" for the UI's coarser term.
   const side: InPlayTargetPrompt["side"] =
     p.scope === "both" ? "either" : p.scope;
+  // The picker re-arms itself between clicks with `remaining` decremented
+  // (or `counters` for some legacy actions). Surface the count in the label
+  // so the player sees how many more clicks the effect will consume —
+  // identical to the existing UI's formatPickerLabel output.
+  const a = p.action as { remaining?: number; counters?: number };
+  const remaining = a.remaining ?? a.counters;
+  const label =
+    typeof remaining === "number" && remaining > 0
+      ? `${p.label} — ${remaining} left`
+      : p.label;
   return {
     kind: "inPlayTarget",
     player: p.player,
-    label: p.label,
+    label,
     side,
+    remaining: typeof remaining === "number" ? remaining : undefined,
   };
 }
 

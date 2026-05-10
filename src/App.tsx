@@ -12,8 +12,11 @@ import {
   retreat,
 } from "./engine/actions";
 import type { TrainerTarget } from "./engine/actions";
+import type { GameCommand } from "./engine/gameCommands";
+import { newReplay, type GameReplay } from "./engine/replay";
 import { activateAbility } from "./engine/abilities";
 import { computePlayerPlayability } from "./engine/preflight";
+import { activePrompt } from "./engine/prompts";
 import { aiStep, resolveAiCoinChoice, resolveAiPendingPromote, resolveAiSetup } from "./engine/ai";
 import { resolvePendingPick, resolvePendingSearchNotice } from "./engine/pendingPick";
 import {
@@ -168,7 +171,16 @@ export default function App() {
         ? savedSettings.oppDeckId
         : deckSpecs[1]?.id ?? deckSpecs[0]?.id ?? "",
   );
-  const rngRef = useRef(makeRng(Date.now()));
+  // Capture the seed alongside the rng so the replay header can record it.
+  // Without this we'd be unable to reconstruct the engine's initial state on
+  // load (the seed is the determinism anchor; per-command RNG is intentionally
+  // not recorded — see docs/REPLAY.md).
+  const seedRef = useRef(Date.now());
+  const rngRef = useRef(makeRng(seedRef.current));
+  // Live replay being recorded for the current game. Reset to a fresh header
+  // on each `onReset`; commands are appended only after the engine returns
+  // ok: true (recordCmd below).
+  const replayRef = useRef<GameReplay | null>(null);
 
   // Resolve "__random__" to a concrete preset id at game start time, so we
   // can log / banner the deck that was rolled. Pass-through for other ids.
@@ -193,6 +205,11 @@ export default function App() {
 
 
   const buildInitial = (): GameState => {
+    // Initial game state for the pre-game placeholder. The replay recorder
+    // is initialised lazily in `onReset` once the user actually starts a
+    // game (where `gameMode` is in scope) — this function runs before any
+    // useState declarations, so referencing component-scope state here
+    // would crash boot.
     const fallback = buildDeck(deckSpecs[0]);
     const myDeck = deckForId(myDeckId, fallback);
     const oppDeck = deckForId(oppDeckId, fallback);
@@ -364,6 +381,28 @@ export default function App() {
       label,
     });
     setCanUndo(true);
+  };
+
+  // Export the current game's structured replay (initial seed + decks +
+  // command stream) as a downloadable JSON file. Determinism contract lives
+  // in docs/REPLAY.md; the schema versions appVersion / dataVersion travel
+  // in the header so a stale replay is recognizable rather than silently
+  // wrong on load. Import + playback UI is deferred to v3.
+  const onExportReplay = () => {
+    if (!replayRef.current) {
+      setStatusMsg("No active replay to export.");
+      return;
+    }
+    const blob = new Blob([JSON.stringify(replayRef.current, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `pandabananastcg-replay-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setStatusMsg("Replay exported.");
   };
 
   // Export the current game log as a downloadable JSON file. Lightweight
@@ -629,7 +668,16 @@ export default function App() {
     history.pushState({ tcgModal: true }, "");
   }, [zoomCard, discardViewer, importOpen, buildOpen]);
 
-  const handle = (r: ActionResult, successMsg?: string) => {
+  // Push a successful command into the active replay. No-op when no replay
+  // is being recorded (defensive; normally replayRef is set on every reset).
+  // Failed actions never appear — the recorder skips when r.ok is false, so
+  // a stale replay can never include a command the engine rejected.
+  const recordCmd = (cmd: GameCommand): void => {
+    if (replayRef.current) replayRef.current.commands.push(cmd);
+  };
+
+  const handle = (r: ActionResult, successMsg?: string, cmd?: GameCommand) => {
+    if (r.ok && cmd) recordCmd(cmd);
     if (!r.ok) setStatusMsg(r.reason);
     else {
       setStatusMsg(successMsg ?? "");
@@ -671,8 +719,12 @@ export default function App() {
     // Rare Candy Stage-2 chooser: clicking an eligible Stage 2 resolves it.
     if (state.pendingRareCandyChoice?.player === viewingPlayer) {
       const r = resolveRareCandyChoice(state, viewingPlayer, i);
-      if (!r.ok) setStatusMsg(r.reason ?? "Pick a matching Stage 2 from your hand.");
-      else setStatusMsg("Rare Candy evolved.");
+      if (r.ok) {
+        recordCmd({ kind: "resolveRareCandyChoice", player: viewingPlayer, handIndex: i });
+        setStatusMsg("Rare Candy evolved.");
+      } else {
+        setStatusMsg(r.reason ?? "Pick a matching Stage 2 from your hand.");
+      }
       rerender();
       return;
     }
@@ -712,7 +764,11 @@ export default function App() {
 
     if (isPokemon(card) && isBasic(card)) {
       snapshotForUndo(`play ${card.name} to bench`);
-      handle(playBasicToBench(state, viewingPlayer, i), `Played ${card.name} to bench.`);
+      handle(
+        playBasicToBench(state, viewingPlayer, i),
+        `Played ${card.name} to bench.`,
+        { kind: "playBasicToBench", player: viewingPlayer, handIndex: i },
+      );
       return;
     }
     if (card.supertype === "Trainer") {
@@ -735,7 +791,11 @@ export default function App() {
         return;
       }
       snapshotForUndo(`play ${card.name}`);
-      handle(playTrainer(state, viewingPlayer, i), `Played ${card.name}.`);
+      handle(
+        playTrainer(state, viewingPlayer, i),
+        `Played ${card.name}.`,
+        { kind: "playTrainer", player: viewingPlayer, handIndex: i },
+      );
       return;
     }
     setSelected({ kind: "hand", index: i });
@@ -752,8 +812,17 @@ export default function App() {
     if (state.pendingInPlayTarget?.player === viewingPlayer) {
       const targetOwner: PlayerId = side === "me" ? viewingPlayer : (viewingPlayer === "p1" ? "p2" : "p1");
       const r = resolveInPlayTarget(state, viewingPlayer, targetOwner, p.instanceId);
-      if (!r.ok) setStatusMsg(r.reason ?? "");
-      else setStatusMsg(`Targeted ${p.card.name}.`);
+      if (r.ok) {
+        recordCmd({
+          kind: "resolveInPlayTarget",
+          player: viewingPlayer,
+          targetOwner,
+          instanceId: p.instanceId,
+        });
+        setStatusMsg(`Targeted ${p.card.name}.`);
+      } else {
+        setStatusMsg(r.reason ?? "");
+      }
       rerender();
       return;
     }
@@ -771,8 +840,12 @@ export default function App() {
         return;
       }
       const r = resolveSwitchTarget(state, viewingPlayer, benchIdx);
-      if (!r.ok) setStatusMsg(r.reason ?? "");
-      else setStatusMsg(`Switched in ${p.card.name}.`);
+      if (r.ok) {
+        recordCmd({ kind: "resolveSwitchTarget", player: viewingPlayer, benchIndex: benchIdx });
+        setStatusMsg(`Switched in ${p.card.name}.`);
+      } else {
+        setStatusMsg(r.reason ?? "");
+      }
       rerender();
       return;
     }
@@ -782,6 +855,7 @@ export default function App() {
         handle(
           promoteBenchToActive(state, viewingPlayer, benchIdx),
           `Promoted ${p.card.name}.`,
+          { kind: "promoteBenchToActive", player: viewingPlayer, benchIndex: benchIdx },
         );
       }
       return;
@@ -792,12 +866,30 @@ export default function App() {
       if (!card) return;
       if (card.supertype === "Energy" && side === "me") {
         snapshotForUndo(`attach ${card.name} to ${p.card.name}`);
-        handle(attachEnergy(state, viewingPlayer, selected.index, p.instanceId), `Attached ${card.name}.`);
+        handle(
+          attachEnergy(state, viewingPlayer, selected.index, p.instanceId),
+          `Attached ${card.name}.`,
+          {
+            kind: "attachEnergy",
+            player: viewingPlayer,
+            handIndex: selected.index,
+            targetInstanceId: p.instanceId,
+          },
+        );
         return;
       }
       if (card.supertype === "Pokémon" && card.evolvesFrom && side === "me") {
         snapshotForUndo(`evolve ${p.card.name} → ${card.name}`);
-        handle(evolve(state, viewingPlayer, selected.index, p.instanceId), `Evolved into ${card.name}.`);
+        handle(
+          evolve(state, viewingPlayer, selected.index, p.instanceId),
+          `Evolved into ${card.name}.`,
+          {
+            kind: "evolve",
+            player: viewingPlayer,
+            handIndex: selected.index,
+            targetInstanceId: p.instanceId,
+          },
+        );
         return;
       }
       if (card.supertype === "Trainer") {
@@ -809,6 +901,12 @@ export default function App() {
           handle(
             playTrainer(state, viewingPlayer, selected.index, target),
             `Attached ${card.name} to ${p.card.name}.`,
+            {
+              kind: "playTrainer",
+              player: viewingPlayer,
+              handIndex: selected.index,
+              target,
+            },
           );
           return;
         }
@@ -818,6 +916,12 @@ export default function App() {
           handle(
             playTrainer(state, viewingPlayer, selected.index, target),
             `Played ${card.name}.`,
+            {
+              kind: "playTrainer",
+              player: viewingPlayer,
+              handIndex: selected.index,
+              target,
+            },
           );
           return;
         }
@@ -827,6 +931,12 @@ export default function App() {
           handle(
             playTrainer(state, viewingPlayer, selected.index, target),
             `Used Rare Candy on ${p.card.name}.`,
+            {
+              kind: "playTrainer",
+              player: viewingPlayer,
+              handIndex: selected.index,
+              target,
+            },
           );
           return;
         }
@@ -856,6 +966,7 @@ export default function App() {
         handle(
           playBasicToBench(state, viewingPlayer, handIndex),
           `Played ${card.name} to bench.`,
+          { kind: "playBasicToBench", player: viewingPlayer, handIndex },
         );
       }
       return;
@@ -867,6 +978,12 @@ export default function App() {
       handle(
         attachEnergy(state, viewingPlayer, handIndex, instanceId),
         `Attached ${card.name}.`,
+        {
+          kind: "attachEnergy",
+          player: viewingPlayer,
+          handIndex,
+          targetInstanceId: instanceId,
+        },
       );
       return;
     }
@@ -875,6 +992,12 @@ export default function App() {
       handle(
         evolve(state, viewingPlayer, handIndex, instanceId),
         `Evolved into ${card.name}.`,
+        {
+          kind: "evolve",
+          player: viewingPlayer,
+          handIndex,
+          targetInstanceId: instanceId,
+        },
       );
       return;
     }
@@ -883,13 +1006,17 @@ export default function App() {
         card.subtypes.includes("Pokémon Tool") ||
         card.subtypes.includes("Tool");
       if (isTool) {
+        const trainerTarget: TrainerTarget = { kind: "inPlay", instanceId };
         snapshotForUndo(`attach ${card.name}`);
         handle(
-          playTrainer(state, viewingPlayer, handIndex, {
-            kind: "inPlay",
-            instanceId,
-          }),
+          playTrainer(state, viewingPlayer, handIndex, trainerTarget),
           `Attached ${card.name}.`,
+          {
+            kind: "playTrainer",
+            player: viewingPlayer,
+            handIndex,
+            target: trainerTarget,
+          },
         );
       }
     }
@@ -989,6 +1116,14 @@ export default function App() {
     handle(
       r.ok ? { ok: true } : { ok: false, reason: r.reason ?? "Cannot activate." },
       r.ok ? `Activated ${p.card.abilities![abilityIndex].name}.` : undefined,
+      r.ok
+        ? {
+            kind: "useAbility",
+            player: viewingPlayer,
+            instanceId: p.instanceId,
+            abilityIndex,
+          }
+        : undefined,
     );
   };
 
@@ -1022,7 +1157,7 @@ export default function App() {
     }
     const r = attack(state, viewingPlayer, atkIndex);
     if (r.ok) lockUndoAfterAttack();
-    handle(r);
+    handle(r, undefined, { kind: "useAttack", player: viewingPlayer, attackIndex: atkIndex });
   };
 
   // benchIdx convention:
@@ -1039,14 +1174,18 @@ export default function App() {
     setPendingSnipeAttack(null);
     const r = attack(state, viewingPlayer, atk);
     if (r.ok) lockUndoAfterAttack();
-    handle(r);
+    handle(r, undefined, { kind: "useAttack", player: viewingPlayer, attackIndex: atk });
   };
 
   const onRetreat = (benchIdx: number) => {
     if (!myTurn) return;
     const promoter = me.bench[benchIdx];
     snapshotForUndo(`retreat to ${promoter?.card.name ?? "bench"}`);
-    handle(retreat(state, viewingPlayer, benchIdx), "Retreated.");
+    handle(
+      retreat(state, viewingPlayer, benchIdx),
+      "Retreated.",
+      { kind: "retreat", player: viewingPlayer, benchIndex: benchIdx },
+    );
   };
 
   const [endTurnConfirm, setEndTurnConfirm] = useState<string[] | null>(null);
@@ -1058,16 +1197,25 @@ export default function App() {
       setEndTurnConfirm(warns);
       return;
     }
-    handle(endTurn(state, viewingPlayer), "Turn ended.");
+    handle(
+      endTurn(state, viewingPlayer),
+      "Turn ended.",
+      { kind: "endTurn", player: viewingPlayer },
+    );
   };
   const confirmEndTurn = () => {
     setEndTurnConfirm(null);
-    handle(endTurn(state, viewingPlayer), "Turn ended.");
+    handle(
+      endTurn(state, viewingPlayer),
+      "Turn ended.",
+      { kind: "endTurn", player: viewingPlayer },
+    );
   };
   const cancelEndTurn = () => setEndTurnConfirm(null);
 
   const onReset = () => {
-    rngRef.current = makeRng(Date.now());
+    seedRef.current = Date.now();
+    rngRef.current = makeRng(seedRef.current);
     const fallback = buildDeck(deckSpecs[0]);
     // Resolve random opp deck once so we can both build the deck and surface
     // the chosen name in the CPU's banner / log.
@@ -1083,6 +1231,9 @@ export default function App() {
         : gameMode === "local"
           ? "Player 2"
           : "CPU";
+    replayRef.current = newReplay(myDeck, oppDeck, seedRef.current, {
+      p2IsAI: gameMode !== "local",
+    });
     stateRef.current = setupGame(myDeck, oppDeck, rngRef.current, {
       p1Name: gameMode === "local" ? "Player 1" : "You",
       p2Name: cpuName,
@@ -1494,6 +1645,13 @@ export default function App() {
               <button className="secondary" onClick={onExportLog} title="Download this game's event log as JSON">
                 Export Log
               </button>
+              <button
+                className="secondary"
+                onClick={onExportReplay}
+                title="Download this game's command stream as a structured replay"
+              >
+                Export Replay
+              </button>
             </div>
           </details>
           <button className="primary" onClick={onReset}>New Game</button>
@@ -1551,7 +1709,13 @@ export default function App() {
       {!preGameOpen && state.phase === "coinFlip" && state.coinFlip?.step === "pickGuess" && (
         <CoinFlipModal
           onGuess={(g) => {
+            // resolveCoinGuess returns void; treat the step transition as
+            // success (mirrors gameCommands.ts dispatcher logic).
+            const before = state.coinFlip?.step;
             resolveCoinGuess(state, g);
+            if (before === "pickGuess" && state.coinFlip?.step !== "pickGuess") {
+              recordCmd({ kind: "resolveCoinGuess", player: viewingPlayer, guess: g });
+            }
             rerender();
           }}
         />
@@ -1591,7 +1755,14 @@ export default function App() {
             guess={state.coinFlip.guess!}
             winnerName={state.players[state.coinFlip.winner].name}
             onChoose={(first) => {
-              chooseFirstPlayer(state, viewingPlayer, first);
+              const err = chooseFirstPlayer(state, viewingPlayer, first);
+              if (!err) {
+                recordCmd({
+                  kind: "chooseFirstPlayer",
+                  player: viewingPlayer,
+                  chooseFirst: first,
+                });
+              }
               rerender();
             }}
           />
@@ -1618,6 +1789,14 @@ export default function App() {
           onConfirm={(activeIdx, benchIdxs) => {
             const err = completeSetup(state, viewingPlayer, activeIdx, benchIdxs);
             if (err) setStatusMsg(err);
+            else {
+              recordCmd({
+                kind: "completeSetup",
+                player: viewingPlayer,
+                activeHandIndex: activeIdx,
+                benchHandIndexes: benchIdxs,
+              });
+            }
             rerender();
           }}
         />
@@ -1653,7 +1832,15 @@ export default function App() {
           pick={state.pendingPick}
           onResolve={(idx) => {
             const r = resolvePendingPick(state, viewingPlayer, idx);
-            if (!r.ok) setStatusMsg(r.reason);
+            if (r.ok) {
+              recordCmd({
+                kind: "resolvePendingPick",
+                player: viewingPlayer,
+                pickedIndexes: idx,
+              });
+            } else {
+              setStatusMsg(r.reason);
+            }
             rerender();
           }}
         />
@@ -1665,7 +1852,15 @@ export default function App() {
           hand={state.players[state.pendingHandReveal.target].hand}
           onConfirm={(idxs) => {
             const r = resolveHandReveal(state, viewingPlayer, idxs);
-            if (!r.ok) setStatusMsg(r.reason ?? "");
+            if (r.ok) {
+              recordCmd({
+                kind: "resolveHandReveal",
+                player: viewingPlayer,
+                pickedHandIndexes: idxs,
+              });
+            } else {
+              setStatusMsg(r.reason ?? "");
+            }
             rerender();
           }}
           onCancel={() => {
@@ -1867,6 +2062,22 @@ export default function App() {
         </div>
       </div>
 
+      {/* Prompt banner: surfaces the active pending prompt for the viewer
+          (deck pick, in-play target picker, hand reveal, etc.). Additive —
+          the ActionBar's statusMsg cascade is unchanged; this banner gives
+          prompts a more visible, persistent home. v2.4 tightened
+          `activePrompt(viewer)` so opponent-owned prompts never appear
+          here. */}
+      {(() => {
+        const prompt = activePrompt(state, viewingPlayer);
+        if (!prompt) return null;
+        return (
+          <div className="prompt-banner" role="status" aria-live="polite">
+            <span className="prompt-banner-label">{prompt.label}</span>
+          </div>
+        );
+      })()}
+
       {/* ------------------ Action bar (sticky) ------------------- */}
       <ActionBar
         myTurn={myTurn}
@@ -1895,8 +2106,12 @@ export default function App() {
                 <button
                   onClick={() => {
                     const r = useStadium(state, viewingPlayer);
-                    if (!r.ok) setStatusMsg(r.reason);
-                    else setStatusMsg(`Activated ${state.stadium!.card.name}.`);
+                    if (r.ok) {
+                      recordCmd({ kind: "useStadium", player: viewingPlayer });
+                      setStatusMsg(`Activated ${state.stadium!.card.name}.`);
+                    } else {
+                      setStatusMsg(r.reason);
+                    }
                     rerender();
                   }}
                   title={state.stadium.card.text}
@@ -1924,6 +2139,16 @@ export default function App() {
           rerender();
           setStatusMsg("Target cancelled.");
         }}
+        retreatBlockedReason={
+          playability && !playability.retreat.ok
+            ? (playability.retreat.reason ?? null)
+            : null
+        }
+        endTurnBlockedReason={
+          playability && !playability.endTurn.ok
+            ? (playability.endTurn.reason ?? null)
+            : null
+        }
       />
 
       {state.winner && (
@@ -2268,6 +2493,10 @@ interface ActionBarProps {
   onRetreat: (i: number) => void;
   onEndTurn: () => void;
   onActivateAbility: (p: PokemonInPlay, i: number) => void;
+  /** Engine-derived reason the retreat button is disabled. null when ok. */
+  retreatBlockedReason?: string | null;
+  /** Engine-derived reason the end-turn button is disabled. null when ok. */
+  endTurnBlockedReason?: string | null;
   onHoverAbilitySource?: (instanceId: string | null) => void;
   pendingTargetActive?: boolean;
   onCancelTarget?: () => void;
@@ -2291,6 +2520,8 @@ function ActionBarInner({
   onHoverAbilitySource,
   pendingTargetActive,
   onCancelTarget,
+  retreatBlockedReason,
+  endTurnBlockedReason,
 }: ActionBarProps) {
   return (
     <div className="action-bar">
@@ -2384,15 +2615,27 @@ function ActionBarInner({
           <div className="group-label">Retreat to</div>
           <div className="group-buttons">
             {me.bench.length === 0 && <span className="muted">—</span>}
-            {me.bench.map((p, i) => (
-              <button
-                key={p.instanceId}
-                disabled={!myTurn || promoteOpen || me.retreatedThisTurn}
-                onClick={() => onRetreat(i)}
-              >
-                {p.card.name}
-              </button>
-            ))}
+            {me.bench.map((p, i) => {
+              // retreatBlockedReason is computed once per render via the
+              // engine's preflight (canRetreat); using it directly keeps
+              // the button state aligned with the engine without re-deriving
+              // here. Falls back to the local fast-path for safety when
+              // the parent omits the prop.
+              const disabled =
+                retreatBlockedReason !== undefined
+                  ? retreatBlockedReason !== null
+                  : !myTurn || promoteOpen || me.retreatedThisTurn;
+              return (
+                <button
+                  key={p.instanceId}
+                  disabled={disabled}
+                  onClick={() => onRetreat(i)}
+                  title={retreatBlockedReason ?? undefined}
+                >
+                  {p.card.name}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -2411,8 +2654,13 @@ function ActionBarInner({
             )}
             <button
               className="primary"
-              disabled={!myTurn || promoteOpen}
+              disabled={
+                endTurnBlockedReason !== undefined
+                  ? endTurnBlockedReason !== null
+                  : !myTurn || promoteOpen
+              }
               onClick={onEndTurn}
+              title={endTurnBlockedReason ?? undefined}
             >
               End Turn
             </button>
@@ -2460,6 +2708,9 @@ const ActionBar = memo(ActionBarInner, (prev, next) => {
     if (a.location !== b.location) return false;
     if (a.p.abilityUsedThisTurn !== b.p.abilityUsedThisTurn) return false;
   }
+  // Preflight-derived block reasons drive the retreat / end-turn buttons.
+  if (prev.retreatBlockedReason !== next.retreatBlockedReason) return false;
+  if (prev.endTurnBlockedReason !== next.endTurnBlockedReason) return false;
   return true;
 });
 

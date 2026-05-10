@@ -18,6 +18,18 @@ Purpose: turn the Twinleaf review into a Claude-ready implementation plan for th
 
 Verified state at landing: `npm run typecheck` clean, `npm run test` 742 passed (3 skipped), `npm run e2e` 5/5, `npm run build` clean.
 
+## v2 follow-ups — all 5 shipped
+
+| Item | Status | What landed |
+| ---- | ------ | ----------- |
+| v2.1 — DSL → FINDINGS gaps | ✅ shipped | [`src/engine/__tests__/findingsGaps.test.ts`](../src/engine/__tests__/findingsGaps.test.ts) — 6 tests covering `pendingPromoteQueue` AI lookahead, mid-queue game-over safety net, non-terminal (Run Away Draw) + terminal (attack-KO) `pendingPromote` mixing, passive attack bonus + damage reduction firing through real `executeAttackHit` (Powerful a-Salt + Solid Shell). The four "fix landed but not directly tested" bullets removed from [FINDINGS.md](FINDINGS.md). |
+| v2.2 — Replay recorder + export | ✅ shipped | Three new `GameCommand` kinds (`resolveCoinGuess` / `chooseFirstPlayer` / `completeSetup`) so replays can walk through setup. App.tsx wires `recordCmd` into coin / first-player / setup modals + every in-game handler (handClick, attack, retreat, endTurn, ability, useStadium, all 5 prompt resolvers). New `Export Replay` Game-menu button downloads the structured replay. [`replay.test.ts`](../src/engine/__tests__/replay.test.ts) round-trip test reconstructs phase / activePlayer / actives / hand and deck sizes after setup + endTurn. |
+| v2.3 — ActionBar preflight expansion | ✅ shipped | Extracted [`precheckAbility`](../src/engine/abilities.ts) and [`precheckStadium`](../src/engine/stadiumActivated.ts); the production `activateAbility` / `useStadium` route through them and `preflight.ts` exposes thin wrappers (`canActivateAbility` / `canActivateStadium`) plus a fresh `canEndTurn`. ActionBar consumes `playability.retreat / .endTurn` for disable + tooltip. Contract test extended with parity for the three new helpers. |
+| v2.4 — `activePrompt` prompt banner | ✅ shipped | Tightened `activePrompt(state, viewer)` to never fall back to opponent-owned prompts (privacy contract for hot-seat / open-hands-off). `InPlayTargetPrompt` now carries `remaining`; the adapter formats labels with `— N left` byte-identically to the prior `formatPickerLabel`. App.tsx renders an additive `.prompt-banner` above the action bar; the existing `statusMsg` cascade is untouched. |
+| v2.5 — More prefab migrations | ✅ shipped | Confident batch (Nest Ball / Poké Ball heads branch / Night Stretcher) migrated to [`effectPrefabs.ts`](../src/engine/effectPrefabs.ts). Pre-migration behavior pins added to [`prefabBehavior.test.ts`](../src/engine/__tests__/prefabBehavior.test.ts) and verified byte-equivalent post-migration. Held for v3: Super Rod / Energy Recycler (need `recycleDiscardToDeck` prefab), Pokégear 3.0 (peek pattern, not search), Brock's Scouting (branchy). [EFFECTS.md](EFFECTS.md) now points new card work at the prefab layer. |
+
+Verified state after v2 landing: `npm run typecheck` clean, `npm run test` 758 passed across 45 files (3 skipped), `npm run build` clean.
+
 The phase content below is preserved as the original plan + reviewer-refined guidance, so future re-reads can audit what was intended versus what shipped.
 
 ## Non-goals

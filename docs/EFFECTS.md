@@ -81,3 +81,21 @@ Detailed rundown of attacks, abilities, trainers, stadiums, and tools wired into
   every bench-snipe / spread / counter-placement effect-handler in
   [../src/engine/effects.ts](../src/engine/effects.ts) checks it before
   applying bench damage.
+
+## Effect prefabs (preferred path for new card work)
+
+[../src/engine/effectPrefabs.ts](../src/engine/effectPrefabs.ts) wraps
+the core deck-search / discard-recovery primitives in semantic helpers
+(`searchDeckToBench`, `searchDeckToHand`, `recoverFromDiscardToHand`).
+New trainer / ability cases that fit one of these patterns SHOULD call
+the prefab rather than `setDeckSearchPick` / `setDiscardRecoveryPick`
+directly. The prefabs are byte-equivalent to the underlying calls
+([../src/engine/__tests__/prefabBehavior.test.ts](../src/engine/__tests__/prefabBehavior.test.ts)
+pins the pendingPick shape), so opting in costs nothing at runtime
+while improving readability and centralising patterns we'll iterate on.
+
+Migrated to date: Buddy-Buddy Poffin, Energy Search, Lana's Aid (Phase 3);
+Nest Ball, Poké Ball (heads branch), Night Stretcher (v2.5). Cards with
+extra prelude cost (Ultra Ball / Earthen Vessel) or output destinations
+the existing prefabs don't cover (Super Rod / Energy Recycler →
+discard-to-deck) are held until the prefab catalogue grows to fit them.

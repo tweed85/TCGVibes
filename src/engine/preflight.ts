@@ -36,6 +36,8 @@ import {
   maxBenchSize,
 } from "./ongoingEffects";
 import { precheckTrainerEffect } from "./trainerEffects";
+import { precheckAbility } from "./abilities";
+import { precheckStadium } from "./stadiumActivated";
 
 // Re-export the existing attack preflight so callers have one entry point.
 export { attackPreflight } from "./actions";
@@ -55,6 +57,7 @@ export type PlayabilityKind =
   | "activateStadium"
   | "promoteBenchToActive"
   | "useStadium"
+  | "endTurn"
   | "cancelPendingTarget";
 
 export interface PlayabilityEntry {
@@ -64,6 +67,8 @@ export interface PlayabilityEntry {
   card?: Card;
   handIndex?: number;
   instanceId?: string;
+  /** Ability index on the holder's `abilities` list — only set for activateAbility entries. */
+  abilityIndex?: number;
   /** Instance ids that are legal targets when ok=true (for target-needing kinds). */
   targetInstanceIds?: string[];
 }
@@ -74,9 +79,13 @@ export interface PlayerPlayability {
   hand: PlayabilityEntry[];
   /** One entry per attack on the active Pokémon. */
   attacks: PlayabilityEntry[];
-  /** One entry per ally with at least one ability. */
+  /** One entry per (ally, abilityIndex) pair across active + bench. */
   abilities: PlayabilityEntry[];
   retreat: PlayabilityEntry;
+  /** Stadium-activation gate. ok=false even when no Stadium is in play. */
+  stadium: PlayabilityEntry;
+  /** End-turn gate. Mirrors `endTurn(state, player)` reasons. */
+  endTurn: PlayabilityEntry;
 }
 
 // ---- Result helpers -------------------------------------------------------
@@ -466,6 +475,62 @@ export function canRetreat(
   return ok("retreat");
 }
 
+/**
+ * Activate an ability. Mirrors `activateAbility` guards by routing through
+ * the same `precheckAbility` predicate that the engine uses. Reason parity
+ * is structural — they share the predicate, so the contract test catches
+ * accidental drift if a future change duplicates the checks.
+ */
+export function canActivateAbility(
+  state: GameState,
+  player: PlayerId,
+  instanceId: string,
+  abilityIndex: number,
+): PlayabilityEntry {
+  const r = precheckAbility(state, player, instanceId, abilityIndex);
+  if (!r.ok)
+    return fail("activateAbility", r.reason, { instanceId, abilityIndex });
+  return ok("activateAbility", { instanceId, abilityIndex });
+}
+
+/**
+ * Activate the current Stadium's effect. Routes through `precheckStadium`,
+ * the same predicate `useStadium` calls — they can't drift.
+ */
+export function canActivateStadium(
+  state: GameState,
+  player: PlayerId,
+): PlayabilityEntry {
+  const r = precheckStadium(state, player);
+  if (!r.ok) return fail("activateStadium", r.reason);
+  return ok("activateStadium");
+}
+
+/**
+ * End the current turn. The engine's `endTurn` only fails for
+ * "Not your turn." (wrong active player) and "Can't end turn now."
+ * (non-main phase). Open user-resolvable prompts also visually block end
+ * turn — surfaced here so the UI doesn't have to repeat the check.
+ */
+export function canEndTurn(state: GameState, player: PlayerId): PlayabilityEntry {
+  if (state.activePlayer !== player) return fail("endTurn", "Not your turn.");
+  if (state.phase !== "main") return fail("endTurn", "Can't end turn now.");
+  // Open prompts. End-turn isn't engine-failed by these (the engine only
+  // checks phase + active player), but the UI experience demands resolving
+  // them first — so we mirror the AI's auto-resolver intent.
+  if (state.pendingPick && state.pendingPick.player === player)
+    return fail("endTurn", "Resolve the open pick first.");
+  if (state.pendingInPlayTarget && state.pendingInPlayTarget.player === player)
+    return fail("endTurn", "Resolve the in-play target picker first.");
+  if (state.pendingHandReveal && state.pendingHandReveal.player === player)
+    return fail("endTurn", "Resolve the hand-reveal first.");
+  if (state.pendingRareCandyChoice && state.pendingRareCandyChoice.player === player)
+    return fail("endTurn", "Pick a Stage 2 with Rare Candy first.");
+  if (state.pendingPromote === player)
+    return fail("endTurn", "Promote a Bench Pokémon first.");
+  return ok("endTurn");
+}
+
 // ---- Aggregate -----------------------------------------------------------
 
 /**
@@ -503,9 +568,20 @@ export function computePlayerPlayability(
     }
   }
 
-  const abilities: PlayabilityEntry[] = []; // populated per-Pokémon in callers
-  // Ability surface is broad and per-instance — leave to callers to compute
-  // per-Pokémon. The aggregate stub is here so the type stays whole.
+  // Per-Pokémon abilities across active + bench. The UI uses this to dim
+  // ability buttons; the entry's `instanceId` + `abilityIndex` route the
+  // click back to `activateAbility` when ok.
+  const abilities: PlayabilityEntry[] = [];
+  const allies: PokemonInPlay[] = [
+    ...(pl.active ? [pl.active] : []),
+    ...pl.bench,
+  ];
+  for (const p of allies) {
+    const list = p.card.abilities ?? [];
+    for (let i = 0; i < list.length; i++) {
+      abilities.push(canActivateAbility(state, player, p.instanceId, i));
+    }
+  }
 
   return {
     player,
@@ -513,6 +589,8 @@ export function computePlayerPlayability(
     attacks,
     abilities,
     retreat: canRetreat(state, player),
+    stadium: canActivateStadium(state, player),
+    endTurn: canEndTurn(state, player),
   };
 }
 

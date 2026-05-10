@@ -529,12 +529,20 @@ function shuffleDeck(state: GameState, pl: PlayerId): void {
   }
 }
 
-export function activateAbility(
+/**
+ * Pre-activation guard for ability use. Runs every check `activateAbility`
+ * does BEFORE it would mutate state. Pure / non-mutating, so the UI's
+ * preflight surface can call this to dim disabled ability buttons and the
+ * action surface can route through it for the live click. Sharing the
+ * predicate is what keeps the dim/tooltip UI from drifting away from the
+ * engine's real reasons.
+ */
+export function precheckAbility(
   state: GameState,
   player: PlayerId,
   instanceId: string,
   abilityIndex: number,
-): ActivateResult {
+): { ok: true } | { ok: false; reason: string } {
   if (state.phase !== "main")
     return { ok: false, reason: "Not in main phase." };
   if (state.activePlayer !== player)
@@ -550,8 +558,6 @@ export function activateAbility(
   const ability = holder.card.abilities?.[abilityIndex];
   if (!ability) return { ok: false, reason: "No such ability." };
   if (!ability.effect) return { ok: false, reason: "That ability isn't engine-playable." };
-  // Some abilities are "as often as you like" — they have no `oncePerTurn`
-  // field. Most abilities are once-per-turn (the field is `true`).
   if (
     "oncePerTurn" in ability.effect &&
     ability.effect.oncePerTurn &&
@@ -561,35 +567,45 @@ export function activateAbility(
   }
   if (!abilitiesActiveOn(state, holder.card))
     return { ok: false, reason: "Abilities are disabled by the current Stadium." };
-  // Psyduck "Damp" — "Pokémon in play (both yours and your opponent's) lose
-  // any Ability that requires the Pokémon using it to Knock Out itself."
-  // We apply this by blocking activation of self-KO abilities whenever any
-  // ability-active Psyduck with Damp is in play on either side.
-  {
-    const dampInPlay = (["p1", "p2"] as PlayerId[]).some((pid) => {
-      const side = state.players[pid];
-      for (const p of [side.active, ...side.bench]) {
-        if (!p) continue;
-        if (!abilitiesActiveOn(state, p.card)) continue;
-        if ((p.card.abilities ?? []).some((a) => a.name === "Damp")) return true;
-      }
-      return false;
-    });
-    if (dampInPlay) {
-      const k = ability.effect.kind;
-      if (k === "putCountersOnOppThenSelfKO" || k === "attachNFromDiscardThenSelfKO") {
-        return { ok: false, reason: "Psyduck's Damp blocks self-KO abilities." };
-      }
+  const dampInPlay = (["p1", "p2"] as PlayerId[]).some((pid) => {
+    const side = state.players[pid];
+    for (const p of [side.active, ...side.bench]) {
+      if (!p) continue;
+      if (!abilitiesActiveOn(state, p.card)) continue;
+      if ((p.card.abilities ?? []).some((a) => a.name === "Damp")) return true;
+    }
+    return false;
+  });
+  if (dampInPlay) {
+    const k = ability.effect.kind;
+    if (k === "putCountersOnOppThenSelfKO" || k === "attachNFromDiscardThenSelfKO") {
+      return { ok: false, reason: "Psyduck's Damp blocks self-KO abilities." };
     }
   }
-
-  const e = ability.effect;
-
-  // Evaluate pre-activation conditions (e.g. Thwackey requires Festival Lead Active).
-  if ("condition" in e && e.condition) {
-    const check = checkCondition(state, player, e.condition);
+  if ("condition" in ability.effect && ability.effect.condition) {
+    const check = checkCondition(state, player, ability.effect.condition);
     if (!check.ok) return check;
   }
+  return { ok: true };
+}
+
+export function activateAbility(
+  state: GameState,
+  player: PlayerId,
+  instanceId: string,
+  abilityIndex: number,
+): ActivateResult {
+  const pre = precheckAbility(state, player, instanceId, abilityIndex);
+  if (!pre.ok) return pre;
+
+  // precheckAbility guarantees these lookups succeed; redo them to populate
+  // the locals the switch below uses.
+  const pl = state.players[player];
+  const holder = (pl.active?.instanceId === instanceId
+    ? pl.active
+    : pl.bench.find((p) => p.instanceId === instanceId))!;
+  const ability = holder.card.abilities![abilityIndex];
+  const e = ability.effect!;
 
   switch (e.kind) {
     case "drawOne":
@@ -1935,10 +1951,11 @@ export function activateAbility(
   }
 
   // As-often-as-you-like abilities (oncePerTurn:false) intentionally don't
-  // set abilityUsedThisTurn so the player can chain the effect.
+  // set abilityUsedThisTurn so the player can chain the effect. `ability`
+  // is the same one precheckAbility validated, so .effect is guaranteed.
   if (
-    !("oncePerTurn" in ability.effect) ||
-    ability.effect.oncePerTurn === true
+    !("oncePerTurn" in e) ||
+    e.oncePerTurn === true
   ) {
     holder.abilityUsedThisTurn = true;
   }

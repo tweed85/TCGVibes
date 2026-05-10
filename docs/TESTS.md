@@ -1,6 +1,6 @@
 # Test suite
 
-**Vitest — 742 tests passing across 44 files** (3 skipped, AI_BENCH-gated).
+**Vitest — 758 tests passing across 45 files** (3 skipped, AI_BENCH-gated).
 See [../CLAUDE.md](../CLAUDE.md) for the project entry point.
 
 ## Engine tests — [../src/engine/__tests__/](../src/engine/__tests__/)
@@ -11,6 +11,11 @@ See [../CLAUDE.md](../CLAUDE.md) for the project entry point.
   trainerDetection, weakness, undoRng, undoIntegration,
   phantomDiveHuman, attackPreflight, unspentTurnSlots, mvpPickers,
   aiScenarios, mcts, aiBenchmark (gated)
+- **findingsGaps** — pendingPromoteQueue AI lookahead, mid-queue
+  game-over safety net, non-terminal (Run Away Draw) +
+  terminal (attack-KO) pendingPromote phase mixing, passive
+  attack-bonus + damage-reduction abilities firing through real
+  `executeAttackHit` (Powerful a-Salt + Solid Shell)
 - **teamRocketCards** — Spidops base damage, Ariana conditional draw,
   Proton T1 bypass + TR-Basic search
 - **auditFixes** + **auditFixes2** — Carmine T1 / Prison Panic Confused /
@@ -52,22 +57,33 @@ See [../CLAUDE.md](../CLAUDE.md) for the project entry point.
   illegal-action fixture (out-of-phase, supporter-already-played,
   non-evolution card, energy-already-attached, retreat-after-retreat,
   no-bench, etc.), `preflight.canX(...).reason === actions.X(...).reason`.
-  Drift between dim/tooltip UI and engine fails this loudly.
-- **prefabBehavior** — Phase 3 pre-migration pins for Buddy-Buddy Poffin /
-  Energy Search / Lana's Aid: pendingPick shape (min/max/predicate/
-  destination), zone changes after resolution, log-text-equivalent
-  Trainer discard. Locks "byte-equivalent" for the prefab migration.
+  Drift between dim/tooltip UI and engine fails this loudly. v2.3 added
+  parity for `canActivateAbility` (out-of-turn, wrong-phase),
+  `canActivateStadium` (no Stadium in play, already used), and
+  `canEndTurn` (out-of-turn, wrong-phase).
+- **prefabBehavior** — Phase 3 + v2.5 pre-migration pins for Buddy-Buddy
+  Poffin / Energy Search / Lana's Aid (Phase 3) plus Nest Ball / Poké
+  Ball (heads branch) / Night Stretcher (v2.5): pendingPick shape
+  (min/max/predicate/destination), zone changes after resolution,
+  log-text-equivalent Trainer discard. Locks "byte-equivalent" for the
+  prefab migration.
 - **prompts** — Phase 2 projection adapter: `state.pendingPick` /
   `pendingInPlayTarget` / etc. project into `PendingPrompt` discriminated
   union without losing min / max / pool / destination / source. Engine
   continuations (`pendingPromoteQueue`, `pendingSecondAttack`,
   `onPromoteResolved`) are NOT prompts and stay out of the union.
-- **replay** — Phase 5: short command stream reconstructs state via
-  `applyGameCommand`; loader rejects newer schemas with `kind:
+  v2.4 tightened `activePrompt(state, viewer)` so opponent-owned
+  prompts never leak into the viewer's surface (privacy contract for
+  hot-seat / open-hands-off).
+- **replay** — Phase 5 + v2.2: short command stream reconstructs state
+  via `applyGameCommand`; loader rejects newer schemas with `kind:
   "newer-schema"`; missing card ids → `kind: "missing-cards"`;
   appVersion / dataVersion mismatch warns but loads; corrupt stream →
   `kind: "malformed"`; static check that every `GameCommand["kind"]` is
-  in the dispatcher.
+  in the dispatcher. v2.2 added the three pre-game kinds
+  (`resolveCoinGuess` / `chooseFirstPlayer` / `completeSetup`) so a
+  replay starting from raw `setupGame` can walk all the way through to
+  main phase.
 
 ## Data tests — [../src/data/__tests__/](../src/data/__tests__/)
 

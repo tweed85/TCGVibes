@@ -29,14 +29,6 @@ Pressure-test findings, MVP scope cuts, and deferred AI overhaul phases. See [..
 - No in-game rules glossary / help button.
 - `AiActionBanner` can flash-and-vanish on fast AI steps.
 
-## Test gaps (fix landed but not directly tested)
-
-- AI lookahead path through `pendingPromoteQueue`.
-- Mid-queue game-over (queued player has no bench when dequeued).
-- Non-terminal + terminal `pendingPromote` phase mixing.
-- Passive attack/damage abilities firing in real `executeAttackHit`
-  (helpers unit-tested; integration path not).
-
 ## Deferred AI work (Phases 2c, 2e, 7-12 of the AI overhaul plan)
 
 - **2c. Multi-action reordering** — replace fixed greedy step order

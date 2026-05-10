@@ -1197,7 +1197,7 @@ export function applyTrainerEffect(
         logEvent(state, player, "bench is full — Nest Ball has no effect.");
         return;
       }
-      if (!setDeckSearchPick(state, player, isBasicPokemonCard, 1, "Nest Ball: pick 1 Basic Pokémon to Bench", { toBench: true })) {
+      if (!searchDeckToBench(state, player, isBasicPokemonCard, 1, "Nest Ball: pick 1 Basic Pokémon to Bench")) {
         logEvent(state, player, "finds no Basic Pokémon.");
       }
       return;
@@ -1345,13 +1345,16 @@ export function applyTrainerEffect(
       return;
 
     case "searchPokemonCoinFlip": {
+      // Coin flip resolves BEFORE the prefab call — only on heads do we
+      // open the deck-search picker. Migrating only the search step keeps
+      // byte-equivalent behavior; the flip + tails path stays untouched.
       const heads = flipCoinInline(state);
       logEvent(state, "system", `Poké Ball flip: ${heads ? "heads" : "tails"}.`);
       if (!heads) {
         shuffleDeck(state, player);
         return;
       }
-      if (!setDeckSearchPick(state, player, isPokemonCard, 1, "Poké Ball: pick 1 Pokémon")) {
+      if (!searchDeckToHand(state, player, isPokemonCard, 1, "Poké Ball: pick 1 Pokémon")) {
         logEvent(state, player, "finds no Pokémon.");
       }
       return;
@@ -1404,7 +1407,7 @@ export function applyTrainerEffect(
 
     case "nightStretcher": {
       const pred = (c: Card) => c.supertype === "Pokémon" || isBasicEnergy(c);
-      if (!setDiscardRecoveryPick(state, player, pred, 1, "Night Stretcher: pick 1 Pokémon or basic Energy from discard")) {
+      if (!recoverFromDiscardToHand(state, player, pred, 1, "Night Stretcher: pick 1 Pokémon or basic Energy from discard")) {
         logEvent(state, player, "finds nothing eligible in discard.");
       }
       return;

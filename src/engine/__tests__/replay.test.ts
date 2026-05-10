@@ -20,7 +20,6 @@ import {
   REPLAY_SCHEMA_VERSION,
   type GameReplay,
 } from "../replay";
-import { setupTestGame } from "./helpers/gameTestHelpers";
 import { setupGame } from "../rules";
 import { makeRng } from "../rng";
 import { buildDeck, DECK_SPECS } from "../../data/decks";
@@ -35,39 +34,75 @@ function freshSetup() {
 }
 
 describe("replay — recorder + loader", () => {
-  it("reconstructs the same state from initial seed + command stream", () => {
-    // Record path: setupTestGame already applies setup commands; for the
-    // replay test we use raw setupGame so we can control the seed precisely
-    // and feed the same seed to loadReplay.
-    const live = freshSetup();
+  it("records + replays setup → endTurn; loaded state matches the live state", () => {
+    // Snapshot the *original* 60-card decks so we can build the replay
+    // header against them. setupGame doesn't mutate input arrays (rng.shuffle
+    // returns a copy), so post-setup access via live.players[..].deck only
+    // sees the deck remainder after hands + prizes were drawn.
+    const p1Deck = buildDeck(DECK_SPECS[0]);
+    const p2Deck = buildDeck(DECK_SPECS[1]);
+    const live = setupGame(p1Deck, p2Deck, makeRng(SEED), { p2IsAI: false });
     const recorded: GameCommand[] = [];
 
-    // Tiny sequence: end the active player's turn (post-setup state is
-    // pre-coin-flip in raw setupGame; we exercise endTurn against a state
-    // that's already in main phase via the DSL helper).
-    const dslState = setupTestGame({ seed: SEED });
-    const ap = dslState.activePlayer;
-    const endCmd: GameCommand = { kind: "endTurn", player: ap };
-    const r = applyGameCommand(dslState, endCmd);
-    if (r.ok) recorded.push(endCmd);
-    expect(r.ok).toBe(true);
+    const guessCmd: GameCommand = { kind: "resolveCoinGuess", player: "p1", guess: "heads" };
+    expect(applyGameCommand(live, guessCmd).ok).toBe(true);
+    recorded.push(guessCmd);
 
-    // We exercise loadReplay's structural correctness — schemaVersion check,
-    // card-id resolution — against the live state. Full end-to-end replay
-    // determinism requires a state-snapshot equality check that's heavier
-    // than this smoke needs.
-    const replay = newReplay(
-      live.players.p1.deck,
-      live.players.p2.deck,
-      SEED,
-      { p2IsAI: false },
-    );
+    const winner = live.coinFlip!.winner!;
+    const chooseCmd: GameCommand = {
+      kind: "chooseFirstPlayer",
+      player: winner,
+      chooseFirst: true,
+    };
+    expect(applyGameCommand(live, chooseCmd).ok).toBe(true);
+    recorded.push(chooseCmd);
+
+    for (const pid of ["p1", "p2"] as const) {
+      const idx = live.players[pid].hand.findIndex(
+        (c) => c.supertype === "Pokémon" && (c.subtypes ?? []).includes("Basic"),
+      );
+      expect(idx).toBeGreaterThanOrEqual(0);
+      const setupCmd: GameCommand = {
+        kind: "completeSetup",
+        player: pid,
+        activeHandIndex: idx,
+        benchHandIndexes: [],
+      };
+      expect(applyGameCommand(live, setupCmd).ok).toBe(true);
+      recorded.push(setupCmd);
+    }
+    expect(live.phase).toBe("main");
+
+    const ap = live.activePlayer;
+    const endCmd: GameCommand = { kind: "endTurn", player: ap };
+    expect(applyGameCommand(live, endCmd).ok).toBe(true);
+    recorded.push(endCmd);
+
+    const replay: GameReplay = {
+      ...newReplay(p1Deck, p2Deck, SEED, { p2IsAI: false }),
+      commands: recorded,
+    };
     const result = loadReplay(replay, cardsById);
     expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.appVersionMatch).toBe(true);
-      expect(result.dataVersionMatch).toBe(true);
-    }
+    if (!result.ok) return;
+    expect(result.appVersionMatch).toBe(true);
+    expect(result.dataVersionMatch).toBe(true);
+
+    // Determinism contract: same seed + same commands → same state.
+    expect(result.state.phase).toBe(live.phase);
+    expect(result.state.activePlayer).toBe(live.activePlayer);
+    expect(result.state.turn).toBe(live.turn);
+    expect(result.state.firstPlayer).toBe(live.firstPlayer);
+    expect(result.state.players.p1.active?.card.id).toBe(
+      live.players.p1.active?.card.id,
+    );
+    expect(result.state.players.p2.active?.card.id).toBe(
+      live.players.p2.active?.card.id,
+    );
+    expect(result.state.players.p1.hand.length).toBe(live.players.p1.hand.length);
+    expect(result.state.players.p2.hand.length).toBe(live.players.p2.hand.length);
+    expect(result.state.players.p1.deck.length).toBe(live.players.p1.deck.length);
+    expect(result.state.players.p2.deck.length).toBe(live.players.p2.deck.length);
   });
 
   it("rejects newer schema versions with kind=newer-schema", () => {
@@ -130,6 +165,9 @@ describe("replay — recorder + loader", () => {
     // by enumerating the expected command kinds and confirming the
     // dispatcher handles each one — not by importing private types.
     const expectedKinds: GameCommand["kind"][] = [
+      "resolveCoinGuess",
+      "chooseFirstPlayer",
+      "completeSetup",
       "playBasicToBench",
       "evolve",
       "attachEnergy",
@@ -149,6 +187,9 @@ describe("replay — recorder + loader", () => {
     // Force the type-system to enumerate every kind: if a future kind is
     // added without listing it here, the assertion below catches it.
     const dummy: Record<GameCommand["kind"], true> = {
+      resolveCoinGuess: true,
+      chooseFirstPlayer: true,
+      completeSetup: true,
       playBasicToBench: true,
       evolve: true,
       attachEnergy: true,

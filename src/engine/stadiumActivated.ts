@@ -352,12 +352,15 @@ const STADIUM_EFFECTS: Record<string, StadiumEffect> = {
   },
 };
 
-// Activate the current Stadium's effect for `player`. Enforces once-per-turn
-// and the stadium's specific precheck.
-export function useStadium(
+/**
+ * Pre-activation guard for the current Stadium. Runs every check
+ * `useStadium` does BEFORE it would mutate state. Shared with the
+ * preflight surface so dim/tooltip UI matches the engine's real reasons.
+ */
+export function precheckStadium(
   state: GameState,
   player: PlayerId,
-): ActivateResult {
+): { ok: true } | { ok: false; reason: string } {
   if (state.phase !== "main") {
     return { ok: false, reason: "Not in main phase." };
   }
@@ -377,7 +380,20 @@ export function useStadium(
   }
   const block = effect.precheck(state, player);
   if (block) return { ok: false, reason: block };
+  return { ok: true };
+}
+
+// Activate the current Stadium's effect for `player`. Enforces once-per-turn
+// and the stadium's specific precheck.
+export function useStadium(
+  state: GameState,
+  player: PlayerId,
+): ActivateResult {
+  const pre = precheckStadium(state, player);
+  if (!pre.ok) return pre;
+  // precheckStadium guarantees state.stadium and the named effect exist.
+  const effect = STADIUM_EFFECTS[state.stadium!.card.name];
   effect.run(state, player);
-  pl.stadiumUsedThisTurn = true;
+  state.players[player].stadiumUsedThisTurn = true;
   return { ok: true };
 }

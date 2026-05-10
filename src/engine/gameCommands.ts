@@ -30,12 +30,28 @@ import {
 } from "./trainerEffects";
 import { useStadium } from "./stadiumActivated";
 import { endTurn } from "./actions";
+import {
+  chooseFirstPlayer,
+  completeSetup,
+  resolveCoinGuess,
+} from "./rules";
 import type { GameState, PlayerId } from "./types";
 
 // Each user-resolvable prompt field maps to a command kind below — the
 // contract test in __tests__/replay.test.ts pins this, so adding a new
 // pending field without a corresponding command will fail loudly.
 export type GameCommand =
+  // Pre-game setup decisions. Without these, replays starting from
+  // setupGame() never leave phase="coinFlip" — every later command would
+  // desync because the engine isn't in main.
+  | { kind: "resolveCoinGuess"; player: PlayerId; guess: "heads" | "tails" }
+  | { kind: "chooseFirstPlayer"; player: PlayerId; chooseFirst: boolean }
+  | {
+      kind: "completeSetup";
+      player: PlayerId;
+      activeHandIndex: number;
+      benchHandIndexes: number[];
+    }
   // Hand actions
   | { kind: "playBasicToBench"; player: PlayerId; handIndex: number }
   | { kind: "evolve"; player: PlayerId; handIndex: number; targetInstanceId: string }
@@ -67,6 +83,28 @@ export type GameCommand =
  */
 export function applyGameCommand(state: GameState, c: GameCommand): ActionResult {
   switch (c.kind) {
+    case "resolveCoinGuess": {
+      // resolveCoinGuess returns void; treat "phase moved off coinFlip-pickGuess
+      // step" as success. Failure cases (wrong phase, already resolved) leave
+      // state.coinFlip.step unchanged.
+      const before = state.coinFlip?.step;
+      resolveCoinGuess(state, c.guess);
+      const after = state.coinFlip?.step;
+      if (before === "pickGuess" && after !== "pickGuess") return { ok: true };
+      return { ok: false, reason: "Coin guess not accepted (wrong phase or already resolved)." };
+    }
+    case "chooseFirstPlayer": {
+      const err = chooseFirstPlayer(state, c.player, c.chooseFirst);
+      if (err) return { ok: false, reason: err };
+      // Successful chooseFirstPlayer transitions phase to "setup".
+      return { ok: true };
+    }
+    case "completeSetup": {
+      const err = completeSetup(state, c.player, c.activeHandIndex, c.benchHandIndexes);
+      if (err) return { ok: false, reason: err };
+      // Once both players complete setup, completeSetup sets phase="main".
+      return { ok: true };
+    }
     case "playBasicToBench":
       return playBasicToBench(state, c.player, c.handIndex);
     case "evolve":
