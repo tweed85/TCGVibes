@@ -1488,10 +1488,14 @@ export function takeAiTurn(state: GameState, player: PlayerId): void {
 function tryStepAiTurn(state: GameState, player: PlayerId): boolean {
   const pl = state.players[player];
 
-  // Step 1: bench Basics if we're thin.
+  // Step 1: bench Basics if we're thin. Bench < 3 is below the v2
+  // bench-discipline threshold, so shouldBenchBasicNow always passes here;
+  // the gate is included for symmetry with Step 4 / future tightening.
   if (pl.bench.length < 3) {
     const idx = findPrimaryBasic(state, player);
-    if (idx >= 0 && playBasicToBench(state, player, idx).ok) return true;
+    if (idx >= 0 && shouldBenchBasicNow(state, player, pl.hand[idx])) {
+      if (playBasicToBench(state, player, idx).ok) return true;
+    }
   }
 
   // Step 2: search Items before Supporters. Deck-thinning makes the Supporter
@@ -1509,10 +1513,14 @@ function tryStepAiTurn(state: GameState, player: PlayerId): boolean {
   if (tryEvolve(state, player)) return true;
 
   // Fill remaining bench before we spend the Supporter. Some searches want
-  // bench slots free.
+  // bench slots free. v2 gates this through shouldBenchBasicNow so we don't
+  // hand a free prize to a spreader by benching dead-weight filler when
+  // the board is already developed.
   if (pl.bench.length < 4) {
     const idx = findPrimaryBasic(state, player);
-    if (idx >= 0 && playBasicToBench(state, player, idx).ok) return true;
+    if (idx >= 0 && shouldBenchBasicNow(state, player, pl.hand[idx])) {
+      if (playBasicToBench(state, player, idx).ok) return true;
+    }
   }
 
   // Step 5: best Supporter now. We've already searched, drawn from abilities,
@@ -2466,6 +2474,17 @@ const ACTIVE_OHKO_PRIZE_PENALTY = 80;
 const OPP_ACTIVE_OHKO_BASE_BONUS = 50;
 const OPP_ACTIVE_OHKO_PRIZE_BONUS = 60;
 
+// --- Phase 2B threat / readiness overlay constants ------------------------
+// Additive v2 overlays on top of the existing OHKO penalty/bonus. Smaller
+// magnitudes than the base weights — they tune how the AI weighs prize-
+// pressure context and immediate attack options on top of the raw threat
+// detection. Benchmark coverage at PR boundary, not per-commit.
+const ACTIVE_OHKO_GAME_LOSING_PENALTY = 150;
+const ACTIVE_OHKO_BENCH_COUNTER_MITIGATION = 30;
+const OPP_ACTIVE_GAME_WINNING_BONUS = 200;
+const ACTIVE_CAN_ATTACK_NOW_BONUS = 15;
+const EVOLUTION_IN_HAND_UNLOCK_BONUS = 10;
+
 // scorePosition: terminal short-circuit + sum of named sub-scores. Each
 // sub-score reads `state` for one slice of the position (prize race, threat,
 // readiness, board, resources). The Phase 2A extraction is intentionally
@@ -2502,9 +2521,11 @@ function scorePrizeRace(state: GameState, player: PlayerId): number {
 
 // v2-only threat-aware eval. Penalize positions where our Active is in OHKO
 // range from opp's projected next attack; symmetrically reward positions
-// where opp's Active is in our OHKO range. This is the single biggest gap
-// the agent audit identified — scoring board state alone without "which
-// side is about to lose a 2-prize attacker" was the v1 weakness.
+// where opp's Active is in our OHKO range. Phase 2B layers three context-
+// aware overlays on top of the base detection: game-losing escalator
+// (opp closes the prize race off our KO), bench-counter mitigation
+// (ready bench attacker softens the threat), and game-winning escalator
+// (our OHKO closes the prize race).
 function scoreImmediateThreats(state: GameState, player: PlayerId): number {
   const me = state.players[player];
   const opp = state.players[opponentOf(player)];
@@ -2516,6 +2537,18 @@ function scoreImmediateThreats(state: GameState, player: PlayerId): number {
     if (incoming >= myActiveRemaining) {
       const prizeAtRisk = prizeValue(me.active.card);
       s -= ACTIVE_OHKO_BASE_PENALTY + prizeAtRisk * ACTIVE_OHKO_PRIZE_PENALTY;
+      // Phase 2B: game-losing escalator. If opp would close out the
+      // game with this KO (prizes ≤ prize value of our Active), the
+      // position isn't just "bad trade" — it's "we lose next turn."
+      if (opp.prizes.length <= prizeAtRisk) {
+        s -= ACTIVE_OHKO_GAME_LOSING_PENALTY;
+      }
+      // Phase 2B: bench-counter mitigation. A ready bench attacker means
+      // we can swap-and-retaliate after the trade. Threat still hurts but
+      // the line isn't a single-point-of-failure.
+      if (countReadyBenchAttackers(state, player) > 0) {
+        s += ACTIVE_OHKO_BENCH_COUNTER_MITIGATION;
+      }
     }
   }
   if (opp.active) {
@@ -2531,15 +2564,85 @@ function scoreImmediateThreats(state: GameState, player: PlayerId): number {
     if (ourPeak >= oppActiveRemaining) {
       const oppPrize = prizeValue(opp.active.card);
       s += OPP_ACTIVE_OHKO_BASE_BONUS + oppPrize * OPP_ACTIVE_OHKO_PRIZE_BONUS;
+      // Phase 2B: game-winning escalator. If KO'ing them closes the
+      // prize race (our prizes ≤ value of their Active), this is the
+      // closer — value the line significantly higher so MCTS picks it
+      // over any setup play.
+      if (me.prizes.length <= oppPrize) {
+        s += OPP_ACTIVE_GAME_WINNING_BONUS;
+      }
     }
   }
   return s;
 }
 
+// True if `p` has at least one attack we can pay right now given current
+// energy. Distinct from "has energy on board" — a Pokémon with 2 Fire
+// facing a 3-Fire attack has energy but no payable attack.
+function hasPayableAttack(state: GameState, p: PokemonInPlay): boolean {
+  const attacks = p.card.attacks;
+  if (!attacks || attacks.length === 0) return false;
+  const provided = energyPoolForCost(p, state);
+  return attacks.some((a) =>
+    canPayCost(provided, effectiveAttackCost(state, p, a.cost)),
+  );
+}
+
+// Count of bench Pokémon that could attack right now. Shared by
+// scoreAttackReadiness (readiness signal) and scoreImmediateThreats
+// (bench-counter mitigation when our Active is doomed) so the two
+// sub-scores read off the same ready-bench measurement.
+function countReadyBenchAttackers(
+  state: GameState,
+  player: PlayerId,
+): number {
+  const me = state.players[player];
+  let count = 0;
+  for (const p of me.bench) {
+    if (p.attachedEnergy.length === 0) continue;
+    if (hasPayableAttack(state, p)) count++;
+  }
+  return count;
+}
+
+// Count of evolution Pokémon in our hand whose base sits in play AND is
+// eligible to evolve this turn (not played-this-turn, not evolved-this-
+// turn) AND the evolved card has attacks. Each match is a real "next-
+// attach attacker" line that scorePosition should preserve when the
+// AI considers shuffle/discard plays.
+function countEvolutionInHandUnlockingActiveLine(
+  state: GameState,
+  player: PlayerId,
+): number {
+  const pl = state.players[player];
+  const allies = [pl.active, ...pl.bench].filter(
+    (p): p is PokemonInPlay => !!p,
+  );
+  if (allies.length === 0) return 0;
+  let count = 0;
+  for (const c of pl.hand) {
+    if (c.supertype !== "Pokémon") continue;
+    const evolved = c as PokemonCard;
+    const evolvesFrom = evolved.evolvesFrom;
+    if (!evolvesFrom) continue;
+    if (!evolved.attacks || evolved.attacks.length === 0) continue;
+    const base = allies.find(
+      (a) =>
+        a.card.name === evolvesFrom &&
+        !a.playedThisTurn &&
+        !a.evolvedThisTurn,
+    );
+    if (base) count++;
+  }
+  return count;
+}
+
 // Energy on board (tempo proxy) + v2 ready-bench counting. Each energy is
 // one already-paid attachment beat — losing a powered Pokémon costs this
 // much in resimulated attaches. v2 layers on bench-attacker readiness with
-// a non-linear gust-insurance bonus for redundant ready attackers.
+// a non-linear gust-insurance bonus for redundant ready attackers, plus
+// Phase 2B overlays for "Active can attack now" and "evolution-in-hand
+// unlocks an attacker."
 function scoreAttackReadiness(state: GameState, player: PlayerId): number {
   const me = state.players[player];
   const opp = state.players[opponentOf(player)];
@@ -2550,8 +2653,9 @@ function scoreAttackReadiness(state: GameState, player: PlayerId): number {
   };
   let s = energyOnBoard(me) * 8 - energyOnBoard(opp) * 8;
   if (me.aiVersion !== "v2") return s;
-  // v2: count ready / nearly-ready bench attackers.
-  let readyBench = 0;
+  const readyBench = countReadyBenchAttackers(state, player);
+  // Nearly-ready bench: 1 energy short of any payable attack. Still gust
+  // insurance after the next attach.
   let nearlyReadyBench = 0;
   for (const p of me.bench) {
     if (p.attachedEnergy.length === 0) continue;
@@ -2561,12 +2665,7 @@ function scoreAttackReadiness(state: GameState, player: PlayerId): number {
     const hasCheapAttack = attacks.some((a) =>
       canPayCost(provided, effectiveAttackCost(state, p, a.cost)),
     );
-    if (hasCheapAttack) {
-      readyBench++;
-      continue;
-    }
-    // One energy short of paying any attack — still gust insurance after
-    // the next attach.
+    if (hasCheapAttack) continue;
     const minShort = Math.min(
       ...attacks.map((a) => {
         const cost = effectiveAttackCost(state, p, a.cost);
@@ -2585,6 +2684,19 @@ function scoreAttackReadiness(state: GameState, player: PlayerId): number {
   if (readyBench >= 2) s += 35;
   if (readyBench >= 3) s += 15;
   s += nearlyReadyBench * 5;
+  // Phase 2B: Active can attack right now (distinct from raw energy-on-
+  // board — a Pokémon with 2 Fire facing 3-Fire has energy but no
+  // payable attack).
+  if (me.active && hasPayableAttack(state, me.active)) {
+    s += ACTIVE_CAN_ATTACK_NOW_BONUS;
+  }
+  // Phase 2B: each evolution piece in hand that would unlock an
+  // attacking Stage 1/2 on an eligible in-play base. Rewards holding
+  // setup pieces — supports the "don't shuffle the evolution piece
+  // away" intuition for hand-disruption Supporter timing decisions.
+  s +=
+    countEvolutionInHandUnlockingActiveLine(state, player) *
+    EVOLUTION_IN_HAND_UNLOCK_BONUS;
   return s;
 }
 
@@ -2616,16 +2728,128 @@ function scoreResourceQuality(state: GameState, player: PlayerId): number {
   return Math.min(me.hand.length, 7) * 3 - Math.min(opp.hand.length, 7) * 2;
 }
 
-// Reserved for additive v2 overlays (spread-pressure detection,
-// over-benching penalty, exposed-rule-box risk).
-function scoreBenchRisk(_state: GameState, _player: PlayerId): number {
-  return 0;
+// v2: penalize positions where opp's Active threatens bench spread and we
+// have exposed bench Pokémon (low-value Basics: no archetype claim, no
+// evolution line in library, no near-term attack). Rule-box exposed bench
+// counts double — losing a 2-prize ex to a Phantom Dive is the textbook
+// "don't bench dead weight under spread" mistake. v1 returns 0.
+function scoreBenchRisk(state: GameState, player: PlayerId): number {
+  const me = state.players[player];
+  if (me.aiVersion !== "v2") return 0;
+  if (!opponentHasBenchSpreadThreat(state, player)) return 0;
+  const arch = archetypeOf(state, player);
+  let exposed = 0;
+  for (const p of me.bench) {
+    if (archetypeBenchBonus(arch, p.card) > 0) continue;
+    if (hasEvolutionInLibrary(me, p.card.name)) continue;
+    if (basicCouldAttackSoon(p.card)) continue;
+    const subs = p.card.subtypes ?? [];
+    const ruleBox =
+      subs.includes("ex") ||
+      subs.includes("V") ||
+      subs.includes("VSTAR") ||
+      subs.includes("VMAX");
+    exposed += ruleBox ? 2 : 1;
+  }
+  return -exposed * 20;
 }
 
 // Reserved for additive v2 overlays (Unfair Stamp / Iono / Marnie timing
 // beyond the per-card scoreTrainerForNow lane, ACE SPEC scheduling).
 function scoreDisruptionTiming(_state: GameState, _player: PlayerId): number {
   return 0;
+}
+
+// Detect bench-spread / bench-snipe threats from opp's Active. Used by both
+// scoreBenchRisk (position penalty) and shouldBenchBasicNow (action gate),
+// so the leaf eval and greedy path agree. Reads resolved AttackEffect[]
+// via getAttackEffects (lazy regex match cached on the move), not free-form
+// text — matches the data-driven effect dispatch the engine already uses.
+function opponentHasBenchSpreadThreat(
+  state: GameState,
+  player: PlayerId,
+): boolean {
+  const opp = state.players[opponentOf(player)];
+  if (!opp.active) return false;
+  for (const move of opp.active.card.attacks ?? []) {
+    for (const eff of getAttackEffects(move)) {
+      switch (eff.kind) {
+        case "placeCountersOnOppBenchAny":
+          return true;
+        case "placeCountersOnNOpp":
+          return true;
+        case "snipeOne":
+          if (eff.benchOnly) return true;
+          break;
+        case "snipeOnePerEnergy":
+          return true;
+        case "placeCounters":
+          if (eff.target === "oppBench" || eff.target === "anyOpp") return true;
+          break;
+        case "distributeDamage":
+          if (eff.benchOnly) return true;
+          break;
+      }
+    }
+  }
+  return false;
+}
+
+// True if a Stage 1/Stage 2 evolving from `basicName` sits in the player's
+// deck or hand. Used to keep evolution-base Basics out of the dead-weight
+// bucket — Dreepy under Dragapult pressure isn't dead weight if we have
+// Drakloak ready to land next turn.
+function hasEvolutionInLibrary(
+  pl: import("./types").PlayerState,
+  basicName: string,
+): boolean {
+  const test = (zone: Card[]): boolean =>
+    zone.some(
+      (c) =>
+        c.supertype === "Pokémon" &&
+        (c as PokemonCard).evolvesFrom === basicName,
+    );
+  return test(pl.deck) || test(pl.hand);
+}
+
+// True if the Basic's attack lineup includes a cheap, immediately-payable
+// option with non-trivial damage. Distinguishes "real low-cost attacker"
+// (Charcadet Hammer In, Fan Rotom Fan Call, etc.) from "filler with a
+// 10-damage Pound." Threshold: free attacks need 30+ damage; 1-energy
+// attacks need 30+. Below that, we treat the card as filler and let the
+// bench-discipline gate / scoreBenchRisk overlay decide.
+function basicCouldAttackSoon(card: Card): boolean {
+  if (card.supertype !== "Pokémon") return false;
+  const attacks = (card as PokemonCard).attacks ?? [];
+  if (attacks.some((a) => a.cost.length === 0 && a.damage >= 30)) return true;
+  if (attacks.some((a) => a.cost.length === 1 && a.damage >= 30)) return true;
+  return false;
+}
+
+// v2 bench-discipline gate. Blocks low-value Basics from filling a
+// developed bench under opponent spread pressure. v1 always allows
+// (preserves the legacy "fill the bench" behavior).
+function shouldBenchBasicNow(
+  state: GameState,
+  player: PlayerId,
+  card: Card,
+): boolean {
+  if (!v2Active(state, player)) return true;
+  const pl = state.players[player];
+  // Less than 3 on bench: setup phase, never block.
+  if (pl.bench.length < 3) return true;
+  // No spread pressure → no over-benching risk worth gating against.
+  if (!opponentHasBenchSpreadThreat(state, player)) return true;
+  // Archetype-critical Basic? Always pass (Tarountula for Rocket Mewtwo,
+  // Smoliv for Arboliva, Riolu for Lucario, etc.).
+  const arch = archetypeOf(state, player);
+  if (archetypeBenchBonus(arch, card) > 0) return true;
+  // Has an evolution line in our library? Bench it — it's a setup base.
+  if (hasEvolutionInLibrary(pl, card.name)) return true;
+  // Real attacker (cheap, payable, non-trivial damage)? Bench it.
+  if (basicCouldAttackSoon(card)) return true;
+  // Otherwise: dead-weight filler. Don't add a free prize for the spreader.
+  return false;
 }
 
 // 1-ply lookahead variant of pickBestAttack: simulates opp's expected reply.

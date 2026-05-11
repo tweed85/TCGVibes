@@ -14,6 +14,21 @@ Start here, then read:
 - `src/engine/ai.ts`
 - `src/engine/aiArchetype.ts`
 
+## Status snapshot (2026-05-10)
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| Phase 0 — picker AI lanes + bug fixes | ✅ Complete | All 11 cards have explicit AI lanes; Glass Trumpet + Grand Tree picker bugs fixed; Stadium activation reaches both the normal CPU turn loop and MCTS; v2 Arboliva can replace its own non-Forest Stadium with Forest of Vitality when it unlocks a same-turn Grass evolution chain. |
+| Phase 1 — `aiDecisionQuality.test.ts` | ✅ Complete | 9/9 scenarios green. Unfair Stamp timing wired in `scoreTrainerForNow` (KO gate + tiered opp-hand-size). Spread-aware bench discipline shipped as the first additive overlay. |
+| Phase 2A — `scorePosition` parity extraction | ✅ Complete | Seven named sub-scores; load-bearing OHKO penalty/bonus constants extracted; `scoreBenchRisk` carries the first additive v2 overlay. Behavior preserved (verified via `aiBenchmark.test.ts` quick run + full suite parity). |
+| Phase 2B — sub-score overlays | ⏭ Next | `scoreImmediateThreats` / `scoreAttackReadiness` targeted overlays (gust threat against our bench, attack-readiness deltas next attach). |
+| Phases 2c, 2e, 3–6 | ⏳ Deferred | See per-phase sections below. |
+
+Test ledger after Phase 2A: **898 passed | 3 skipped** in `npm run test`,
+0 `it.fails` in `aiDecisionQuality.test.ts`. Quick `aiBenchmark.test.ts`
+run passes; full benchmark not re-run at every PR (see Phase 2 strategy
+note).
+
 ## Goal
 
 The CPU should feel like a competent pilot of its deck, not a generic
@@ -44,7 +59,39 @@ is better action choice, better scoring, and better archetype rules.
 - Keep v1 behavior stable unless the change is a bug fix. New strategy should
   be gated through existing v2 surfaces where possible.
 
-## Phase 0 — unblock hidden choice quality
+## Phase 0 — unblock hidden choice quality — ✅ COMPLETE
+
+**Landed:**
+- Stable picker discriminant: `PendingPickEffectKind` on `PendingPick` /
+  `PendingHandReveal` (`src/engine/types.ts`) so AI lanes route off
+  `effectKind` / `action.kind` — never label text.
+- Explicit AI scoring lanes for all 11 listed cards (see "AI lane spec"
+  below for the per-card rules). Wired inline in each card's `if (pl.isAI)`
+  branch in `trainerEffects.ts` / `stadiumActivated.ts`.
+- Picker bug fixes:
+  - **Glass Trumpet** — distinct-target enforcement (`pickedInstanceIds` on
+    the action variant) plus `skipGlassTrumpetAttach` engine function +
+    `GameCommand`. Action-bar Cancel routes through the skip so queued
+    Energy returns to discard.
+  - **Grand Tree** — shuffle-on-skip fix in `grandTreeApplyStage2`
+    resolver; human single-basic case now routes through the chained
+    picker so the optional Stage 2 prompt always appears.
+- **Stadium activation reachable in normal CPU turn loop AND MCTS**:
+  `src/engine/ai.ts` calls `useStadium` whenever
+  `stadiumHasActivatedEffect(state.stadium.card.name)` returns true and
+  precheck passes; `mcts.ts` enumerates `useStadium` as an action kind.
+- **Forest of Vitality replacement logic**: v2 Arboliva can displace its
+  own non-Forest Stadium when Forest of Vitality immediately unlocks a
+  Grass evolution chain this turn
+  (`forestOfVitalityUnlocksGrassEvolution`).
+
+**Tests:** `src/engine/__tests__/aiPickerLanes.test.ts` (one scenario per
+card) + regression tests in `mvpPickers.test.ts` (Glass Trumpet distinct
+targets, Grand Tree per-player T1 + optional Stage 2). Replay
+round-trip for `skipGlassTrumpetAttach` in `replay.test.ts`.
+
+Reference spec preserved below (do not re-implement; this is the
+historical scope).
 
 Dependency: the audit-driven card-picker fixes.
 
@@ -85,7 +132,24 @@ Tests:
 - Add focused tests near `src/engine/__tests__/mvpPickers.test.ts`.
 - Add at least one AI-path test per card where AI choice is nontrivial.
 
-## Phase 1 — add AI decision-quality scenarios
+## Phase 1 — add AI decision-quality scenarios — ✅ COMPLETE
+
+**Landed** (`src/engine/__tests__/aiDecisionQuality.test.ts`):
+
+- 9 scenarios, all green. Public AI entrypoints only (`takeAiTurn`,
+  `resolveAiPendingPromote`) — no imports of private scoring helpers.
+  Deterministic IDs (module-level counter, no `Math.random()`).
+- **Unfair Stamp timing** wired in `scoreTrainerForNow` case
+  `"unfairStampShuffleDraw"`: KO gate respects engine, score scales
+  with opp hand size (≥6 → 80, ≤2 → 5, 3–5 → 35 below Item threshold 40).
+- **Spread-aware bench discipline** shipped as the first additive
+  overlay (covered under Phase 2A — see `shouldBenchBasicNow` and
+  `opponentHasBenchSpreadThreat`). Scenario #5 (don't over-bench a
+  dead-weight Basic under spread pressure) + positive control (v2 AI
+  still benches an evolution-base Basic under no spread pressure)
+  both green.
+
+Reference spec preserved below.
 
 Create `src/engine/__tests__/aiDecisionQuality.test.ts`.
 
@@ -122,6 +186,58 @@ If the DSL cannot express the state cleanly, shape the state directly in the
 test, but keep all actual actions routed through production engine functions.
 
 ## Phase 2 — refactor scoring into named sub-scores
+
+### Phase 2A — `scorePosition` parity extraction — ✅ COMPLETE
+
+**Landed** (`src/engine/ai.ts`):
+
+- `scorePosition` is now a terminal short-circuit + sum of seven named
+  helpers: `scorePrizeRace`, `scoreImmediateThreats`,
+  `scoreAttackReadiness`, `scoreBoardDevelopment`, `scoreResourceQuality`,
+  `scoreBenchRisk`, `scoreDisruptionTiming`.
+- Behavior parity preserved (verified by `aiBenchmark.test.ts` quick run
+  + full suite holding green).
+- Load-bearing constants extracted with provenance comment
+  ("Load-bearing MCTS leaf-eval weights; change only with benchmark
+  evidence."): `ACTIVE_OHKO_BASE_PENALTY = 60`,
+  `ACTIVE_OHKO_PRIZE_PENALTY = 80`, `OPP_ACTIVE_OHKO_BASE_BONUS = 50`,
+  `OPP_ACTIVE_OHKO_PRIZE_BONUS = 60`.
+- **First additive v2 overlay shipped in `scoreBenchRisk`** —
+  spread-aware bench-risk eval. Shared helpers
+  (`opponentHasBenchSpreadThreat`, `hasEvolutionInLibrary`,
+  `basicCouldAttackSoon`) feed both `scoreBenchRisk` (position penalty)
+  and the new `shouldBenchBasicNow` gate at the bench-play call site,
+  so leaf eval and greedy path can't drift. Detection uses resolved
+  `AttackEffect[]` (`placeCountersOnOppBenchAny`, `placeCountersOnNOpp`,
+  `snipeOne {benchOnly}`, `snipeOnePerEnergy`, `placeCounters
+  {target: oppBench|anyOpp}`, `distributeDamage {benchOnly}`) — no
+  text parsing.
+
+**Parity tests:** `src/engine/__tests__/aiScorePosition.test.ts` (5
+behavior-path tests covering won/lost terminal, prize-race gradient,
+catastrophic-no-mons no-throw, v2 threat-aware scenario).
+
+### Phase 2B — sub-score overlays — ⏭ NEXT RECOMMENDED
+
+Now that the seams are in place, the next additive overlays land inside
+the named helpers. The two highest-leverage targets:
+
+1. **`scoreImmediateThreats`** — extend to detect:
+   - opponent gust threat when our bench has un-shielded multi-prizers
+     (gust + their best attack → 2-prize swing in our bench);
+   - bench Pokémon already in OHKO range of opp's projected attack
+     (Phantom Dive numbers, Sinistcha Cursed Drop scatter).
+2. **`scoreAttackReadiness`** — extend to:
+   - count attackers at cost-minus-one with a clearly accessible Energy
+     (acceleration ability, basic in hand, search Trainer in hand);
+   - reward "two ready attackers of complementary types" (handles weakness
+     coverage in the leaf eval).
+
+Test pattern: extend `aiScorePosition.test.ts` with focused parity +
+overlay-gradient tests (same shape — public behavior paths only, no
+private helper imports).
+
+### Reference spec — original Phase 2
 
 Current AI scoring is spread through `src/engine/ai.ts`. Refactor carefully.
 Do not change behavior and refactor in the same commit unless the test pins
@@ -351,14 +467,25 @@ Before marking any AI change done:
 - Does `npm run typecheck` pass?
 - Does `npm run test` pass, or did you document the exact failing test and why?
 
-## Recommended first PRs
+## Recommended next PRs
 
-1. Add `aiDecisionQuality.test.ts` with 4-6 failing/xfailing scenarios that
-   describe the desired CPU behavior. Keep implementation untouched.
-2. Implement AI target scoring for Prime Catcher / gust decisions after the
-   Prime Catcher picker fix lands.
-3. Refactor attack/attachment target scoring into named helpers and pin with
-   tests.
-4. Add playbook fields for two archetypes only: Dragapult and Crustle. Prove
-   value before expanding to all 12.
-5. Expand playbooks to the remaining curated archetypes.
+PRs 1–3 below all landed during Phase 0–2A; they're kept here as the
+chronological record. Active next-step list starts at PR 4.
+
+1. ~~Add `aiDecisionQuality.test.ts` with 4–6 failing/xfailing scenarios
+   that describe the desired CPU behavior. Keep implementation
+   untouched.~~ ✅ Landed; flipped to all-green after the Unfair Stamp
+   scoring + spread-aware bench-risk overlays.
+2. ~~Implement AI target scoring for Prime Catcher / gust decisions after
+   the Prime Catcher picker fix lands.~~ ✅ Landed in Phase 0.
+3. ~~Refactor attack/attachment target scoring into named helpers and
+   pin with tests.~~ ✅ Landed in Phase 2A (`scorePosition` extraction +
+   `aiScorePosition.test.ts`).
+4. **Phase 2B sub-score overlays** — extend `scoreImmediateThreats`
+   (opponent gust threat against our bench, bench-Pokémon-in-OHKO-range)
+   and `scoreAttackReadiness` (acceleration-aware readiness, weakness-
+   coverage pairs). Behavior-test in `aiScorePosition.test.ts`.
+5. **Phase 4 archetype playbooks (narrow first)** — add playbook fields
+   for two archetypes only: Dragapult and Crustle. Prove value before
+   expanding to all 12.
+6. **Phase 4 expansion** — playbooks for the remaining curated archetypes.
