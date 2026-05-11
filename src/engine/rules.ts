@@ -149,6 +149,8 @@ export function setupGame(
     pendingSecondAttack: null,
     pendingPick: null,
     pendingSwitchTarget: null,
+    pendingChoiceMenu: null,
+    preComputedDiscardForDamage: null,
     pendingInPlayTarget: null,
     pendingHandReveal: null,
     pendingSearchNotice: null,

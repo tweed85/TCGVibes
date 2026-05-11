@@ -11,7 +11,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
-    "ai:digest": "node scripts/ai-coordinator/digest.mjs"
+    "audit:choices": "AUDIT_REPORT=1 vitest run src/engine/__tests__/userChoiceAuditReport.test.ts",
+    "ai:digest": "node scripts/ai-coordinator/digest.mjs",
+    "ai:handoff": "node scripts/ai-coordinator/handoff.mjs",
+    "ai:session-start": "node scripts/ai-coordinator/session-start.mjs",
+    "ai:dashboard": "node scripts/ai-coordinator/dashboard.mjs",
+    "ai:dashboard:watch": "node scripts/ai-coordinator/dashboard.mjs --watch"
   },
   "dependencies": {
     "@capacitor/core": "^8.3.1",

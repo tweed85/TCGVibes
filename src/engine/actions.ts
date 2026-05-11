@@ -1249,11 +1249,85 @@ export function attack(
     }
   }
 
+  // Phase 7 — pre-attack discard-for-damage picker. For Inferno X /
+  // Bellowing Thunder / Spill the Tea (and any future damage-scaling
+  // discard attack), open a picker BEFORE running the attack so the
+  // player can choose which energies to discard. The picker resolves
+  // via `resumeDamageScalingAttack` which re-enters the attack flow
+  // with `state.preComputedDiscardForDamage` set.
+  if (state.preComputedDiscardForDamage === null && !state.players[player].isAI) {
+    const move = effectiveAttacks(atk)[attackIndex];
+    if (move) {
+      const effects = getAttackEffects(move);
+      const damageScalingDiscard = effects.find(
+        (e) =>
+          e.kind === "discardAnyEnergyAcrossOwnForDamage" ||
+          e.kind === "discardEnergyAnywhereForDamage",
+      );
+      if (damageScalingDiscard) {
+        const energyType =
+          (damageScalingDiscard as { energyType?: import("./types").EnergyType }).energyType ?? null;
+        const max =
+          damageScalingDiscard.kind === "discardEnergyAnywhereForDamage"
+            ? (damageScalingDiscard as { max: number }).max
+            : Number.POSITIVE_INFINITY;
+        const allies = [state.players[player].active, ...state.players[player].bench].filter(
+          (p): p is import("./types").PokemonInPlay => !!p,
+        );
+        const hasEligible = allies.some((p) =>
+          p.attachedEnergy.some((en) =>
+            energyType == null
+              ? en.subtypes.includes("Basic")
+              : en.provides.includes(energyType),
+          ),
+        );
+        if (hasEligible) {
+          state.pendingInPlayTarget = {
+            player,
+            label: `${move.name}: discard a${energyType ? ` ${energyType}` : "ny Basic"} Energy from one of your Pokémon (Cancel to apply damage)`,
+            scope: "own",
+            slot: "anywhere",
+            filter: "hasAnyEnergy",
+            action: {
+              kind: "attackDiscardForDamagePicker",
+              discarded: 0,
+              max: Number.isFinite(max) ? max : 99,
+              energyType,
+              attackerOwner: player,
+              attackIndex,
+              attackName: move.name,
+            },
+          };
+          return ok;
+        }
+      }
+    }
+  }
+
   executeAttackHit(state, player, attackIndex);
   finishHit(state, player, attackIndex, false);
   // Per-attack overrides (snipe target, etc.) are single-use — consumed.
   state.snipeTargetOverride = null;
+  // Clear the pre-attack discard count after the attack completes.
+  state.preComputedDiscardForDamage = null;
   return ok;
+}
+
+// Phase 7 — re-enter the attack flow after the pre-attack discard-for-damage
+// picker resolves. Records the chosen discard count in
+// `state.preComputedDiscardForDamage`, skips preflight + confusion (already
+// done on the first pass), and runs executeAttackHit + finishHit.
+export function resumeDamageScalingAttack(
+  state: GameState,
+  player: PlayerId,
+  attackIndex: number,
+  discarded: number,
+): void {
+  state.preComputedDiscardForDamage = discarded;
+  executeAttackHit(state, player, attackIndex);
+  finishHit(state, player, attackIndex, false);
+  state.snipeTargetOverride = null;
+  state.preComputedDiscardForDamage = null;
 }
 
 // Resume a queued Festival Lead second hit after the opponent has promoted a

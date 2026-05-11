@@ -27,6 +27,7 @@ import {
   cancelHandReveal,
   resolveRareCandyChoice,
   cancelRareCandyChoice,
+  resolveChoiceMenu,
 } from "./engine/trainerEffects";
 import { stadiumHasActivatedEffect, useStadium } from "./engine/stadiumActivated";
 import { makeRng } from "./engine/rng";
@@ -2225,6 +2226,26 @@ export default function App() {
         return (
           <div className="prompt-banner" role="status" aria-live="polite">
             <span className="prompt-banner-label">{prompt.label}</span>
+            {prompt.kind === "choiceMenu" && state.pendingChoiceMenu && state.pendingChoiceMenu.player === viewingPlayer ? (
+              <div className="prompt-banner-options">
+                {prompt.options.map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => {
+                      const r = resolveChoiceMenu(state, viewingPlayer, opt.id);
+                      if (r.ok) {
+                        recordCmd({ kind: "resolveChoiceMenu", player: viewingPlayer, optionId: opt.id });
+                        rerender();
+                      } else {
+                        setStatusMsg(r.reason ?? "Could not resolve.");
+                      }
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         );
       })()}

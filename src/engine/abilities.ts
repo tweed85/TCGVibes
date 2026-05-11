@@ -631,13 +631,27 @@ export function activateAbility(
     }
 
     case "healAny": {
-      // Target the most-damaged of your Pokémon (heuristic; no target UI yet).
+      // "Heal N damage from 1 of your Pokémon." Humans pick the target;
+      // AI heals the most-damaged ally (preserves prior heuristic).
       const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
-      const target = allies.sort((a, b) => b.damage - a.damage)[0];
-      if (!target) return { ok: false, reason: "No Pokémon in play." };
-      const before = target.damage;
-      target.damage = Math.max(0, target.damage - e.amount);
-      logEvent(state, player, `uses ${ability.name}: heals ${before - target.damage} from ${target.card.name}.`);
+      const damaged = allies.filter((p) => p.damage > 0);
+      if (damaged.length === 0) return { ok: false, reason: "No damaged Pokémon." };
+      if (pl.isAI || damaged.length === 1) {
+        const target = damaged.sort((a, b) => b.damage - a.damage)[0];
+        const before = target.damage;
+        target.damage = Math.max(0, target.damage - e.amount);
+        logEvent(state, player, `uses ${ability.name}: heals ${before - target.damage} from ${target.card.name}.`);
+        break;
+      }
+      state.pendingInPlayTarget = {
+        player,
+        label: `${ability.name}: pick the Pokémon to heal ${e.amount}`,
+        scope: "own",
+        slot: "anywhere",
+        filter: "anyPokemon",
+        action: { kind: "abilityHealAny", amount: e.amount },
+      };
+      logEvent(state, player, `uses ${ability.name}.`);
       break;
     }
 
@@ -764,13 +778,18 @@ export function activateAbility(
       if (!pl.active || pl.bench.length === 0) {
         return { ok: false, reason: "Nothing to switch with." };
       }
-      const incoming = pl.bench.shift()!;
-      const outgoing = pl.active;
-      pl.active = incoming;
-      pl.bench.push(outgoing);
-      logEvent(state, player, `uses ${ability.name}: switches ${outgoing.card.name} → ${incoming.card.name}.`);
-      fireTriggeredOnMoveToActive(state, player, incoming);
-      fireTriggeredOnMoveToBench(state, player, outgoing);
+      if (pl.isAI || pl.bench.length === 1) {
+        const incoming = pl.bench.shift()!;
+        const outgoing = pl.active;
+        pl.active = incoming;
+        pl.bench.push(outgoing);
+        logEvent(state, player, `uses ${ability.name}: switches ${outgoing.card.name} → ${incoming.card.name}.`);
+        fireTriggeredOnMoveToActive(state, player, incoming);
+        fireTriggeredOnMoveToBench(state, player, outgoing);
+        break;
+      }
+      state.pendingSwitchTarget = player;
+      logEvent(state, player, `uses ${ability.name}: pick a Benched Pokémon to switch in.`);
       break;
     }
 
@@ -820,16 +839,29 @@ export function activateAbility(
     }
 
     case "peek2Top": {
-      // Drakloak — look at top 2, put 1 in hand, 1 on bottom of deck.
-      const top = pl.deck.splice(0, 2);
-      if (top.length === 0) break;
-      // Auto-pick: prefer the more-useful card (Pokemon > Trainer > Energy).
-      const score = (c: Card) =>
-        c.supertype === "Pokémon" ? 2 : c.supertype === "Trainer" ? 1 : 0;
-      top.sort((a, b) => score(b) - score(a));
-      pl.hand.push(top[0]);
-      if (top[1]) pl.deck.push(top[1]); // bottom
-      logEvent(state, player, `uses ${ability.name}: takes ${top[0].name}.`);
+      // Drakloak Recon Directive — look at the top 2 cards of your deck and
+      // put 1 of them into your hand. Put the other card on the bottom of
+      // your deck. Opens a picker for the human player; the AI's choice
+      // (Pokemon > Trainer > Energy) is wired in resolveAiPendingPickSmart.
+      const set = setTopPeekPick(
+        state,
+        player,
+        2,
+        () => true,
+        1,
+        `${ability.name}: pick 1 card for your hand; the other goes to the bottom of your deck`,
+        {
+          min: 1,
+          unpicked: "bottomOfDeck",
+          pickedDestination: "hand",
+          effectKind: "reconDirective",
+        },
+      );
+      if (!set) {
+        logEvent(state, player, `uses ${ability.name}: deck is empty.`);
+      } else {
+        logEvent(state, player, `uses ${ability.name}.`);
+      }
       break;
     }
 
@@ -950,28 +982,35 @@ export function activateAbility(
     }
 
     case "moveOwnBasicEnergyBetween": {
-      // Blissey ex Happy Switch — move a Basic Energy from one of your
-      // Pokémon to another. Auto-pick: move from the ally with the most
-      // basic energy to the Active if different; otherwise to the first
-      // bench slot.
+      // Blissey ex Happy Switch (and similar abilities) — move a Basic
+      // Energy from one of your Pokémon to another. Humans get the two-step
+      // Energy Switch picker; AI auto-picks source = first ally with Basic
+      // Energy, dest = a different ally (preserves the pre-prompt heuristic).
       const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
       if (allies.length < 2)
         return { ok: false, reason: "Need at least two of your Pokémon in play." };
-      const isBasicEnergy = (c: Card): c is EnergyCard =>
+      const isBasicEnergy2 = (c: Card): c is EnergyCard =>
         c.supertype === "Energy" && c.subtypes.includes("Basic");
-      const sourceIdx = allies.findIndex((p) => p.attachedEnergy.some(isBasicEnergy));
-      if (sourceIdx < 0)
+      const source = allies.find((p) => p.attachedEnergy.some(isBasicEnergy2));
+      if (!source)
         return { ok: false, reason: "No Basic Energy attached to any of your Pokémon." };
-      const source = allies[sourceIdx];
-      const target = allies.find((p) => p !== source)!;
-      const eIdx = source.attachedEnergy.findIndex(isBasicEnergy);
-      const [en] = source.attachedEnergy.splice(eIdx, 1);
-      target.attachedEnergy.push(en);
-      logEvent(
-        state,
+      if (pl.isAI) {
+        const dest = (pl.active && pl.active !== source) ? pl.active : allies.find((p) => p !== source)!;
+        const eIdx = source.attachedEnergy.findIndex(isBasicEnergy2);
+        const [en] = source.attachedEnergy.splice(eIdx, 1);
+        dest.attachedEnergy.push(en);
+        logEvent(state, player, `uses ${ability.name}: moves ${en.name} from ${source.card.name} to ${dest.card.name}.`);
+        break;
+      }
+      state.pendingInPlayTarget = {
         player,
-        `uses ${ability.name}: moves ${en.name} from ${source.card.name} to ${target.card.name}.`,
-      );
+        label: `${ability.name}: pick the Pokémon to move a Basic Energy FROM`,
+        scope: "own",
+        slot: "anywhere",
+        filter: "hasBasicEnergy",
+        action: { kind: "energySwitchSource" },
+      };
+      logEvent(state, player, `uses ${ability.name}.`);
       break;
     }
 
@@ -1170,17 +1209,27 @@ export function activateAbility(
     }
 
     case "peekTopMayDiscard": {
-      // Morpeko — auto: if the top card is a Pokémon (valuable), keep it;
-      // else discard. Good-enough MVP heuristic.
-      const top = pl.deck[0];
-      if (!top) return { ok: false, reason: "Deck is empty." };
-      const discardIt = top.supertype !== "Pokémon";
-      if (discardIt) {
-        pl.deck.shift();
-        pl.discard.push(top);
-        logEvent(state, player, `uses ${ability.name}: discards ${top.name}.`);
+      // Morpeko Snack Seek — peek top card. The player MAY discard it.
+      // Opens an optional picker for the human; AI lane in
+      // resolveAiPendingPickSmart discards non-Pokémon to dig.
+      const set = setTopPeekPick(
+        state,
+        player,
+        1,
+        () => true,
+        1,
+        `${ability.name}: optionally discard the top card`,
+        {
+          min: 0,
+          unpicked: "topOfDeck",
+          pickedDestination: "discard",
+          effectKind: "peekTopMayDiscard",
+        },
+      );
+      if (!set) {
+        logEvent(state, player, `uses ${ability.name}: deck is empty.`);
       } else {
-        logEvent(state, player, `uses ${ability.name}: keeps the top card.`);
+        logEvent(state, player, `uses ${ability.name}.`);
       }
       break;
     }
@@ -1295,16 +1344,22 @@ export function activateAbility(
     }
 
     case "swapHandCardWithDeckTop": {
+      // Gumshoos Evidence Gathering — switch a card from your hand with the
+      // top card of your deck. Opens a hand-reveal picker for the human; AI
+      // lane in resolveAiHandReveal picks the least-useful card (first
+      // Energy → Trainer → Pokemon).
       if (pl.hand.length === 0 || pl.deck.length === 0)
         return { ok: false, reason: "Need a hand card and a non-empty deck." };
-      // Auto: swap the least-useful hand card (first Energy if any, else first) with the top of deck.
-      const handIdx = pl.hand.findIndex((c) => c.supertype === "Energy");
-      const idx = handIdx >= 0 ? handIdx : 0;
-      const handCard = pl.hand.splice(idx, 1)[0];
-      const topCard = pl.deck.shift()!;
-      pl.hand.push(topCard);
-      pl.deck.unshift(handCard);
-      logEvent(state, player, `uses ${ability.name}: swaps a hand card with the top of deck.`);
+      state.pendingHandReveal = {
+        player,
+        target: player,
+        label: `${ability.name}: pick a card from your hand to swap with the top of your deck`,
+        min: 1,
+        max: 1,
+        filter: "any",
+        action: "swapWithDeckTop",
+      };
+      logEvent(state, player, `uses ${ability.name}.`);
       break;
     }
 
@@ -1348,11 +1403,24 @@ export function activateAbility(
       );
       if (!hasGated)
         return { ok: false, reason: `Requires a ${e.requiredType} Mega Evolution Pokémon ex in play.` };
-      const target = allies.filter((p) => p.damage > 0).sort((a, b) => b.damage - a.damage)[0];
-      if (!target) return { ok: false, reason: "No damaged Pokémon." };
-      const before = target.damage;
-      target.damage = Math.max(0, target.damage - e.amount);
-      logEvent(state, player, `uses ${ability.name}: heals ${before - target.damage} from ${target.card.name}.`);
+      const damaged = allies.filter((p) => p.damage > 0);
+      if (damaged.length === 0) return { ok: false, reason: "No damaged Pokémon." };
+      if (pl.isAI || damaged.length === 1) {
+        const target = damaged.sort((a, b) => b.damage - a.damage)[0];
+        const before = target.damage;
+        target.damage = Math.max(0, target.damage - e.amount);
+        logEvent(state, player, `uses ${ability.name}: heals ${before - target.damage} from ${target.card.name}.`);
+        break;
+      }
+      state.pendingInPlayTarget = {
+        player,
+        label: `${ability.name}: pick the Pokémon to heal ${e.amount}`,
+        scope: "own",
+        slot: "anywhere",
+        filter: "anyPokemon",
+        action: { kind: "abilityHealAny", amount: e.amount },
+      };
+      logEvent(state, player, `uses ${ability.name}.`);
       break;
     }
 
@@ -1360,11 +1428,24 @@ export function activateAbility(
       const hasType = holder.attachedEnergy.some((en) => en.provides.includes(e.energyType));
       if (!hasType) return { ok: false, reason: `Requires ${e.energyType} Energy attached.` };
       const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
-      const target = allies.filter((p) => p.damage > 0).sort((a, b) => b.damage - a.damage)[0];
-      if (!target) return { ok: false, reason: "No damaged Pokémon." };
-      const before = target.damage;
-      target.damage = Math.max(0, target.damage - e.amount);
-      logEvent(state, player, `uses ${ability.name}: heals ${before - target.damage} from ${target.card.name}.`);
+      const damaged = allies.filter((p) => p.damage > 0);
+      if (damaged.length === 0) return { ok: false, reason: "No damaged Pokémon." };
+      if (pl.isAI || damaged.length === 1) {
+        const target = damaged.sort((a, b) => b.damage - a.damage)[0];
+        const before = target.damage;
+        target.damage = Math.max(0, target.damage - e.amount);
+        logEvent(state, player, `uses ${ability.name}: heals ${before - target.damage} from ${target.card.name}.`);
+        break;
+      }
+      state.pendingInPlayTarget = {
+        player,
+        label: `${ability.name}: pick the Pokémon to heal ${e.amount}`,
+        scope: "own",
+        slot: "anywhere",
+        filter: "anyPokemon",
+        action: { kind: "abilityHealAny", amount: e.amount },
+      };
+      logEvent(state, player, `uses ${ability.name}.`);
       break;
     }
 
@@ -1416,9 +1497,10 @@ export function activateAbility(
     }
 
     case "discardHandEnergyPlaceCountersOnOpp": {
-      // me4 Mega Greninja ex "Mortal Shuriken" — Active-only; discard a
-      // basic <type> Energy from HAND; place N damage counters on 1 of
-      // opp's Pokémon (auto-target lowest-effective-HP).
+      // Mega Greninja ex Mortal Shuriken — Active-only; discard a basic
+      // <type> Energy from HAND, then the player picks which opponent's
+      // Pokémon takes N counters. The energy is fungible (typed); only the
+      // opp target is a real choice. AI auto-targets the most-fragile opp.
       if (pl.active?.instanceId !== holder.instanceId) {
         return { ok: false, reason: `${ability.name} requires ${holder.card.name} to be Active.` };
       }
@@ -1435,22 +1517,34 @@ export function activateAbility(
       if (targets.length === 0) return { ok: false, reason: "No opponent Pokémon in play." };
       const [en] = pl.hand.splice(idx, 1);
       pl.discard.push(en);
-      // Auto-target: prefer the most-fragile (lowest remaining HP).
-      let target = targets[0];
-      let bestRem = effectiveMaxHp(target, state) - target.damage;
-      for (const t of targets) {
-        const rem = effectiveMaxHp(t, state) - t.damage;
-        if (rem < bestRem) {
-          bestRem = rem;
-          target = t;
+      if (pl.isAI || targets.length === 1) {
+        let target = targets[0];
+        let bestRem = effectiveMaxHp(target, state) - target.damage;
+        for (const t of targets) {
+          const rem = effectiveMaxHp(t, state) - t.damage;
+          if (rem < bestRem) {
+            bestRem = rem;
+            target = t;
+          }
         }
+        target.damage += e.counters * 10;
+        logEvent(
+          state,
+          player,
+          `uses ${ability.name}: discards ${en.name}; places ${e.counters} counters on ${target.card.name}.`,
+        );
+        knockOutFromAbilityCounters(state, oppId, target);
+        break;
       }
-      target.damage += e.counters * 10;
-      logEvent(
-        state,
+      logEvent(state, player, `uses ${ability.name}: discards ${en.name}.`);
+      state.pendingInPlayTarget = {
         player,
-        `uses ${ability.name}: discards ${en.name}; places ${e.counters} counters on ${target.card.name}.`,
-      );
+        label: `${ability.name}: place ${e.counters} damage counters on an opponent's Pokémon`,
+        scope: "opp",
+        slot: "anywhere",
+        filter: "anyPokemon",
+        action: { kind: "abilityPlaceCountersOnOpp", counters: e.counters, abilityName: ability.name },
+      };
       break;
     }
 
@@ -1493,20 +1587,35 @@ export function activateAbility(
     }
 
     case "revealOppHandPutOnOppBench": {
+      // Mandibuzz Look for Prey — reveal opponent's hand, choose 1 Basic
+      // Pokémon (HP ≤ cap) to put onto their bench. Humans get a hand-reveal
+      // picker; AI picks the first eligible match (preserves prior heuristic).
       const oppId: PlayerId = player === "p1" ? "p2" : "p1";
       const opp = state.players[oppId];
       if (opp.bench.length >= 5) return { ok: false, reason: "Opponent's bench is full." };
-      const idx = opp.hand.findIndex(
-        (c) => c.supertype === "Pokémon" && c.subtypes.includes("Basic") && c.hp <= e.hpMax,
+      const eligible = opp.hand.some(
+        (c) => c.supertype === "Pokémon" && (c.subtypes ?? []).includes("Basic") && (c as PokemonCard).hp <= e.hpMax,
       );
-      if (idx < 0) return { ok: false, reason: `No Basic Pokémon with ≤${e.hpMax} HP in opp hand.` };
-      const [card] = opp.hand.splice(idx, 1) as [PokemonCard];
-      opp.bench.push(makePokemonInPlay(card));
-      logEvent(state, player, `uses ${ability.name}: forces ${card.name} onto ${opp.name}'s bench.`);
+      if (!eligible) return { ok: false, reason: `No Basic Pokémon with ≤${e.hpMax} HP in opp hand.` };
+      state.pendingHandReveal = {
+        player,
+        target: oppId,
+        label: `${ability.name}: pick a Basic Pokémon with ≤${e.hpMax} HP from ${opp.name}'s hand to bench`,
+        min: 1,
+        max: 1,
+        filter: "basicPokemon",
+        hpMax: e.hpMax,
+        action: "toOppBench",
+      };
+      logEvent(state, player, `uses ${ability.name}.`);
       break;
     }
 
     case "top4AttachEnergyType": {
+      // Peek top 4 of deck, distribute typed Basic Energies among your
+      // Pokémon "in any way you like"; non-matching cards go to bottom of
+      // deck. Humans get a queued-attach picker; AI auto-distributes
+      // round-robin (parity).
       const top = pl.deck.splice(0, 4);
       if (top.length === 0) return { ok: false, reason: "Deck is empty." };
       const attachers = top.filter(
@@ -1514,19 +1623,34 @@ export function activateAbility(
           c.supertype === "Energy" && c.subtypes.includes("Basic") && (c as EnergyCard).provides.includes(e.energyType),
       );
       const leftovers = top.filter((c) => !attachers.includes(c as EnergyCard));
-      // Auto: attach each to an ally in round-robin, starting with Active.
       const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
-      if (allies.length === 0) {
-        // No allies → put the energies back in the deck.
+      if (allies.length === 0 || attachers.length === 0) {
+        // Nothing to attach — put cards back appropriately.
         pl.deck.push(...attachers, ...leftovers);
-        shuffleDeck(state, player);
-        logEvent(state, player, `uses ${ability.name}: no allies to attach to.`);
+        if (allies.length === 0) shuffleDeck(state, player);
+        logEvent(state, player, `uses ${ability.name}: no ${e.energyType} Energy found among top 4.`);
         break;
       }
-      attachers.forEach((en, i) => allies[i % allies.length].attachedEnergy.push(en));
-      // Put remaining on the bottom.
+      // Non-matching cards go to the bottom of the deck.
       pl.deck.push(...leftovers);
-      logEvent(state, player, `uses ${ability.name}: attaches ${attachers.length} ${e.energyType} Energy.`);
+      if (pl.isAI) {
+        attachers.forEach((en, i) => allies[i % allies.length].attachedEnergy.push(en));
+        logEvent(state, player, `uses ${ability.name}: attaches ${attachers.length} ${e.energyType} Energy.`);
+        break;
+      }
+      state.pendingInPlayTarget = {
+        player,
+        label: `${ability.name}: attach ${attachers[0].name} to a Pokémon (${attachers.length} Energy left)`,
+        scope: "own",
+        slot: "anywhere",
+        filter: "anyPokemon",
+        action: {
+          kind: "abilityAttachQueuedEnergyToAlly",
+          queue: attachers,
+          abilityName: ability.name,
+        },
+      };
+      logEvent(state, player, `uses ${ability.name}.`);
       break;
     }
 
@@ -1540,61 +1664,123 @@ export function activateAbility(
     }
 
     case "attachNFromDiscardThenSelfKO": {
-      // Overvolt Discharge: attach up to 3 Basic Energy (any type) from
-      // discard to your Lightning Pokémon; then self-KO.
+      // Magneton Overvolt Discharge — attach up to N Basic Energy (any type)
+      // from discard to your Lightning Pokémon "in any way", then self-KO.
+      // Humans get a re-arming target picker; AI auto-distributes round-robin
+      // (parity with prior behavior).
       const allies = [pl.active, ...pl.bench].filter(
         (p): p is PokemonInPlay => !!p && p.card.types.includes("Lightning"),
       );
-      let attached = 0;
-      for (let i = 0; i < e.count; i++) {
-        const idx = pl.discard.findIndex(
-          (c) => c.supertype === "Energy" && c.subtypes.includes("Basic"),
-        );
-        if (idx < 0 || allies.length === 0) break;
-        const [en] = pl.discard.splice(idx, 1) as [EnergyCard];
-        allies[attached % allies.length].attachedEnergy.push(en);
-        attached++;
+      const hasEnergy = pl.discard.some(
+        (c) => c.supertype === "Energy" && c.subtypes.includes("Basic"),
+      );
+      if (allies.length === 0 || !hasEnergy) {
+        return { ok: false, reason: "No eligible Lightning ally or basic Energy in discard." };
       }
-      holder.damage = 9999;
-      logEvent(state, player, `uses ${ability.name}: attaches ${attached} basic Energy to Lightning Pokémon; this Pokémon is KO'd.`);
+      if (pl.isAI) {
+        let attached = 0;
+        for (let i = 0; i < e.count; i++) {
+          const idx = pl.discard.findIndex(
+            (c) => c.supertype === "Energy" && c.subtypes.includes("Basic"),
+          );
+          if (idx < 0 || allies.length === 0) break;
+          const [en] = pl.discard.splice(idx, 1) as [EnergyCard];
+          allies[attached % allies.length].attachedEnergy.push(en);
+          attached++;
+        }
+        holder.damage = 9999;
+        logEvent(state, player, `uses ${ability.name}: attaches ${attached} basic Energy to Lightning Pokémon; this Pokémon is KO'd.`);
+        break;
+      }
+      state.pendingInPlayTarget = {
+        player,
+        label: `${ability.name}: pick a Lightning Pokémon to attach a basic Energy (${e.count} left, Cancel to stop and self-KO)`,
+        scope: "own",
+        slot: "anywhere",
+        filter: "anyPokemon",
+        action: {
+          kind: "abilityAttachAnyBasicFromDiscardToTyped",
+          remaining: e.count,
+          typeFilter: "Lightning",
+          holderInstanceId: holder.instanceId,
+          abilityName: ability.name,
+        },
+      };
+      logEvent(state, player, `uses ${ability.name}.`);
       break;
     }
 
     case "attachMixedFromHand": {
-      // Pyro Dance — attach a Basic A Energy, a Basic B Energy, or 1 of each
-      // from hand to your Pokémon in any way (up to `max` total).
+      // Infernape Pyro Dance — attach a Basic typeA, typeB, or 1 of each
+      // from hand to your Pokémon "in any way you like" (up to `max` total).
+      // Humans get a re-arming target picker; AI auto-distributes round-robin
+      // (parity with prior behavior).
       const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
       if (allies.length === 0) return { ok: false, reason: "No Pokémon in play." };
-      let attached = 0;
-      for (let i = 0; i < e.max; i++) {
-        const idx = pl.hand.findIndex(
-          (c) =>
-            c.supertype === "Energy" &&
-            c.subtypes.includes("Basic") &&
-            ((c as EnergyCard).provides.includes(e.typeA) || (c as EnergyCard).provides.includes(e.typeB)),
-        );
-        if (idx < 0) break;
-        const [en] = pl.hand.splice(idx, 1) as [EnergyCard];
-        allies[attached % allies.length].attachedEnergy.push(en);
-        attached++;
-      }
-      if (attached === 0)
+      const handHas = pl.hand.some(
+        (c) =>
+          c.supertype === "Energy" &&
+          c.subtypes.includes("Basic") &&
+          ((c as EnergyCard).provides.includes(e.typeA) || (c as EnergyCard).provides.includes(e.typeB)),
+      );
+      if (!handHas)
         return { ok: false, reason: `No basic ${e.typeA} or ${e.typeB} Energy in hand.` };
-      logEvent(state, player, `uses ${ability.name}: attaches ${attached} Energy.`);
+      if (pl.isAI) {
+        let attached = 0;
+        for (let i = 0; i < e.max; i++) {
+          const idx = pl.hand.findIndex(
+            (c) =>
+              c.supertype === "Energy" &&
+              c.subtypes.includes("Basic") &&
+              ((c as EnergyCard).provides.includes(e.typeA) || (c as EnergyCard).provides.includes(e.typeB)),
+          );
+          if (idx < 0) break;
+          const [en] = pl.hand.splice(idx, 1) as [EnergyCard];
+          allies[attached % allies.length].attachedEnergy.push(en);
+          attached++;
+        }
+        logEvent(state, player, `uses ${ability.name}: attaches ${attached} Energy.`);
+        break;
+      }
+      state.pendingInPlayTarget = {
+        player,
+        label: `${ability.name}: pick a Pokémon to attach a Basic ${e.typeA}/${e.typeB} Energy (${e.max} left, Cancel to stop)`,
+        scope: "own",
+        slot: "anywhere",
+        filter: "anyPokemon",
+        action: {
+          kind: "abilityAttachMixedFromHand",
+          remaining: e.max,
+          typeA: e.typeA,
+          typeB: e.typeB,
+          abilityName: ability.name,
+        },
+      };
+      logEvent(state, player, `uses ${ability.name}.`);
       break;
     }
 
     case "flipChooseStatusOpp": {
-      // Selective Slime — flip; heads: opp Active gets burned/confused/poisoned.
-      // Auto-pick Poisoned (generally best value).
+      // Cradily Selective Slime / Grafaiai Miraculous Paint — flip a coin;
+      // on heads, the player CHOOSES Burned / Confused / Poisoned. Opens a
+      // PendingChoiceMenu for humans; AI picks Poisoned (matches prior heuristic).
       const heads = state.rng.next() < 0.5;
       logEvent(state, "system", `${ability.name}: ${heads ? "heads" : "tails"}.`);
       if (!heads) break;
       const oppId: PlayerId = player === "p1" ? "p2" : "p1";
       const oppActive = state.players[oppId].active;
       if (!oppActive) break;
-      if (!oppActive.statuses.includes("poisoned")) oppActive.statuses.push("poisoned");
-      logEvent(state, player, `uses ${ability.name}: ${oppActive.card.name} is now poisoned.`);
+      state.pendingChoiceMenu = {
+        player,
+        label: `${ability.name}: choose a Special Condition for ${oppActive.card.name}`,
+        options: [
+          { id: "burned", label: "Burned" },
+          { id: "confused", label: "Confused" },
+          { id: "poisoned", label: "Poisoned" },
+        ],
+        effectKind: "selectiveSlimeStatus",
+      };
+      logEvent(state, player, `uses ${ability.name}.`);
       break;
     }
 
@@ -1621,41 +1807,76 @@ export function activateAbility(
       );
       if (candidates.length === 0 || !pl.active)
         return { ok: false, reason: `No Benched ${e.energyType} Pokémon.` };
-      const incoming = candidates[0];
-      const benchIdx = pl.bench.findIndex((p) => p.instanceId === incoming.instanceId);
-      const outgoing = pl.active;
-      pl.bench.splice(benchIdx, 1);
-      pl.active = incoming;
-      pl.bench.push(outgoing);
-      const EXCLUSIVE = ["asleep", "confused", "paralyzed"];
-      if (EXCLUSIVE.includes(e.status)) {
-        incoming.statuses = incoming.statuses.filter((x) => !EXCLUSIVE.includes(x));
+      if (pl.isAI || candidates.length === 1) {
+        // AI / forced lane: pick the first matching candidate (parity with prior behavior).
+        const incoming = candidates[0];
+        const benchIdx = pl.bench.findIndex((p) => p.instanceId === incoming.instanceId);
+        const outgoing = pl.active;
+        pl.bench.splice(benchIdx, 1);
+        pl.active = incoming;
+        pl.bench.push(outgoing);
+        const EXCLUSIVE = ["asleep", "confused", "paralyzed"];
+        if (EXCLUSIVE.includes(e.status)) {
+          incoming.statuses = incoming.statuses.filter((x) => !EXCLUSIVE.includes(x));
+        }
+        if (!incoming.statuses.includes(e.status)) incoming.statuses.push(e.status);
+        logEvent(state, player, `uses ${ability.name}: switches in ${incoming.card.name} — now ${e.status}.`);
+        fireTriggeredOnMoveToActive(state, player, incoming);
+        fireTriggeredOnMoveToBench(state, player, outgoing);
+        break;
       }
-      if (!incoming.statuses.includes(e.status)) incoming.statuses.push(e.status);
-      logEvent(state, player, `uses ${ability.name}: switches in ${incoming.card.name} — now ${e.status}.`);
-      fireTriggeredOnMoveToActive(state, player, incoming);
-      fireTriggeredOnMoveToBench(state, player, outgoing);
+      state.pendingInPlayTarget = {
+        player,
+        label: `${ability.name}: pick a Benched ${e.energyType} Pokémon to switch in`,
+        scope: "own",
+        slot: "bench",
+        filter: "anyPokemon",
+        action: {
+          kind: "abilitySwitchBenchedTypeWithStatus",
+          energyType: e.energyType,
+          status: e.status,
+          excludeSameName: !!e.excludeSameName,
+          holderName,
+          abilityName: ability.name,
+        },
+      };
+      logEvent(state, player, `uses ${ability.name}.`);
       break;
     }
 
     case "swapWithBenchAndForceOppPromote": {
       if (!pl.active || pl.bench.length === 0) return { ok: false, reason: "Need Benched Pokémon." };
-      const incoming = pl.bench.shift()!;
-      const outgoing = pl.active;
-      pl.active = incoming;
-      pl.bench.push(outgoing);
-      fireTriggeredOnMoveToActive(state, player, incoming);
-      fireTriggeredOnMoveToBench(state, player, outgoing);
-      const oppId: PlayerId = player === "p1" ? "p2" : "p1";
-      const opp = state.players[oppId];
-      if (opp.active && opp.bench.length > 0) {
-        opp.bench.push(opp.active);
-        opp.active = null;
-        setPendingPromote(state, oppId);
-        state.phase = "promoteActive";
-        state.onPromoteResolved = null;
+      if (pl.isAI || pl.bench.length === 1) {
+        const incoming = pl.bench.shift()!;
+        const outgoing = pl.active;
+        pl.active = incoming;
+        pl.bench.push(outgoing);
+        fireTriggeredOnMoveToActive(state, player, incoming);
+        fireTriggeredOnMoveToBench(state, player, outgoing);
+        const oppId: PlayerId = player === "p1" ? "p2" : "p1";
+        const opp = state.players[oppId];
+        if (opp.active && opp.bench.length > 0) {
+          opp.bench.push(opp.active);
+          opp.active = null;
+          setPendingPromote(state, oppId);
+          state.phase = "promoteActive";
+          state.onPromoteResolved = null;
+        }
+        logEvent(state, player, `uses ${ability.name}: switches self; opp must promote a new Active.`);
+        break;
       }
-      logEvent(state, player, `uses ${ability.name}: switches self; opp must promote a new Active.`);
+      state.pendingInPlayTarget = {
+        player,
+        label: `${ability.name}: pick a Benched Pokémon to swap with the Active`,
+        scope: "own",
+        slot: "bench",
+        filter: "anyPokemon",
+        action: {
+          kind: "abilitySwapWithBenchForceOppPromote",
+          abilityName: ability.name,
+        },
+      };
+      logEvent(state, player, `uses ${ability.name}.`);
       break;
     }
 
@@ -1711,7 +1932,8 @@ export function activateAbility(
 
     case "devolveOppEvolution": {
       // Ancient Wing — Active-only; pick an opp Evolution Pokémon, put the
-      // highest Stage card from it back into opp's hand.
+      // highest Stage card from it back into opp's hand. Human picks the
+      // target; AI auto-picks the most-evolved opp ally.
       if (e.activeOnly && pl.active?.instanceId !== holder.instanceId)
         return { ok: false, reason: "This Pokémon must be Active." };
       const oppId: PlayerId = player === "p1" ? "p2" : "p1";
@@ -1720,29 +1942,54 @@ export function activateAbility(
         (p): p is PokemonInPlay => !!p && p.evolvedFrom.length > 0,
       );
       if (targets.length === 0) return { ok: false, reason: "No evolved opposing Pokémon." };
-      const target = targets.sort((a, b) => b.evolvedFrom.length - a.evolvedFrom.length)[0];
-      const topStage = target.card as PokemonCard;
-      const newTop = target.evolvedFrom.pop()!;
-      target.card = newTop;
-      opp.hand.push(topStage);
-      // Evolved-this-turn flag clears — the target is reverted.
-      target.evolvedThisTurn = false;
-      logEvent(state, player, `uses ${ability.name}: devolves ${target.card.name}; ${topStage.name} returns to ${opp.name}'s hand.`);
+      if (pl.isAI || targets.length === 1) {
+        const target = targets.sort((a, b) => b.evolvedFrom.length - a.evolvedFrom.length)[0];
+        const topStage = target.card as PokemonCard;
+        const newTop = target.evolvedFrom.pop()!;
+        target.card = newTop;
+        opp.hand.push(topStage);
+        target.evolvedThisTurn = false;
+        logEvent(state, player, `uses ${ability.name}: devolves ${target.card.name}; ${topStage.name} returns to ${opp.name}'s hand.`);
+        break;
+      }
+      state.pendingInPlayTarget = {
+        player,
+        label: `${ability.name}: pick an opp Evolution Pokémon to devolve`,
+        scope: "opp",
+        slot: "anywhere",
+        filter: "anyPokemon",
+        action: { kind: "abilityDevolveOppEvolution", abilityName: ability.name },
+      };
+      logEvent(state, player, `uses ${ability.name}.`);
       break;
     }
 
     case "discardToolFromHandGustOpp": {
-      // Beckoning Tail — cost: discard a <toolName> from HAND, then gust opp bench.
+      // Beckoning Tail — discard a <toolName> from HAND (fungible by name),
+      // then gust an opp benched Pokémon. Human picks the gust target;
+      // AI auto-targets bench[0] (preserves prior behavior).
       const idx = pl.hand.findIndex((c) => c.supertype === "Trainer" && c.name === e.toolName);
       if (idx < 0) return { ok: false, reason: `No ${e.toolName} in hand.` };
-      const [tool] = pl.hand.splice(idx, 1);
-      pl.discard.push(tool);
       const oppId: PlayerId = player === "p1" ? "p2" : "p1";
       const opp = state.players[oppId];
       if (!opp.active || opp.bench.length === 0)
         return { ok: false, reason: "Opponent has no Benched Pokémon." };
-      const r = performGust(state, oppId, 0);
-      if (r) logEvent(state, player, `uses ${ability.name}: discards ${tool.name}; gusts ${r.pulled.card.name}.`);
+      const [tool] = pl.hand.splice(idx, 1);
+      pl.discard.push(tool);
+      if (pl.isAI || opp.bench.length === 1) {
+        const r = performGust(state, oppId, 0);
+        if (r) logEvent(state, player, `uses ${ability.name}: discards ${tool.name}; gusts ${r.pulled.card.name}.`);
+        break;
+      }
+      logEvent(state, player, `uses ${ability.name}: discards ${tool.name}.`);
+      state.pendingInPlayTarget = {
+        player,
+        label: `${ability.name}: pick an opp Benched Pokémon to gust to Active`,
+        scope: "opp",
+        slot: "bench",
+        filter: "anyPokemon",
+        action: { kind: "pokemonCatcher" },
+      };
       break;
     }
 
@@ -1855,22 +2102,44 @@ export function activateAbility(
       break;
     }
     case "moveBasicEnergyAnywhere": {
-      // As-often-as-you-like — DON'T set abilityUsedThisTurn at the end.
-      // Move a Basic <energyType> Energy from one of your Pokémon to another.
-      // Auto-pick: source = first ally with matching energy other than the
-      // player's chosen target; target = active.
+      // Dewgong Wash Out, Azumarill ex Bubble Gathering — as-often-as-you-like
+      // move of a Basic <energyType> Energy between your Pokémon. Humans get
+      // a typed-energy switch picker that re-arms after each move; AI moves
+      // one typed energy per activation (matches the pre-prompt behavior;
+      // the as-often-as-you-like loop is driven by re-activation).
       const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
-      const source = allies.find((p) =>
-        p.attachedEnergy.some((en) => en.subtypes.includes("Basic") && en.provides.includes(e.energyType)),
-      );
-      if (!source) return { ok: false, reason: `No Basic ${e.energyType} Energy on any of your Pokémon.` };
-      const target = allies.find((p) => p !== source);
-      if (!target) return { ok: false, reason: "Need another Pokémon to move energy to." };
-      const idx = source.attachedEnergy.findIndex((en) => en.subtypes.includes("Basic") && en.provides.includes(e.energyType));
-      const [en] = source.attachedEnergy.splice(idx, 1);
-      target.attachedEnergy.push(en);
-      logEvent(state, player, `uses ${ability.name}: moves ${en.name} from ${source.card.name} to ${target.card.name}.`);
-      // Don't set abilityUsedThisTurn — usable again same turn.
+      if (allies.length < 2)
+        return { ok: false, reason: "Need at least two of your Pokémon in play." };
+      const hasTypedFilter = (en: EnergyCard) =>
+        en.subtypes.includes("Basic") && en.provides.includes(e.energyType);
+      const source = allies.find((p) => p.attachedEnergy.some(hasTypedFilter));
+      if (!source)
+        return { ok: false, reason: `No Basic ${e.energyType} Energy on any of your Pokémon.` };
+      if (pl.isAI) {
+        const dest = allies.find((p) => p !== source)!;
+        const idx = source.attachedEnergy.findIndex(hasTypedFilter);
+        const [en] = source.attachedEnergy.splice(idx, 1);
+        dest.attachedEnergy.push(en);
+        logEvent(state, player, `uses ${ability.name}: moves ${en.name} from ${source.card.name} to ${dest.card.name}.`);
+        // As-often-as-you-like: don't set abilityUsedThisTurn so AI can
+        // re-trigger if it has more typed energy to move.
+        return { ok: true };
+      }
+      state.pendingInPlayTarget = {
+        player,
+        label: `${ability.name}: pick the Pokémon to move a Basic ${e.energyType} Energy FROM`,
+        scope: "own",
+        slot: "anywhere",
+        filter: "hasBasicEnergy",
+        action: {
+          kind: "typedEnergySwitchSource",
+          energyType: e.energyType,
+          asOften: true,
+        },
+      };
+      logEvent(state, player, `uses ${ability.name}.`);
+      // Don't set abilityUsedThisTurn — usable again same turn (the re-arming
+      // picker handles repeats; the user cancels to stop).
       return { ok: true };
     }
     case "attachEnergyFromHandToNamedAsOften": {

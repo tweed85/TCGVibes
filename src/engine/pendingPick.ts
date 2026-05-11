@@ -443,6 +443,12 @@ export function setTopPeekPick(
   eligible: (c: Card) => boolean,
   max: number,
   label: string,
+  options: {
+    min?: number;
+    unpicked?: import("./types").PendingPickFallback;
+    pickedDestination?: import("./types").PendingPick["pickedDestination"];
+    effectKind?: import("./types").PendingPickEffectKind;
+  } = {},
 ): boolean {
   const pl = state.players[player];
   // Defensively ensure the deck has no prize references before we peek.
@@ -455,11 +461,13 @@ export function setTopPeekPick(
     player,
     label,
     pool,
-    min: 0,
+    min: Math.max(0, options.min ?? 0),
     max: Math.min(max, eligibleIndexes.length),
     eligibleIndexes,
-    unpicked: "shuffleIntoDeck",
+    unpicked: options.unpicked ?? "shuffleIntoDeck",
     source: "deckTop",
+    pickedDestination: options.pickedDestination,
+    effectKind: options.effectKind,
   };
   state.phase = "pick";
   return true;

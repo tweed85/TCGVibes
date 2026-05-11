@@ -29,22 +29,26 @@ Pressure-test findings, MVP scope cuts, and deferred AI overhaul phases. See [..
 - No in-game rules glossary / help button.
 - `AiActionBanner` can flash-and-vanish on fast AI steps.
 
-## Deferred AI work (Phases 2c, 2e, 7-12 of the AI overhaul plan)
+## Deferred AI work (Phases 7-12 of the AI overhaul plan)
 
 Concrete build plan: [AI_CPU_BUILD_PLAN.md](AI_CPU_BUILD_PLAN.md). Use that
 doc for implementation sequencing; this section is the older backlog map.
 
-- **2c. Multi-action reordering** — replace fixed greedy step order
-  with a score-then-pick loop.
-- **2e. Ability scoring tuning** — defaults at 50-65 across ~70 kinds;
-  tune per-impact via Phase 9 self-tuning.
+**Phases 0-5 of the build plan are complete** (Phase 3E
+candidate-generator refactor subsumed the older 2c / 2e items). 938
+tests pass; 49 `aiDecisionQuality` scenarios green.
+
+- **6. Replay-informed tuning** — deferred until cloud-replay corpus
+  exists. Will tune opening search targets, attach targets, sequencing
+  thresholds via filtered replay analysis.
 - **7. Opp modeling** — route opp's MCTS-rollout moves through their
   detected archetype playbook instead of greedy.
 - **8. Opening book from real tournament data** — *substantially
   seeded*: Prague Regional 2026 R9 + Day 2 (top16/top8/top4/finals)
   logged in
   [../data/tournament-replays/](../data/tournament-replays/). **12 archetype
-  playbooks wired** in [../src/engine/aiArchetype.ts](../src/engine/aiArchetype.ts):
+  playbooks fully wired** with T1-T3 `cardBonus` / `abilityBonus` in
+  [../src/engine/aiArchetype.ts](../src/engine/aiArchetype.ts):
   festival-leads, arboliva, alakazam, lucario-ex, rocket-mewtwo,
   dragapult-blaziken, dragapult-dudunsparce, crustle, cynthia-garchomp,
   grimmsnarl-froslass, mega-starmie-froslass, hops-trevenant. Continue
@@ -53,7 +57,7 @@ doc for implementation sequencing; this section is the older backlog map.
   perturbation-searches the 20+ heuristic constants. Game 3 T12
   "intriguing pass" from Prague R9 is concrete training data for a
   low `passOnLethalConservatismFactor`.
-- **10. Massive scenario suite** — expand from 12 → 200 handcrafted
+- **10. Massive scenario suite** — expand from 49 → 200 handcrafted
   decision tests.
 - **11. Game-log review pass** — manually read 100 AI-vs-AI logs,
   encode found mistakes as new heuristic rules / scenarios.

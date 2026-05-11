@@ -1,5 +1,5 @@
 import { memo, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent } from "react";
-import type { Card, PokemonCard, PokemonInPlay } from "../engine/types";
+import type { Card, EnergyCard, PokemonCard, PokemonInPlay } from "../engine/types";
 
 // Shared "zoom" subscriber — the top-level App wires a listener that
 // intercepts shift+click / right-click on any CardView and renders a large
@@ -103,6 +103,57 @@ function EnergyTypeMark({ type }: { type: string }) {
     default:
       return <span className="energy-fallback">{type.slice(0, 2)}</span>;
   }
+}
+
+const ENERGY_VISIBLE_LIMIT = 4;
+const ENERGY_COLLAPSE_VISIBLE = 3;
+const TOOL_VISIBLE_LIMIT = 2;
+
+function energyTokenModel(e: EnergyCard): {
+  primary: string;
+  types: string[];
+  isWild: boolean;
+  className: string;
+  code: string;
+} {
+  const types = e.provides ?? ["Colorless"];
+  const primary = types[0] ?? "Colorless";
+  const distinct = new Set(types);
+  const isWild = distinct.size > 1;
+  return {
+    primary,
+    types,
+    isWild,
+    className: `energy-token energy-pip energy-${isWild ? "wild" : primary}`,
+    code: isWild ? "*" : (ENERGY_ABBR[primary] ?? primary.slice(0, 2)),
+  };
+}
+
+function EnergyToken({ energy, index }: { energy: EnergyCard; index: number }) {
+  const model = energyTokenModel(energy);
+  return (
+    <span
+      className={model.className}
+      style={{ "--stack-index": index } as CSSProperties}
+      title={`${energy.name} (${model.types.join("/")})`}
+      aria-label={`${energy.name}, provides ${model.types.join("/")}`}
+    >
+      {model.isWild ? <span className="energy-wild-mark" aria-hidden="true" /> : <EnergyTypeMark type={model.primary} />}
+      <span className="energy-sr-code">{model.code}</span>
+    </span>
+  );
+}
+
+function EnergyOverflowToken({ hidden, energies }: { hidden: number; energies: EnergyCard[] }) {
+  return (
+    <span
+      className="energy-token energy-stack-count"
+      title={`Additional Energy: ${energies.map((e) => e.name).join(", ")}`}
+      aria-label={`${hidden} additional attached Energy`}
+    >
+      +{hidden}
+    </span>
+  );
 }
 
 type ToolIconKind =
@@ -211,6 +262,24 @@ function ToolIcon({ card }: { card: Card }) {
       {(spec.mark || spec.kind === "berry" || spec.kind === "capsule" || spec.kind === "helmet" || spec.kind === "tm" || spec.kind === "orb") && (
         <span className="tool-mark">{mark}</span>
       )}
+    </span>
+  );
+}
+
+function ToolChip({ card, index }: { card: Card; index: number }) {
+  const image = card.imageSmall ?? card.imageLarge;
+  return (
+    <span
+      className="tool-chip tool-badge"
+      style={{ "--stack-index": index } as CSSProperties}
+      title={card.name}
+      aria-label={card.name}
+    >
+      <span className="tool-card-tab" aria-hidden="true">
+        {image ? <img src={image} alt="" loading="lazy" /> : <ToolIcon card={card} />}
+      </span>
+      <span className="tool-chip-glint" aria-hidden="true" />
+      <span className="tool-chip-sr">{card.name}</span>
     </span>
   );
 }
@@ -658,27 +727,16 @@ export function PokemonInPlayView({
     (dropHover ? " drop-hover" : "");
   const tip = cardTooltip(p.card);
 
-  // Render each attached Energy as a type-colored pip with a recognizable
-  // symbol. Wildcard / multi-type energies render rainbow with an all-type
-  // mark while their title still lists the exact card and provided types.
-  const pips = p.attachedEnergy.map((e, i) => {
-    const types = e.provides ?? ["Colorless"];
-    const primary = types[0] ?? "Colorless";
-    const distinct = new Set(types);
-    const isWild = distinct.size > 1;
-    const cls = `energy-pip energy-${isWild ? "wild" : primary}`;
-    return (
-      <span
-        key={`${e.id}-${i}`}
-        className={cls}
-        title={`${e.name} (${types.join("/")})`}
-        aria-label={`${e.name}, provides ${types.join("/")}`}
-      >
-        {isWild ? <span className="energy-wild-mark" aria-hidden="true" /> : <EnergyTypeMark type={primary} />}
-        <span className="energy-sr-code">{isWild ? "*" : (ENERGY_ABBR[primary] ?? primary.slice(0, 2))}</span>
-      </span>
-    );
-  });
+  // Render attachments as physical board tokens: a readable stack of glossy
+  // Energy coins and tiny Tool card-tabs anchored to the Pokémon's edges.
+  const visibleEnergyCount =
+    p.attachedEnergy.length > ENERGY_VISIBLE_LIMIT
+      ? ENERGY_COLLAPSE_VISIBLE
+      : p.attachedEnergy.length;
+  const visibleEnergy = p.attachedEnergy.slice(0, visibleEnergyCount);
+  const hiddenEnergy = p.attachedEnergy.slice(visibleEnergyCount);
+  const visibleTools = p.tools.slice(0, TOOL_VISIBLE_LIMIT);
+  const hiddenTools = Math.max(0, p.tools.length - visibleTools.length);
 
   const effMax = maxHp ?? p.card.hp;
   const currentHp = Math.max(0, effMax - p.damage);
@@ -714,20 +772,26 @@ export function PokemonInPlayView({
             ))}
           </div>
         )}
-        {pips.length > 0 && <div className="energy-row">{pips}</div>}
+        {p.attachedEnergy.length > 0 && (
+          <div className="attachment-layer attachment-layer-energy">
+            <div className="energy-row energy-stack" aria-label={`Attached Energy: ${p.attachedEnergy.map((e) => e.name).join(", ")}`}>
+              {visibleEnergy.map((e, i) => (
+                <EnergyToken key={`${e.id}-${i}`} energy={e} index={i} />
+              ))}
+              {hiddenEnergy.length > 0 && (
+                <EnergyOverflowToken hidden={hiddenEnergy.length} energies={hiddenEnergy} />
+              )}
+            </div>
+          </div>
+        )}
         {p.tools.length > 0 && (
-          <div className="tool-row" aria-label={`Attached tools: ${p.tools.map((t) => t.name).join(", ")}`}>
-            {p.tools.slice(0, 3).map((tool, i) => (
-              <span
-                key={`${tool.id}-${i}`}
-                className="tool-badge"
-                title={tool.name}
-                aria-label={tool.name}
-              >
-                <ToolIcon card={tool} />
-              </span>
-            ))}
-            {p.tools.length > 3 && <span className="tool-more">+{p.tools.length - 3}</span>}
+          <div className="attachment-layer attachment-layer-tools">
+            <div className="tool-row tool-stack" aria-label={`Attached tools: ${p.tools.map((t) => t.name).join(", ")}`}>
+              {visibleTools.map((tool, i) => (
+                <ToolChip key={`${tool.id}-${i}`} card={tool} index={i} />
+              ))}
+              {hiddenTools > 0 && <span className="tool-more">+{hiddenTools}</span>}
+            </div>
           </div>
         )}
       </div>

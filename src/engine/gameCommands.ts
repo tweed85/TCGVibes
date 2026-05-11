@@ -25,6 +25,7 @@ import { resolvePendingPick } from "./pendingPick";
 import {
   resolveSwitchTarget,
   resolveInPlayTarget,
+  resolveChoiceMenu,
   resolveHandReveal,
   resolveRareCandyChoice,
   skipGlassTrumpetAttach,
@@ -72,6 +73,7 @@ export type GameCommand =
   | { kind: "resolveSwitchTarget"; player: PlayerId; benchIndex: number }
   | { kind: "resolveInPlayTarget"; player: PlayerId; targetOwner: PlayerId; instanceId: string }
   | { kind: "resolveHandReveal"; player: PlayerId; pickedHandIndexes: number[] }
+  | { kind: "resolveChoiceMenu"; player: PlayerId; optionId: string }
   | { kind: "resolveRareCandyChoice"; player: PlayerId; handIndex: number }
   // Optional-prompt skip — Prime Catcher's "If you do, you may switch your
   // Active." Without an explicit skip command, exported replays would stall
@@ -152,6 +154,10 @@ export function applyGameCommand(state: GameState, c: GameCommand): ActionResult
     case "resolveHandReveal": {
       const r = resolveHandReveal(state, c.player, c.pickedHandIndexes);
       return r.ok ? { ok: true } : { ok: false, reason: r.reason ?? "Hand reveal failed." };
+    }
+    case "resolveChoiceMenu": {
+      const r = resolveChoiceMenu(state, c.player, c.optionId);
+      return r.ok ? { ok: true } : { ok: false, reason: r.reason ?? "Choice menu failed." };
     }
     case "resolveRareCandyChoice": {
       const r = resolveRareCandyChoice(state, c.player, c.handIndex);

@@ -32,6 +32,13 @@ import {
   setTopPeekPick,
   setBottomPeekPick,
 } from "./pendingPick";
+import {
+  AI_CHOICEMENU_POLICIES,
+  AI_HANDREVEAL_POLICIES,
+  AI_INPLAY_POLICIES,
+  registerAiChoiceMenuPolicy,
+} from "./aiPolicies";
+import type { AIChoiceMenuPolicy } from "./aiPolicies";
 import type {
   Card,
   EnergyCard,
@@ -44,7 +51,7 @@ import type {
   TrainerCard,
 } from "./types";
 import type { TrainerTarget } from "./actions";
-import { resumeSecondAttack } from "./actions";
+import { resumeDamageScalingAttack, resumeSecondAttack } from "./actions";
 
 // Auto-detected effect ids.
 export type TrainerEffectId =
@@ -3007,7 +3014,14 @@ export function applyTrainerEffect(
           }
           return koAvailable * 1000 + prize * 100 + target.card.hp;
         };
-        const benchedTarget = opp.bench.slice().sort((a, b) => score(b) - score(a))[0];
+        const explicitTargetId =
+          target?.kind === "oppInPlay" ? target.instanceId :
+          target?.kind === "inPlay" ? target.instanceId :
+          null;
+        const explicitTarget = explicitTargetId
+          ? opp.bench.find((p) => p.instanceId === explicitTargetId)
+          : null;
+        const benchedTarget = explicitTarget ?? opp.bench.slice().sort((a, b) => score(b) - score(a))[0];
         const idx = opp.bench.indexOf(benchedTarget);
         const r = performGust(state, oppId, idx);
         if (r) logEvent(state, player, `gusts ${r.pulled.card.name} to Active.`);
@@ -4417,6 +4431,85 @@ export function resolveInPlayTarget(
       state.pendingInPlayTarget = null;
       return { ok: true };
     }
+    case "typedEnergySwitchSource": {
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      const energyType = pending.action.energyType;
+      const hasTyped = target.attachedEnergy.some(
+        (e) => e.subtypes.includes("Basic") && e.provides.includes(energyType),
+      );
+      if (!hasTyped) {
+        return { ok: false, reason: `That Pokémon has no Basic ${energyType} Energy.` };
+      }
+      state.pendingInPlayTarget = {
+        player: clicker,
+        label: `Move a Basic ${energyType} Energy TO (from ${target.card.name})`,
+        scope: "own",
+        slot: "anywhere",
+        filter: "anyPokemon",
+        action: {
+          kind: "typedEnergySwitchDest",
+          sourceInstanceId: target.instanceId,
+          energyType,
+          asOften: pending.action.asOften,
+        },
+      };
+      return { ok: true };
+    }
+    case "typedEnergySwitchDest": {
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      const srcId = pending.action.sourceInstanceId;
+      if (instanceId === srcId) {
+        return { ok: false, reason: "Pick a different Pokémon than the source." };
+      }
+      const energyType = pending.action.energyType;
+      const source = clickerPl.active?.instanceId === srcId
+        ? clickerPl.active
+        : clickerPl.bench.find((p) => p.instanceId === srcId);
+      if (!source) {
+        state.pendingInPlayTarget = null;
+        return { ok: false, reason: "Source Pokémon is no longer in play." };
+      }
+      const eIdx = source.attachedEnergy.findIndex(
+        (e) => e.subtypes.includes("Basic") && e.provides.includes(energyType),
+      );
+      if (eIdx < 0) {
+        state.pendingInPlayTarget = null;
+        return { ok: false, reason: `Source has no Basic ${energyType} Energy.` };
+      }
+      const [en] = source.attachedEnergy.splice(eIdx, 1);
+      target.attachedEnergy.push(en);
+      logEvent(
+        state,
+        clicker,
+        `moves ${en.name} from ${source.card.name} to ${target.card.name}.`,
+      );
+      enforceSpecialEnergyAttachRules(state);
+      state.pendingInPlayTarget = null;
+      // "As often as you like" — re-arm the source picker if any ally still
+      // has a Basic <energyType> Energy and at least one other ally exists
+      // to receive it. Player can cancel to stop.
+      if (pending.action.asOften) {
+        const allies = [clickerPl.active, ...clickerPl.bench].filter(
+          (p): p is import("./types").PokemonInPlay => !!p,
+        );
+        const stillMovable = allies.some((p) =>
+          p.attachedEnergy.some(
+            (e) => e.subtypes.includes("Basic") && e.provides.includes(energyType),
+          ),
+        );
+        if (stillMovable && allies.length >= 2) {
+          state.pendingInPlayTarget = {
+            player: clicker,
+            label: `Move another Basic ${energyType} Energy FROM (cancel to stop)`,
+            scope: "own",
+            slot: "anywhere",
+            filter: "hasBasicEnergy",
+            action: { kind: "typedEnergySwitchSource", energyType, asOften: true },
+          };
+        }
+      }
+      return { ok: true };
+    }
     case "wallysCompassion": {
       // Must target one of YOUR damaged Mega Evolution Pokémon ex.
       if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
@@ -4478,6 +4571,123 @@ export function resolveInPlayTarget(
         state,
         clicker,
         `Potion: heals ${before - target.damage} from ${target.card.name}.`,
+      );
+      state.pendingInPlayTarget = null;
+      return { ok: true };
+    }
+    case "abilityHealAny": {
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      if (target.damage === 0) return { ok: false, reason: "That Pokémon has no damage to heal." };
+      const before = target.damage;
+      target.damage = Math.max(0, target.damage - pending.action.amount);
+      logEvent(
+        state,
+        clicker,
+        `heals ${before - target.damage} from ${target.card.name}.`,
+      );
+      state.pendingInPlayTarget = null;
+      return { ok: true };
+    }
+    case "abilityPlaceCountersOnOpp": {
+      if (!isOpp) return { ok: false, reason: "Pick one of your opponent's Pokémon." };
+      target.damage += pending.action.counters * 10;
+      logEvent(
+        state,
+        clicker,
+        `${pending.action.abilityName}: places ${pending.action.counters} counters on ${target.card.name}.`,
+      );
+      state.pendingInPlayTarget = null;
+      // Resolve any KO the placement may have caused.
+      const ownerId: PlayerId = clicker === "p1" ? "p2" : "p1";
+      knockOutFromAbilityCounters(state, ownerId, target);
+      return { ok: true };
+    }
+    case "abilitySwitchBenchedTypeWithStatus": {
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      const benchIdx = clickerPl.bench.findIndex((p) => p.instanceId === instanceId);
+      if (benchIdx < 0) return { ok: false, reason: "Pick a Benched Pokémon." };
+      const energyType = pending.action.energyType;
+      if (!target.card.types.includes(energyType)) {
+        return { ok: false, reason: `Pick a ${energyType} Pokémon.` };
+      }
+      if (pending.action.excludeSameName && target.card.name === pending.action.holderName) {
+        return { ok: false, reason: "Cannot pick the same Pokémon name as the holder." };
+      }
+      if (!clickerPl.active) {
+        state.pendingInPlayTarget = null;
+        return { ok: false, reason: "No Active Pokémon to swap with." };
+      }
+      const incoming = target;
+      const outgoing = clickerPl.active;
+      clickerPl.bench.splice(benchIdx, 1);
+      clickerPl.active = incoming;
+      clickerPl.bench.push(outgoing);
+      const EXCLUSIVE: import("./types").StatusCondition[] = ["asleep", "confused", "paralyzed"];
+      const newStatus = pending.action.status;
+      if ((EXCLUSIVE as string[]).includes(newStatus)) {
+        incoming.statuses = incoming.statuses.filter(
+          (x) => !(EXCLUSIVE as string[]).includes(x),
+        );
+      }
+      if (!incoming.statuses.includes(newStatus)) incoming.statuses.push(newStatus);
+      logEvent(
+        state,
+        clicker,
+        `${pending.action.abilityName}: switches in ${incoming.card.name} — now ${newStatus}.`,
+      );
+      fireTriggeredOnMoveToActive(state, clicker, incoming);
+      fireTriggeredOnMoveToBench(state, clicker, outgoing);
+      state.pendingInPlayTarget = null;
+      return { ok: true };
+    }
+    case "abilityDevolveOppEvolution": {
+      if (!isOpp) return { ok: false, reason: "Pick one of your opponent's Pokémon." };
+      if (target.evolvedFrom.length === 0) {
+        return { ok: false, reason: "That Pokémon isn't evolved." };
+      }
+      const oppId: PlayerId = clicker === "p1" ? "p2" : "p1";
+      const opp = state.players[oppId];
+      const topStage = target.card as import("./types").PokemonCard;
+      const newTop = target.evolvedFrom.pop()!;
+      target.card = newTop;
+      opp.hand.push(topStage);
+      target.evolvedThisTurn = false;
+      logEvent(
+        state,
+        clicker,
+        `${pending.action.abilityName}: devolves ${target.card.name}; ${topStage.name} returns to ${opp.name}'s hand.`,
+      );
+      state.pendingInPlayTarget = null;
+      return { ok: true };
+    }
+    case "abilitySwapWithBenchForceOppPromote": {
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      const benchIdx = clickerPl.bench.findIndex((p) => p.instanceId === instanceId);
+      if (benchIdx < 0) return { ok: false, reason: "Pick a Benched Pokémon." };
+      if (!clickerPl.active) {
+        state.pendingInPlayTarget = null;
+        return { ok: false, reason: "No Active Pokémon to swap with." };
+      }
+      const incoming = target;
+      const outgoing = clickerPl.active;
+      clickerPl.bench.splice(benchIdx, 1);
+      clickerPl.active = incoming;
+      clickerPl.bench.push(outgoing);
+      fireTriggeredOnMoveToActive(state, clicker, incoming);
+      fireTriggeredOnMoveToBench(state, clicker, outgoing);
+      const oppId: PlayerId = clicker === "p1" ? "p2" : "p1";
+      const opp = state.players[oppId];
+      if (opp.active && opp.bench.length > 0) {
+        opp.bench.push(opp.active);
+        opp.active = null;
+        setPendingPromote(state, oppId);
+        state.phase = "promoteActive";
+        state.onPromoteResolved = null;
+      }
+      logEvent(
+        state,
+        clicker,
+        `${pending.action.abilityName}: switches self; opp must promote a new Active.`,
       );
       state.pendingInPlayTarget = null;
       return { ok: true };
@@ -4736,6 +4946,286 @@ export function resolveInPlayTarget(
       );
       if (!ok) {
         logEvent(state, ownerId, `${attackName}: no Energy in deck.`);
+      }
+      return { ok: true };
+    }
+    case "abilityAttachAnyBasicFromDiscardToTyped": {
+      // Magneton Overvolt Discharge — re-arming. Each click takes one Basic
+      // Energy from discard and attaches to the clicked typed ally; when
+      // remaining hits 0 (or discard runs dry, or no eligible allies), the
+      // holder self-KOs.
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      const action = pending.action;
+      if (!target.card.types.includes(action.typeFilter)) {
+        return { ok: false, reason: `Pick a ${action.typeFilter} Pokémon.` };
+      }
+      const idx = clickerPl.discard.findIndex(
+        (c) => c.supertype === "Energy" && c.subtypes.includes("Basic"),
+      );
+      const finish = (): void => {
+        // Self-KO the holder.
+        const holderId = action.holderInstanceId;
+        let holder: import("./types").PokemonInPlay | null = null;
+        if (clickerPl.active?.instanceId === holderId) holder = clickerPl.active;
+        else holder = clickerPl.bench.find((p) => p.instanceId === holderId) ?? null;
+        if (holder) {
+          holder.damage = 9999;
+          knockOutFromAbilityCounters(state, clicker, holder);
+        }
+        state.pendingInPlayTarget = null;
+      };
+      if (idx < 0) {
+        logEvent(state, clicker, `${action.abilityName}: no more basic Energy in discard.`);
+        finish();
+        return { ok: true };
+      }
+      const [en] = clickerPl.discard.splice(idx, 1) as [import("./types").EnergyCard];
+      target.attachedEnergy.push(en);
+      logEvent(state, clicker, `${action.abilityName}: attaches ${en.name} to ${target.card.name}.`);
+      const remaining = action.remaining - 1;
+      const stillAvailable = clickerPl.discard.some(
+        (c) => c.supertype === "Energy" && c.subtypes.includes("Basic"),
+      );
+      if (remaining > 0 && stillAvailable) {
+        state.pendingInPlayTarget = {
+          ...pending,
+          label: `${action.abilityName}: pick a ${action.typeFilter} Pokémon to attach a basic Energy from discard (${remaining} left, Cancel to stop and KO)`,
+          action: { ...action, remaining },
+        };
+      } else {
+        finish();
+      }
+      return { ok: true };
+    }
+    case "abilityAttachMixedFromHand": {
+      // Infernape Pyro Dance — re-arming. Each click attaches the first
+      // eligible Basic typeA OR typeB Energy from hand to the clicked ally.
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      const action = pending.action;
+      const handIdx = clickerPl.hand.findIndex(
+        (c) =>
+          c.supertype === "Energy" &&
+          c.subtypes.includes("Basic") &&
+          ((c as import("./types").EnergyCard).provides.includes(action.typeA) ||
+            (c as import("./types").EnergyCard).provides.includes(action.typeB)),
+      );
+      if (handIdx < 0) {
+        logEvent(state, clicker, `${action.abilityName}: no more eligible Energy in hand.`);
+        state.pendingInPlayTarget = null;
+        return { ok: true };
+      }
+      const [en] = clickerPl.hand.splice(handIdx, 1) as [import("./types").EnergyCard];
+      target.attachedEnergy.push(en);
+      logEvent(state, clicker, `${action.abilityName}: attaches ${en.name} to ${target.card.name}.`);
+      const remaining = action.remaining - 1;
+      const stillAvailable = clickerPl.hand.some(
+        (c) =>
+          c.supertype === "Energy" &&
+          c.subtypes.includes("Basic") &&
+          ((c as import("./types").EnergyCard).provides.includes(action.typeA) ||
+            (c as import("./types").EnergyCard).provides.includes(action.typeB)),
+      );
+      if (remaining > 0 && stillAvailable) {
+        state.pendingInPlayTarget = {
+          ...pending,
+          label: `${action.abilityName}: pick a Pokémon to attach the next Energy (${remaining} left, Cancel to stop)`,
+          action: { ...action, remaining },
+        };
+      } else {
+        state.pendingInPlayTarget = null;
+      }
+      return { ok: true };
+    }
+    case "attackMoveAnyEnergySource": {
+      // Energy Blender / Iron Shake-Up — first click: source ally.
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      const action = pending.action;
+      const hasEligible = target.attachedEnergy.some((en) =>
+        action.energyType == null
+          ? true
+          : en.provides.includes(action.energyType),
+      );
+      if (!hasEligible) {
+        return { ok: false, reason: action.energyType
+          ? `That Pokémon has no ${action.energyType} Energy to move.`
+          : "That Pokémon has no Energy to move." };
+      }
+      state.pendingInPlayTarget = {
+        player: clicker,
+        label: `${action.attackName}: pick a Pokémon to move Energy TO (from ${target.card.name})`,
+        scope: "own",
+        slot: "anywhere",
+        filter: "anyPokemon",
+        action: {
+          kind: "attackMoveAnyEnergyDest",
+          sourceInstanceId: target.instanceId,
+          energyType: action.energyType,
+          attackName: action.attackName,
+        },
+      };
+      return { ok: true };
+    }
+    case "attackMoveAnyEnergyDest": {
+      // Energy Blender / Iron Shake-Up — second click: dest ally; move 1
+      // energy; re-arm source picker (Cancel to stop).
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      const action = pending.action;
+      if (instanceId === action.sourceInstanceId) {
+        return { ok: false, reason: "Pick a different Pokémon than the source." };
+      }
+      const source = clickerPl.active?.instanceId === action.sourceInstanceId
+        ? clickerPl.active
+        : clickerPl.bench.find((p) => p.instanceId === action.sourceInstanceId);
+      if (!source) {
+        state.pendingInPlayTarget = null;
+        return { ok: false, reason: "Source Pokémon left play." };
+      }
+      const eIdx = source.attachedEnergy.findIndex((en) =>
+        action.energyType == null
+          ? true
+          : en.provides.includes(action.energyType),
+      );
+      if (eIdx < 0) {
+        state.pendingInPlayTarget = null;
+        return { ok: false, reason: "Source has no matching Energy." };
+      }
+      const [en] = source.attachedEnergy.splice(eIdx, 1);
+      target.attachedEnergy.push(en);
+      logEvent(
+        state,
+        clicker,
+        `${action.attackName}: moves ${en.name} from ${source.card.name} to ${target.card.name}.`,
+      );
+      enforceSpecialEnergyAttachRules(state);
+      // Re-arm source picker for "any amount" / "in any way" semantics.
+      const allies = [clickerPl.active, ...clickerPl.bench].filter(
+        (p): p is import("./types").PokemonInPlay => !!p,
+      );
+      const stillMovable =
+        allies.length >= 2 &&
+        allies.some((p) =>
+          p.attachedEnergy.some((eng) =>
+            action.energyType == null
+              ? true
+              : eng.provides.includes(action.energyType),
+          ),
+        );
+      if (stillMovable) {
+        state.pendingInPlayTarget = {
+          player: clicker,
+          label: `${action.attackName}: move another Energy FROM (Cancel to stop)`,
+          scope: "own",
+          slot: "anywhere",
+          filter: "anyPokemon",
+          action: {
+            kind: "attackMoveAnyEnergySource",
+            energyType: action.energyType,
+            attackName: action.attackName,
+          },
+        };
+      } else {
+        state.pendingInPlayTarget = null;
+      }
+      return { ok: true };
+    }
+    case "abilityAttachQueuedEnergyToAlly": {
+      // Top-N peek + queued attach. Each click takes the head of the queue
+      // and attaches to the clicked ally; closes when queue is empty.
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      const action = pending.action;
+      if (action.queue.length === 0) {
+        state.pendingInPlayTarget = null;
+        return { ok: true };
+      }
+      const en = action.queue[0];
+      target.attachedEnergy.push(en);
+      logEvent(state, clicker, `${action.abilityName}: attaches ${en.name} to ${target.card.name}.`);
+      const remaining = action.queue.slice(1);
+      if (remaining.length > 0) {
+        state.pendingInPlayTarget = {
+          ...pending,
+          label: `${action.abilityName}: attach ${remaining[0].name} (${remaining.length} Energy left)`,
+          action: { ...action, queue: remaining },
+        };
+      } else {
+        state.pendingInPlayTarget = null;
+      }
+      return { ok: true };
+    }
+    case "attackDiscardForDamagePicker": {
+      // Inferno X / Bellowing Thunder / Spill the Tea — pre-attack picker.
+      // Each click discards one matching Energy from the clicked ally;
+      // re-arm until max reached, no eligible energy, or user cancels.
+      // On close, resume the attack with the accumulated discard count.
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      const action = pending.action;
+      const energyType = action.energyType;
+      const eIdx = target.attachedEnergy.findIndex((en) =>
+        energyType == null
+          ? en.subtypes.includes("Basic")
+          : en.provides.includes(energyType),
+      );
+      if (eIdx < 0) {
+        return { ok: false, reason: energyType
+          ? `That Pokémon has no ${energyType} Energy.`
+          : "That Pokémon has no Basic Energy to discard." };
+      }
+      const [en] = target.attachedEnergy.splice(eIdx, 1);
+      clickerPl.discard.push(en);
+      const discarded = action.discarded + 1;
+      logEvent(
+        state,
+        clicker,
+        `${action.attackName}: discards ${en.name} from ${target.card.name} (${discarded} total).`,
+      );
+      const stillAvailable =
+        discarded < action.max &&
+        [clickerPl.active, ...clickerPl.bench]
+          .filter((p): p is import("./types").PokemonInPlay => !!p)
+          .some((p) =>
+            p.attachedEnergy.some((eng) =>
+              energyType == null
+                ? eng.subtypes.includes("Basic")
+                : eng.provides.includes(energyType),
+            ),
+          );
+      if (stillAvailable) {
+        state.pendingInPlayTarget = {
+          ...pending,
+          label: `${action.attackName}: discard another Energy (${discarded} discarded, Cancel to apply damage)`,
+          action: { ...action, discarded },
+        };
+      } else {
+        state.pendingInPlayTarget = null;
+        finishPreAttackDiscardPicker(state, action.attackerOwner, action.attackIndex, discarded);
+      }
+      return { ok: true };
+    }
+    case "attackAttachBasicFromHandToAlly": {
+      // Attach-all-Basic-from-hand re-arming.
+      if (isOpp) return { ok: false, reason: "Pick one of your own Pokémon." };
+      const action = pending.action;
+      const idx = clickerPl.hand.findIndex(
+        (c) => c.supertype === "Energy" && c.subtypes.includes("Basic"),
+      );
+      if (idx < 0) {
+        state.pendingInPlayTarget = null;
+        return { ok: true };
+      }
+      const [en] = clickerPl.hand.splice(idx, 1) as [import("./types").EnergyCard];
+      target.attachedEnergy.push(en);
+      logEvent(state, clicker, `${action.attackName}: attaches ${en.name} to ${target.card.name}.`);
+      const stillAvailable = clickerPl.hand.some(
+        (c) => c.supertype === "Energy" && c.subtypes.includes("Basic"),
+      );
+      if (stillAvailable) {
+        state.pendingInPlayTarget = {
+          ...pending,
+          label: `${action.attackName}: pick a Pokémon for the next Basic Energy from hand (Cancel to stop)`,
+          action: { ...action, remaining: action.remaining - 1 },
+        };
+      } else {
+        state.pendingInPlayTarget = null;
       }
       return { ok: true };
     }
@@ -5076,14 +5566,49 @@ export function cancelInPlayTarget(state: GameState): void {
     skipPrimeCatcherSelfSwitch(state, pending.player);
     return;
   }
+  if (pending.action.kind === "attackDiscardForDamagePicker") {
+    // Cancel finishes the discard-for-damage picker and resumes the attack
+    // with whatever count was accumulated so far.
+    const action = pending.action;
+    state.pendingInPlayTarget = null;
+    finishPreAttackDiscardPicker(state, action.attackerOwner, action.attackIndex, action.discarded);
+    return;
+  }
+  if (pending.action.kind === "abilityAttachAnyBasicFromDiscardToTyped") {
+    // Cancelling the Overvolt Discharge picker still self-KOs the holder.
+    const action = pending.action;
+    const ownerPl = state.players[pending.player];
+    let holder: import("./types").PokemonInPlay | null = null;
+    if (ownerPl.active?.instanceId === action.holderInstanceId) holder = ownerPl.active;
+    else holder = ownerPl.bench.find((p) => p.instanceId === action.holderInstanceId) ?? null;
+    if (holder) {
+      holder.damage = 9999;
+      knockOutFromAbilityCounters(state, pending.player, holder);
+    }
+    state.pendingInPlayTarget = null;
+    return;
+  }
   state.pendingInPlayTarget = null;
 }
 
+
 // -------- Hand-reveal resolver -------------------------------------------
 
-function handCardMatches(c: Card, filter: "item" | "tool" | "itemOrTool" | "supporter" | "pokemon" | "energy" | "any"): boolean {
+function handCardMatches(
+  c: Card,
+  filter: NonNullable<import("./types").PendingHandReveal>["filter"],
+  hpMax?: number,
+): boolean {
   if (filter === "any") return true;
-  if (filter === "pokemon") return c.supertype === "Pokémon";
+  if (filter === "pokemon") {
+    if (c.supertype !== "Pokémon") return false;
+    return hpMax == null || (c as import("./types").PokemonCard).hp <= hpMax;
+  }
+  if (filter === "basicPokemon") {
+    if (c.supertype !== "Pokémon") return false;
+    if (!(c.subtypes ?? []).includes("Basic")) return false;
+    return hpMax == null || (c as import("./types").PokemonCard).hp <= hpMax;
+  }
   if (filter === "energy") return c.supertype === "Energy";
   if (c.supertype !== "Trainer") return false;
   const subs = c.subtypes ?? [];
@@ -5097,6 +5622,7 @@ function handCardMatches(c: Card, filter: "item" | "tool" | "itemOrTool" | "supp
     case "supporter":
       return subs.includes("Supporter");
   }
+  return false;
 }
 
 // Called by the UI when the initiator confirms their selection from the
@@ -5116,7 +5642,7 @@ export function resolveHandReveal(
   const targetPl = state.players[pending.target];
   for (const i of uniq) {
     if (i < 0 || i >= targetPl.hand.length) return { ok: false, reason: "Invalid index." };
-    if (!handCardMatches(targetPl.hand[i], pending.filter)) {
+    if (!handCardMatches(targetPl.hand[i], pending.filter, pending.hpMax)) {
       return { ok: false, reason: `Card at ${i} doesn't match filter.` };
     }
   }
@@ -5134,6 +5660,37 @@ export function resolveHandReveal(
     logEvent(state, clicker, picked.length
       ? `puts ${picked.map((c) => c.name).join(", ")} on top of ${targetPl.name}'s deck.`
       : `puts nothing on top of ${targetPl.name}'s deck.`);
+  } else if (pending.action === "toOppBench") {
+    // Mandibuzz Look for Prey — the picked Basic Pokémon goes onto the
+    // target player's bench (not into discard or deck). min=1 max=1.
+    if (picked.length === 0) {
+      logEvent(state, clicker, `found nothing eligible in ${targetPl.name}'s hand.`);
+    } else if (targetPl.bench.length >= 5) {
+      // Defensive: bench was full at resolution; put the card back in hand.
+      targetPl.hand.push(...picked);
+      logEvent(state, clicker, `${targetPl.name}'s bench is full.`);
+    } else {
+      const card = picked[0] as import("./types").PokemonCard;
+      targetPl.bench.push(makePokemonInPlay(card));
+      logEvent(state, clicker, `forces ${card.name} onto ${targetPl.name}'s bench.`);
+    }
+  } else if (pending.action === "swapWithDeckTop") {
+    // Gumshoos Evidence Gathering: the picked hand card swaps places with
+    // the current top card of the target player's deck. With min=1 max=1
+    // there will be exactly one picked card.
+    if (picked.length > 0 && targetPl.deck.length > 0) {
+      const handCard = picked[0];
+      const deckTop = targetPl.deck.shift()!;
+      targetPl.hand.push(deckTop);
+      targetPl.deck.unshift(handCard);
+      logEvent(
+        state,
+        clicker,
+        `swaps ${handCard.name} with the top of ${targetPl.name}'s deck.`,
+      );
+    } else {
+      logEvent(state, clicker, "could not perform a swap.");
+    }
   } else {
     // toBottomOfDeck
     targetPl.deck.push(...picked);
@@ -5180,13 +5737,44 @@ export function resolveHandReveal(
 }
 
 // AI initiator auto-resolves the reveal by taking the first `max` matches.
+// Action-specific scoring (e.g. swapWithDeckTop prefers Energy > Trainer >
+// Pokemon to preserve pre-conversion auto-pick behavior) wins over the
+// default "first N matches" lane.
 export function resolveAiHandReveal(state: GameState): boolean {
   const pending = state.pendingHandReveal;
   if (!pending) return false;
+
+  // Phase 2.5 — registry consultation first. Each registered policy returns
+  // the hand indexes to pick; the resolver applies them. Falls through to
+  // the action-dispatched fallback (swapWithDeckTop scoring or
+  // first-N-eligible) if no policy is registered for the effectKind.
+  if (pending.effectKind && AI_HANDREVEAL_POLICIES[pending.effectKind]) {
+    const policy = AI_HANDREVEAL_POLICIES[pending.effectKind]!;
+    const picked = policy(state, pending.player, pending);
+    resolveHandReveal(state, pending.player, picked);
+    return true;
+  }
+
   const targetPl = state.players[pending.target];
+
+  if (pending.action === "swapWithDeckTop") {
+    // Gumshoos: prefer least-useful hand card. Energy > Trainer > Pokemon.
+    const scored: { idx: number; score: number }[] = [];
+    targetPl.hand.forEach((c, i) => {
+      if (!handCardMatches(c, pending.filter, pending.hpMax)) return;
+      const score =
+        c.supertype === "Energy" ? 3 : c.supertype === "Trainer" ? 2 : 1;
+      scored.push({ idx: i, score });
+    });
+    scored.sort((a, b) => b.score - a.score);
+    const picked = scored.slice(0, pending.max).map((s) => s.idx);
+    resolveHandReveal(state, pending.player, picked);
+    return true;
+  }
+
   const eligible: number[] = [];
   targetPl.hand.forEach((c, i) => {
-    if (eligible.length < pending.max && handCardMatches(c, pending.filter)) eligible.push(i);
+    if (eligible.length < pending.max && handCardMatches(c, pending.filter, pending.hpMax)) eligible.push(i);
   });
   resolveHandReveal(state, pending.player, eligible);
   return true;
@@ -5194,6 +5782,181 @@ export function resolveAiHandReveal(state: GameState): boolean {
 
 export function cancelHandReveal(state: GameState): void {
   state.pendingHandReveal = null;
+}
+
+// -------- Choice-menu resolver (Cradily Selective Slime, etc.) -------------
+
+export function resolveChoiceMenu(
+  state: GameState,
+  clicker: PlayerId,
+  optionId: string,
+): { ok: boolean; reason?: string } {
+  const pending = state.pendingChoiceMenu;
+  if (!pending || pending.player !== clicker) {
+    return { ok: false, reason: "No choice menu pending." };
+  }
+  const option = pending.options.find((o) => o.id === optionId);
+  if (!option) return { ok: false, reason: "Invalid option." };
+
+  const oppId: PlayerId = clicker === "p1" ? "p2" : "p1";
+
+  switch (pending.effectKind) {
+    case "selectiveSlimeStatus": {
+      const oppActive = state.players[oppId].active;
+      if (!oppActive) {
+        state.pendingChoiceMenu = null;
+        return { ok: false, reason: "Opponent has no Active." };
+      }
+      const status = optionId as import("./types").StatusCondition;
+      const EXCLUSIVE: import("./types").StatusCondition[] = ["asleep", "confused", "paralyzed"];
+      if ((EXCLUSIVE as string[]).includes(status)) {
+        oppActive.statuses = oppActive.statuses.filter(
+          (x) => !(EXCLUSIVE as string[]).includes(x),
+        );
+      }
+      if (!oppActive.statuses.includes(status)) oppActive.statuses.push(status);
+      logEvent(
+        state,
+        clicker,
+        `chose ${status}: ${oppActive.card.name} is now ${status}.`,
+      );
+      state.pendingChoiceMenu = null;
+      return { ok: true };
+    }
+  }
+}
+
+export function resolveAiChoiceMenu(state: GameState): boolean {
+  const pending = state.pendingChoiceMenu;
+  if (!pending) return false;
+  // Phase 2.5 — registry consultation. Defaults to first option if no
+  // policy is registered for the effectKind (generic fallback).
+  const policy = AI_CHOICEMENU_POLICIES[pending.effectKind];
+  const pickedId = policy
+    ? policy(state, pending.player, pending.options)
+    : pending.options[0].id;
+  return resolveChoiceMenu(state, pending.player, pickedId).ok;
+}
+
+// Register the selective-slime status policy.
+const policySelectiveSlimeStatus: AIChoiceMenuPolicy = (_state, _player, options) => {
+  // Match the pre-prompt heuristic: prefer Poisoned, else first option.
+  if (options.some((o) => o.id === "poisoned")) return "poisoned";
+  return options[0].id;
+};
+registerAiChoiceMenuPolicy("selectiveSlimeStatus", policySelectiveSlimeStatus);
+
+export function cancelChoiceMenu(state: GameState): void {
+  state.pendingChoiceMenu = null;
+}
+
+// -------- Phase 7 — pre-attack discard-for-damage continuation -----------
+
+// Calls `resumeDamageScalingAttack` from actions.ts. Same ESM-cycle
+// pattern as `resumeSecondAttack` — the binding resolves at call time.
+function finishPreAttackDiscardPicker(
+  state: GameState,
+  attackerOwner: PlayerId,
+  attackIndex: number,
+  discarded: number,
+): void {
+  resumeDamageScalingAttack(state, attackerOwner, attackIndex, discarded);
+}
+
+// -------- AI in-play-target resolver (Phase 2.4) -------------------------
+
+// Drain a pending in-play target prompt for the AI player. Registry first;
+// fallback picks the first eligible target (or cancels for hold-only
+// actions like the discard-for-damage picker, which apply accumulated
+// state on cancel). Today most ability/trainer handlers branch on
+// `pl.isAI` and resolve inline before ever opening the prompt — this
+// resolver is the defensive drain for any code path that opens a prompt
+// without first branching, plus the new multi-step distribution pickers
+// (Overvolt Discharge, Pyro Dance, etc.) that may stall mid-iteration
+// from a search-rollout perspective.
+export function resolveAiPendingInPlayTarget(state: GameState): boolean {
+  const pending = state.pendingInPlayTarget;
+  if (!pending) return false;
+  const player = pending.player;
+  const policy = AI_INPLAY_POLICIES[pending.action.kind];
+  if (policy) {
+    const id = policy(state, player, pending);
+    if (id) {
+      const targetOwner = pickTargetOwner(state, pending, id);
+      resolveInPlayTarget(state, player, targetOwner, id);
+      return true;
+    }
+    // Policy declined — cancel.
+    cancelInPlayTarget(state);
+    return true;
+  }
+  // Generic fallback: click the first eligible target per the prompt's
+  // scope/slot/filter. For "Cancel-to-stop" re-arming actions (multi-step
+  // distribution), this short-circuits the round-robin loop.
+  const fallback = firstEligibleInPlayTarget(state, pending);
+  if (fallback) {
+    resolveInPlayTarget(state, player, fallback.owner, fallback.instanceId);
+    return true;
+  }
+  // No eligible target — cancel.
+  cancelInPlayTarget(state);
+  return true;
+}
+
+function pickTargetOwner(
+  state: GameState,
+  pending: import("./types").PendingInPlayTarget,
+  instanceId: string,
+): PlayerId {
+  for (const owner of ["p1", "p2"] as const) {
+    const pl = state.players[owner];
+    if (pl.active?.instanceId === instanceId) return owner;
+    if (pl.bench.some((p) => p.instanceId === instanceId)) return owner;
+  }
+  // Should not happen — caller already validated the id.
+  return pending.player;
+}
+
+function firstEligibleInPlayTarget(
+  state: GameState,
+  pending: import("./types").PendingInPlayTarget,
+): { instanceId: string; owner: PlayerId } | null {
+  const ownIds = pending.scope === "opp" ? [] : [pending.player];
+  const oppIds = pending.scope === "own" ? [] : [pending.player === "p1" ? "p2" : "p1"];
+  const allOwners = [...ownIds, ...oppIds] as PlayerId[];
+  for (const owner of allOwners) {
+    const pl = state.players[owner];
+    const candidates: import("./types").PokemonInPlay[] = [];
+    if (pending.slot !== "bench" && pl.active) candidates.push(pl.active);
+    if (pending.slot !== "active") candidates.push(...pl.bench);
+    for (const c of candidates) {
+      if (passesFilter(c, pending.filter)) {
+        return { instanceId: c.instanceId, owner };
+      }
+    }
+  }
+  return null;
+}
+
+function passesFilter(
+  p: import("./types").PokemonInPlay,
+  filter: import("./types").PendingInPlayTarget["filter"],
+): boolean {
+  if (!filter) return true;
+  switch (filter) {
+    case "hasTool":
+      return p.tools.length > 0;
+    case "hasSpecialEnergy":
+      return p.attachedEnergy.some((e) => !e.subtypes.includes("Basic"));
+    case "hasAnyEnergy":
+      return p.attachedEnergy.length > 0;
+    case "hasBasicEnergy":
+      return p.attachedEnergy.some((e) => e.subtypes.includes("Basic"));
+    case "isBasic":
+      return (p.card.subtypes ?? []).includes("Basic");
+    case "anyPokemon":
+      return true;
+  }
 }
 
 // -------- Rare Candy chooser resolver ------------------------------------

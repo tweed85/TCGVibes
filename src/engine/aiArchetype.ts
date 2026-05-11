@@ -508,6 +508,12 @@ export function archetypeTrainerBonus(
       if (card.name === "Brock's Scouting") return 14;
       // Pokémon Center Lady is the wall-phase healer.
       if (card.name === "Pokémon Center Lady") return 16;
+      // Healing and defensive Tools preserve the wall phase.
+      if (card.name === "Jumbo Ice Cream") return 14;
+      if (card.name === "Super Potion") return 12;
+      if (card.name === "Powerglass") return 14;
+      if (card.name.endsWith("Berry")) return 10;
+      if (card.name === "Sparkling Crystal") return 12;
       // Colress's Tenacity chains stadium → energy (refills lost stadium).
       if (card.name === "Colress's Tenacity") return 14;
       // Boss's Orders sniped opp setup pieces in the wall phase.
@@ -751,9 +757,10 @@ export function archetypeBenchBonus(
     case "crustle":
       // Wide Dwebble bench is the wall foundation — multiple lines so
       // 1 KO doesn't sink the plan.
-      if (name === "Dwebble") return 20;
-      // Cornerstone Mask Ogerpon ex — Free-Heal pivot + ability-damage immunity.
-      if (name === "Cornerstone Mask Ogerpon ex") return 12;
+      if (name === "Dwebble") return 26;
+      // Cornerstone Mask Ogerpon ex — defensive anchor, but below Dwebble so
+      // the rule-box body doesn't crowd out the single-prize wall.
+      if (name === "Cornerstone Mask Ogerpon ex") return 18;
       // Mega Kangaskhan ex — rapid-fire backup against EX-immune opponents.
       if (name === "Kangaskhan") return 10;
       return 0;
@@ -841,8 +848,8 @@ export function archetypeAbilityBonus(
       // Triggered by Crustle being in play; not an activated ability but
       // worth flagging so the AI keeps Crustle promoted in EX-heavy matchups.
       if (abilityName === "Mysterious Rock Inn") return 25;
-      // Free-Heal (Cornerstone Mask Ogerpon ex) — heal on switch-out.
-      if (abilityName === "Free-Heal") return 12;
+      // Cornerstone Stance — defensive anchor against attackers with abilities.
+      if (abilityName === "Cornerstone Stance") return 22;
       return 0;
     case "cynthia-garchomp":
       // Champion's Call (Cynthia's Gabite) — tutors a Cynthia's Pokémon
@@ -903,30 +910,55 @@ const PLAYBOOKS: Partial<Record<Archetype, PlaybookEntry>> = {
   "festival-leads": {
     cardBonus: {
       1: {
+        "Applin": 35,
+        "Dipplin": 30,
+        "Grookey": 28,
+        "Thwackey": 22,
         "Festival Grounds": 50,
         "Lillie's Determination": 25,
         "Buddy-Buddy Poffin": 20,
       },
       2: {
+        "Applin": 25,
+        "Dipplin": 40,
+        "Grookey": 20,
+        "Thwackey": 35,
         "Buddy-Buddy Poffin": 30,
         "Festival Grounds": 50,
       },
-      3: { "Maximum Belt": 15 },
+      3: {
+        "Dipplin": 35,
+        "Thwackey": 30,
+        "Festival Grounds": 35,
+        "Maximum Belt": 15,
+      },
     },
     abilityBonus: { 1: {}, 2: {}, 3: {} },
   },
   "arboliva": {
     cardBonus: {
       1: {
+        "Smoliv": 35,
+        "Teal Mask Ogerpon ex": 30,
+        "Chikorita": 18,
         "Forest of Vitality": 50,
         "Ultra Ball": 18,
         "Buddy-Buddy Poffin": 15,
       },
       2: {
+        "Smoliv": 24,
+        "Arboliva ex": 45,
+        "Teal Mask Ogerpon ex": 30,
+        "Forest of Vitality": 35,
         "Rare Candy": 40,
         "Buddy-Buddy Poffin": 15,
       },
-      3: { "Maximum Belt": 12 },
+      3: {
+        "Arboliva ex": 35,
+        "Teal Mask Ogerpon ex": 25,
+        "Forest of Vitality": 30,
+        "Maximum Belt": 12,
+      },
     },
     abilityBonus: {
       1: { "Teal Dance": 30 },
@@ -937,14 +969,25 @@ const PLAYBOOKS: Partial<Record<Archetype, PlaybookEntry>> = {
   "alakazam": {
     cardBonus: {
       1: {
+        "Abra": 35,
+        "Dunsparce": 24,
         "Battle Cage": 50,
         "Lillie's Determination": 25,
       },
       2: {
+        "Kadabra": 30,
+        "Alakazam ex": 45,
+        "Alakazam": 35,
+        "Dudunsparce": 25,
         "Rare Candy": 40,
         "Battle Cage": 50,
       },
-      3: { "Lana's Aid": 12 },
+      3: {
+        "Alakazam ex": 40,
+        "Alakazam": 35,
+        "Battle Cage": 35,
+        "Lana's Aid": 12,
+      },
     },
     abilityBonus: {
       1: { "Psychic Draw": 30 },
@@ -955,14 +998,25 @@ const PLAYBOOKS: Partial<Record<Archetype, PlaybookEntry>> = {
   "lucario-ex": {
     cardBonus: {
       1: {
+        "Riolu": 35,
+        "Makuhita": 22,
         "Premium Power Pro": 50,
         "Fighting Gong": 25,
       },
       2: {
+        "Riolu": 25,
+        "Mega Lucario ex": 45,
+        "Lucario ex": 30,
+        "Fighting Gong": 30,
         "Rare Candy": 35,
         "Premium Power Pro": 50,
       },
-      3: { "Maximum Belt": 20 },
+      3: {
+        "Mega Lucario ex": 40,
+        "Premium Power Pro": 35,
+        "Fighting Gong": 25,
+        "Maximum Belt": 20,
+      },
     },
     abilityBonus: { 1: {}, 2: {}, 3: { "Heave-Ho Catcher": 30 } },
   },
@@ -972,15 +1026,24 @@ const PLAYBOOKS: Partial<Record<Archetype, PlaybookEntry>> = {
   "rocket-mewtwo": {
     cardBonus: {
       1: {
+        "Team Rocket's Tarountula": 38,
+        "Team Rocket's Mewtwo ex": 28,
+        "Team Rocket's Energy": 24,
         "Team Rocket's Proton": 60,
         "Team Rocket's Transceiver": 30,
         "Ultra Ball": 18,
       },
       2: {
+        "Team Rocket's Spidops": 45,
+        "Team Rocket's Mewtwo ex": 35,
+        "Team Rocket's Energy": 25,
         "Team Rocket's Ariana": 55,
         "Team Rocket's Transceiver": 22,
       },
       3: {
+        "Team Rocket's Mewtwo ex": 45,
+        "Team Rocket's Spidops": 30,
+        "Team Rocket's Energy": 22,
         "Team Rocket's Giovanni": 40,
         "Team Rocket's Archer": 25,
         "Maximum Belt": 25,
@@ -998,18 +1061,27 @@ const PLAYBOOKS: Partial<Record<Archetype, PlaybookEntry>> = {
   "dragapult-blaziken": {
     cardBonus: {
       1: {
+        "Dreepy": 35,
+        "Drakloak": 20,
         "Buddy-Buddy Poffin": 35,
         "Lillie's Determination": 30,
         "Ultra Ball": 18,
       },
       2: {
+        "Dreepy": 30,
+        "Drakloak": 35,
+        "Dragapult ex": 35,
         "Crispin": 45,
-        "Rare Candy": 35,
+        "Rare Candy": 50,
         "Buddy-Buddy Poffin": 22,
       },
       3: {
+        "Dreepy": 30,
+        "Dragapult ex": 30,
+        "Rare Candy": 40,
+        "Drakloak": 25,
         "Boss's Orders": 25,
-        "Counter Catcher": 20,
+        "Counter Catcher": 30,
         "Crispin": 28,
       },
     },
@@ -1028,19 +1100,27 @@ const PLAYBOOKS: Partial<Record<Archetype, PlaybookEntry>> = {
   "dragapult-dudunsparce": {
     cardBonus: {
       1: {
+        "Dreepy": 35,
+        "Drakloak": 20,
         "Buddy-Buddy Poffin": 40,
         "Poké Pad": 25,
         "Ultra Ball": 18,
       },
       2: {
+        "Dreepy": 30,
+        "Drakloak": 35,
+        "Dragapult ex": 35,
         "Lillie's Determination": 50,
-        "Rare Candy": 40,
+        "Rare Candy": 55,
         "Buddy-Buddy Poffin": 25,
         "Hero's Cape": 35,
       },
       3: {
+        "Dreepy": 30,
+        "Dragapult ex": 30,
         "Boss's Orders": 35,
-        "Rare Candy": 30,
+        "Rare Candy": 45,
+        "Counter Catcher": 30,
         "Pokégear 3.0": 18,
       },
     },
@@ -1061,22 +1141,48 @@ const PLAYBOOKS: Partial<Record<Archetype, PlaybookEntry>> = {
   "crustle": {
     cardBonus: {
       1: {
+        "Dwebble": 45,
+        "Crustle": 30,
+        "Cornerstone Mask Ogerpon ex": 28,
         "Pokégear 3.0": 35,
         "Buddy-Buddy Poffin": 30,
         "Lillie's Determination": 25,
+        "Powerglass": 24,
+        "Jumbo Ice Cream": 22,
+        "Super Potion": 18,
+        "Sparkling Crystal": 18,
       },
       2: {
+        "Dwebble": 35,
+        "Crustle": 45,
+        "Cornerstone Mask Ogerpon ex": 25,
         "Hero's Cape": 50,
+        "Powerglass": 35,
+        "Jumbo Ice Cream": 30,
+        "Super Potion": 22,
+        "Sparkling Crystal": 24,
         "Lillie's Determination": 30,
         "Pokémon Center Lady": 25,
       },
       3: {
+        "Dwebble": 30,
+        "Crustle": 35,
+        "Cornerstone Mask Ogerpon ex": 22,
+        "Hero's Cape": 35,
+        "Powerglass": 30,
+        "Jumbo Ice Cream": 35,
+        "Super Potion": 25,
+        "Sparkling Crystal": 22,
         "Pokémon Center Lady": 35,
         "Colress's Tenacity": 30,
         "Boss's Orders": 22,
       },
     },
-    abilityBonus: { 1: {}, 2: {}, 3: {} },
+    abilityBonus: {
+      1: { "Mysterious Rock Inn": 25, "Cornerstone Stance": 35 },
+      2: { "Mysterious Rock Inn": 30, "Cornerstone Stance": 30 },
+      3: { "Mysterious Rock Inn": 25, "Cornerstone Stance": 22 },
+    },
   },
   // Sourced from prague-2026-r13/top4 replays. Neddy Kosek's "Cynthia's
   // Garchomp" line. T1 often double-Poffin — wide bench of 4-5 basics
@@ -1086,15 +1192,22 @@ const PLAYBOOKS: Partial<Record<Archetype, PlaybookEntry>> = {
   "cynthia-garchomp": {
     cardBonus: {
       1: {
+        "Cynthia's Gible": 40,
+        "Cynthia's Roselia": 35,
         "Buddy-Buddy Poffin": 50,
         "Ultra Ball": 18,
       },
       2: {
+        "Cynthia's Gabite": 40,
+        "Cynthia's Garchomp ex": 35,
+        "Cynthia's Roserade": 35,
         "Cynthia": 50,
         "Rare Candy": 30,
         "Cynthia's Power Weight": 20,
       },
       3: {
+        "Cynthia's Garchomp ex": 45,
+        "Cynthia's Roserade": 30,
         "Boss's Orders": 35,
         "Cynthia": 30,
         "Unfair Stamp": 25,
@@ -1115,15 +1228,23 @@ const PLAYBOOKS: Partial<Record<Archetype, PlaybookEntry>> = {
   "grimmsnarl-froslass": {
     cardBonus: {
       1: {
+        "Marnie's Impidimp": 40,
+        "Snorunt": 28,
+        "Munkidori": 25,
         "Spikemuth Gym": 55,
         "Buddy-Buddy Poffin": 35,
         "Poké Pad": 22,
       },
       2: {
+        "Marnie's Morgrem": 40,
+        "Froslass": 35,
+        "Marnie's Impidimp": 25,
         "Lillie's Determination": 45,
         "Buddy-Buddy Poffin": 25,
       },
       3: {
+        "Marnie's Grimmsnarl ex": 45,
+        "Froslass": 30,
         "Boss's Orders": 25,
         "Petrel": 20,
       },
@@ -1142,14 +1263,23 @@ const PLAYBOOKS: Partial<Record<Archetype, PlaybookEntry>> = {
   "mega-starmie-froslass": {
     cardBonus: {
       1: {
+        "Staryu": 40,
+        "Snorunt": 30,
+        "Munkidori": 24,
         "Risky Ruins": 55,
         "Buddy-Buddy Poffin": 30,
       },
       2: {
+        "Mega Starmie ex": 45,
+        "Mega Froslass ex": 35,
+        "Froslass": 25,
         "Crispin": 50,
         "Lillie's Determination": 30,
       },
       3: {
+        "Mega Starmie ex": 45,
+        "Mega Froslass ex": 38,
+        "Risky Ruins": 35,
         "Boss's Orders": 30,
         "Crispin": 25,
       },
@@ -1172,16 +1302,25 @@ const PLAYBOOKS: Partial<Record<Archetype, PlaybookEntry>> = {
   "hops-trevenant": {
     cardBonus: {
       1: {
+        "Hop's Phantump": 40,
+        "Hop's Snorlax": 30,
+        "Telepathic Psychic Energy": 28,
         "Hop's Bag": 40,
         "Postwick": 30,
         "Poké Pad": 18,
       },
       2: {
+        "Hop's Trevenant": 45,
+        "Hop's Snorlax": 28,
+        "Telepathic Psychic Energy": 25,
         "Lillie's Determination": 50,
         "Hop's Choice Band": 35,
         "Postwick": 25,
       },
       3: {
+        "Hop's Trevenant": 45,
+        "Hop's Snorlax": 25,
+        "Postwick": 30,
         "Boss's Orders": 35,
         "Hop's Choice Band": 25,
         "Hassel": 18,

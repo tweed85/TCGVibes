@@ -967,6 +967,23 @@ button, select, input, [role="button"] {
 .prompt-banner-label {
   display: inline-block;
 }
+.prompt-banner-options {
+  display: inline-flex;
+  gap: 8px;
+  margin-left: 12px;
+}
+.prompt-banner-options button {
+  background: rgba(56, 189, 248, 0.32);
+  border: 1px solid rgba(56, 189, 248, 0.6);
+  color: #e0f2fe;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.prompt-banner-options button:hover {
+  background: rgba(56, 189, 248, 0.5);
+}
 
 .action-bar .status-line {
   display: flex;
@@ -1617,6 +1634,273 @@ button, select, input, [role="button"] {
   font-weight: 800;
   text-align: center;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.65);
+}
+
+/* Premium attachment treatment — energy/tools sit like physical objects
+   on the card edge instead of flat labels inside the art box. */
+.card.in-play .in-play-overlay .attachment-layer {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+}
+.card.in-play .in-play-overlay .attachment-layer-energy {
+  left: 4px;
+  bottom: 4px;
+}
+.card.in-play .in-play-overlay .attachment-layer-tools {
+  right: 4px;
+  bottom: 4px;
+}
+.card.in-play .in-play-overlay .energy-row.energy-stack {
+  align-self: auto;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  max-width: none;
+  flex-wrap: nowrap;
+  filter: drop-shadow(0 8px 8px rgba(0, 0, 0, 0.42));
+}
+.card.in-play .in-play-overlay .energy-token {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  margin-left: -6px;
+  padding: 6px;
+  border-radius: 50%;
+  border: 2px solid rgba(8, 12, 18, 0.96);
+  outline: 1px solid rgba(255, 255, 255, 0.38);
+  background:
+    radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0) 21%),
+    radial-gradient(circle at 50% 58%, #252b33 0 58%, #07090d 100%);
+  color: #090909;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  transform: translateY(calc(var(--stack-index, 0) * -1px));
+  box-shadow:
+    0 5px 7px rgba(0, 0, 0, 0.52),
+    0 0 0 1px rgba(0, 0, 0, 0.76),
+    0 0 8px var(--energy-glow, rgba(255, 255, 255, 0.18)),
+    inset 0 1px 1px rgba(255, 255, 255, 0.34),
+    inset 0 -4px 5px rgba(0, 0, 0, 0.58);
+}
+.card.in-play .in-play-overlay .energy-token:first-child { margin-left: 0; }
+.card.in-play .in-play-overlay .energy-token::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.62), transparent 22%),
+    radial-gradient(circle at 50% 58%, var(--energy-center, #e2e8f0) 0 36%, var(--energy-mid, #94a3b8) 64%, var(--energy-edge, #334155) 100%);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.55),
+    inset 0 -3px 4px rgba(0, 0, 0, 0.38);
+}
+.card.in-play .in-play-overlay .energy-token::after {
+  content: "";
+  position: absolute;
+  inset: 3px 5px auto 6px;
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0));
+  transform: rotate(-16deg);
+  pointer-events: none;
+}
+.card.in-play .in-play-overlay .energy-token svg {
+  position: relative;
+  z-index: 2;
+  width: 86%;
+  height: 86%;
+  fill: currentColor;
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 0.72;
+  stroke-linejoin: round;
+  filter:
+    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.20))
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.78));
+}
+.card.in-play .in-play-overlay .energy-token.energy-Fire {
+  --energy-center: #ff3644;
+  --energy-mid: #d90f21;
+  --energy-edge: #64070f;
+  --energy-glow: rgba(255, 34, 55, 0.52);
+}
+.card.in-play .in-play-overlay .energy-token.energy-Water {
+  --energy-center: #49c8ff;
+  --energy-mid: #1472ff;
+  --energy-edge: #0b236b;
+  --energy-glow: rgba(56, 189, 248, 0.44);
+}
+.card.in-play .in-play-overlay .energy-token.energy-Grass {
+  --energy-center: #5ced75;
+  --energy-mid: #13a538;
+  --energy-edge: #063f18;
+  --energy-glow: rgba(34, 197, 94, 0.44);
+}
+.card.in-play .in-play-overlay .energy-token.energy-Lightning {
+  --energy-center: #fff76a;
+  --energy-mid: #ffc400;
+  --energy-edge: #8a4b00;
+  --energy-glow: rgba(250, 204, 21, 0.46);
+  color: #111;
+}
+.card.in-play .in-play-overlay .energy-token.energy-Psychic {
+  --energy-center: #ec8bff;
+  --energy-mid: #9b35e6;
+  --energy-edge: #35105f;
+  --energy-glow: rgba(217, 70, 239, 0.46);
+}
+.card.in-play .in-play-overlay .energy-token.energy-Fighting {
+  --energy-center: #d79745;
+  --energy-mid: #91511a;
+  --energy-edge: #351a08;
+  --energy-glow: rgba(180, 83, 9, 0.42);
+}
+.card.in-play .in-play-overlay .energy-token.energy-Darkness {
+  --energy-center: #4b4f5b;
+  --energy-mid: #1e2430;
+  --energy-edge: #02040a;
+  --energy-glow: rgba(15, 23, 42, 0.58);
+  color: #f4f4f5;
+}
+.card.in-play .in-play-overlay .energy-token.energy-Metal {
+  --energy-center: #f2f5f8;
+  --energy-mid: #9faab8;
+  --energy-edge: #3b4655;
+  --energy-glow: rgba(203, 213, 225, 0.44);
+  color: #111;
+}
+.card.in-play .in-play-overlay .energy-token.energy-Dragon {
+  --energy-center: #f5d63b;
+  --energy-mid: #8b5cf6;
+  --energy-edge: #1e40af;
+  --energy-glow: rgba(168, 85, 247, 0.42);
+}
+.card.in-play .in-play-overlay .energy-token.energy-Fairy {
+  --energy-center: #ffb8df;
+  --energy-mid: #e5489c;
+  --energy-edge: #801640;
+  --energy-glow: rgba(244, 114, 182, 0.42);
+}
+.card.in-play .in-play-overlay .energy-token.energy-Colorless {
+  --energy-center: #ffffff;
+  --energy-mid: #cbd5e1;
+  --energy-edge: #526071;
+  --energy-glow: rgba(226, 232, 240, 0.42);
+  color: #111;
+}
+.card.in-play .in-play-overlay .energy-token.energy-wild {
+  --energy-center: #ffffff;
+  --energy-mid: #22c55e;
+  --energy-edge: #7c3aed;
+  --energy-glow: rgba(255, 255, 255, 0.48);
+}
+.card.in-play .in-play-overlay .energy-token.energy-wild::before {
+  background:
+    radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.64), transparent 21%),
+    conic-gradient(
+      var(--energy-fire), var(--energy-lightning), var(--energy-grass),
+      var(--energy-water), var(--energy-psychic), var(--energy-fighting),
+      var(--energy-darkness), var(--energy-fire)
+    );
+}
+.card.in-play .in-play-overlay .energy-stack-count {
+  background: radial-gradient(circle at 35% 25%, #fff 0 14%, #e2e8f0 32%, #334155 100%);
+  color: #0f172a;
+  font-size: 10px;
+  font-weight: 950;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+.card.in-play .in-play-overlay .tool-row.tool-stack {
+  align-self: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+  max-height: none;
+  filter: drop-shadow(0 8px 8px rgba(0, 0, 0, 0.44));
+}
+.card.in-play .in-play-overlay .tool-chip {
+  position: relative;
+  width: 29px;
+  height: 40px;
+  margin-top: -17px;
+  overflow: visible;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  background: linear-gradient(135deg, rgba(226, 232, 240, 0.96), rgba(71, 85, 105, 0.96));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform: rotate(calc(-5deg + var(--stack-index, 0) * 5deg));
+  box-shadow:
+    0 6px 9px rgba(0, 0, 0, 0.52),
+    0 0 0 1px rgba(15, 23, 42, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.48);
+}
+.card.in-play .in-play-overlay .tool-chip:first-child { margin-top: 0; }
+.card.in-play .in-play-overlay .tool-card-tab {
+  position: absolute;
+  inset: 2px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: rgba(15, 23, 42, 0.86);
+}
+.card.in-play .in-play-overlay .tool-card-tab img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.card.in-play .in-play-overlay .tool-card-tab .tool-icon {
+  width: 100%;
+  height: 100%;
+}
+.card.in-play .in-play-overlay .tool-chip-glint {
+  position: absolute;
+  inset: 3px 4px auto 4px;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+.card.in-play .in-play-overlay .tool-chip-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+.active-slot .card.in-play .in-play-overlay .attachment-layer-energy {
+  left: 6px;
+  bottom: 6px;
+}
+.active-slot .card.in-play .in-play-overlay .energy-token {
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  margin-left: -7px;
+}
+.active-slot .card.in-play .in-play-overlay .attachment-layer-tools {
+  right: 6px;
+  bottom: 6px;
+}
+.active-slot .card.in-play .in-play-overlay .tool-chip {
+  width: 34px;
+  height: 47px;
+}
+.bench-slot .card.in-play .in-play-overlay .energy-token {
+  width: 22px;
+  height: 22px;
+  padding: 5px;
+  margin-left: -6px;
+}
+.bench-slot .card.in-play .in-play-overlay .tool-chip {
+  width: 24px;
+  height: 34px;
 }
 
 .muted { color: var(--muted); font-size: 11px; }

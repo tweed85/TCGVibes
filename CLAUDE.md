@@ -119,6 +119,71 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
   `cancelInPlayTarget` so queued Energy never leaks. Optional
   `PendingPick` steps (Grand Tree Stage 2) use `min: 0` so the existing
   picker UI's Skip button covers them without a dedicated command.
+- **AI turn = candidate-generator loop (Phase 3E).**
+  `tryStepAiTurn` runs `tryImmediateWinningLine` (Phase 3A: take the
+  game-winning attack or gust before any setup), then enumerates ranked
+  action candidates from category-specific generators
+  (`enumerateBenchBasicCandidates`, `enumerateItemCandidates`,
+  `enumerateAbilityCandidates`, `enumerateEvolutionCandidates`,
+  `enumerateSupporterCandidates`, `enumerateStadiumCandidates`,
+  `enumerateEnergyAttachCandidates`). Each candidate's score is
+  `priority × CANDIDATE_BAND + localScore` (CANDIDATE_BAND = 10000)
+  so the original priority bands are preserved while still allowing
+  in-category score ordering. Non-candidate fallbacks (tools,
+  low-threshold Supporters, defensive/offensive retreat) run after
+  the loop. ACE SPEC items need score ≥ 75 (vs 40 for regular Items)
+  via `isAceSpec` predicate in the picker threshold callback.
+- **`scorePosition` = parity-extracted leaf eval.** Seven named
+  sub-scores: `scorePrizeRace`, `scoreImmediateThreats`,
+  `scoreAttackReadiness`, `scoreBoardDevelopment`,
+  `scoreResourceQuality`, `scoreBenchRisk`, `scoreDisruptionTiming`.
+  Load-bearing constants (`ACTIVE_OHKO_BASE_PENALTY = 60`,
+  `ACTIVE_OHKO_PRIZE_PENALTY = 80`, plus opp-side bonuses) carry
+  provenance comments. v2-only overlays layered inside each helper:
+  spread-aware bench risk (`opponentHasBenchSpreadThreat` +
+  `shouldBenchBasicNow` gate the bench-play action), gust threat /
+  bench-counter mitigation / game-winning escalator in
+  `scoreImmediateThreats`, active-can-attack-now +
+  evolution-in-hand-unlock in `scoreAttackReadiness`.
+- **12 archetype playbooks fully wired.** All 12 detected archetypes
+  in `aiArchetype.ts` (festival-leads, arboliva, alakazam, lucario-ex,
+  rocket-mewtwo, dragapult-blaziken, dragapult-dudunsparce, crustle,
+  cynthia-garchomp, grimmsnarl-froslass, mega-starmie-froslass,
+  hops-trevenant) have T1–T3 `cardBonus` weights and
+  `abilityBonus` entries. Dragapult variants prioritize
+  Dreepy/Drakloak/Rare Candy paths; Crustle prioritizes wall-first
+  heals (Powerglass / Berry tools / Sparkling Crystal). Playbook
+  bonuses reach the search-pick scorer, attach-target scorer, and
+  Phase 5E evolution scorer.
+- **Target scorers (Phase 5).** Named v2 scorers for gust target
+  (`bestGustTarget` — last-prize KO + ramp-engine + future-threat +
+  full-protection penalty), Energy attach (`scoreEnergyTarget` —
+  next-turn-reachable attacks + acceleration support + OHKO-range
+  waste penalty), search target (`scorePickedPokemon`/`scorePickedEnergy`
+  — evolution completion + bench-ready Basics + energy-type-gap-closers),
+  bench target (`findPrimaryBasic` — archetype + evolution-base +
+  attacker-readiness), evolution target (`pickBestEvolution` —
+  archetype + ability-unlock bonuses), attack choice
+  (`attackValue` — mid-game prize-swing bonus + bench-attacker
+  backup), and spread/counter placement (`placeCountersOnOppBenchAny`
+  in `effects.ts` — KO-priority + rule-box-close-to-KO +
+  engine-piece names + most-damaged fallback).
+- **Multi-agent coordinator workflow.** `scripts/ai-coordinator/`
+  ships `digest.mjs` (post-edit verification + Schema A QA append),
+  `handoff.mjs` (cross-agent inbox messages + async chain-fire),
+  `session-start.mjs` (inbox tail + actionable TODOs surfaced on
+  Claude Code SessionStart hook), and `dashboard.mjs` (live
+  peer-process visibility, `--watch` mode rewrites `ai/dashboard.md`
+  every 3s). `.claude/settings.json` hooks: PostToolUse typecheck on
+  source edits, Stop runs digest + dashboard, SessionStart surfaces
+  inbox. Claude→Codex / Codex→Claude chain-fires use detached
+  spawning with per-session logs under `ai/peer-sessions/`. Auth
+  pre-checks (claudeIsAuthenticated / codexIsAuthenticated)
+  short-circuit before spawn when CLIs aren't logged in.
+  Coordination files (`ai/PROJECT_STATE.md`, `ai/TODO.md`,
+  `ai/QA.md`, `ai/inbox.md`, `ai/agent_ownership.md`,
+  `ai/agent_recommendations.md`) follow Schema A/B/C parseable
+  formats; the AI build plan is now fully complete through Phase 5.
 - **Drag-and-drop: hand → in-play.** `useCardGesture` in
   [CardView.tsx](src/ui/CardView.tsx) is one state machine for tap +
   long-press-zoom + drag, dispatched off pointerdown: move >8px before
@@ -283,12 +348,13 @@ For task-specific deep dives, read the relevant docs/ companion:
 - **Effect coverage** (attacks / abilities / trainers / stadiums / tools, ~85 effect kinds incl. Chaos Rising additions, ~24 tools, special interactions; prefab layer for new card work): see [docs/EFFECTS.md](docs/EFFECTS.md)
 - **AI internals** (v1 greedy, v2 archetype-aware heuristics, MCTS, the 12 wired archetype playbooks, measured win rates): see [docs/AI.md](docs/AI.md)
 - **Deck library** (12 curated decks: 4 baseline + 8 Prague Regional 2026 community lists; deck-builder gameplay-equivalence grouping; dataset refresh): see [docs/DECKS.md](docs/DECKS.md)
-- **Test suite** (789 vitest + 5 Playwright e2e — full enumeration with what each file covers): see [docs/TESTS.md](docs/TESTS.md)
+- **Test suite** (~938 vitest + 5 Playwright e2e — full enumeration with what each file covers): see [docs/TESTS.md](docs/TESTS.md)
 - **Replay determinism contract + cloud aggregation** (schema versions, v1→v2 migration, what's recorded vs not, opt-in upload): see [docs/REPLAY.md](docs/REPLAY.md) and [docs/REPLAY_BACKEND.md](docs/REPLAY_BACKEND.md) for the Supabase setup recipe
 - **Twinleaf-inspired phases + v2 follow-ups** (preflight, prompt adapter, prefabs, replay, cloud aggregation — status table): see [docs/TWINLEAFGG_IMPLEMENTATION_PLAN.md](docs/TWINLEAFGG_IMPLEMENTATION_PLAN.md)
 - **Mobile / iOS / offline** (Capacitor, PWA, responsive CSS, safe-area hardening): see [docs/MOBILE.md](docs/MOBILE.md)
-- **Open findings + deferred AI work** (MVP scope cuts, pressure-test findings, Phases 2c / 2e / 7-12 of the AI overhaul plan): see [docs/FINDINGS.md](docs/FINDINGS.md)
-- **CPU AI build plan** (Phase 0 = picker AI lanes + bug fixes — landed; Phases 1–6 deferred, parity-first `scorePosition` refactor strategy recorded): see [docs/AI_CPU_BUILD_PLAN.md](docs/AI_CPU_BUILD_PLAN.md)
+- **Open findings + deferred AI work** (MVP scope cuts, pressure-test findings, Phase 6 + 7-12 of the AI overhaul plan): see [docs/FINDINGS.md](docs/FINDINGS.md)
+- **CPU AI build plan** (Phases 0–5 ✅ complete; Phase 6 deferred pending cloud-replay corpus): see [docs/AI_CPU_BUILD_PLAN.md](docs/AI_CPU_BUILD_PLAN.md)
+- **Multi-agent coordinator workflow** (Claude + Codex handoff protocol, file schemas, hook config, live dashboard): see [ai/agent_recommendations.md](ai/agent_recommendations.md)
 
 ## Working branch
 

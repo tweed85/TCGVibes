@@ -12,9 +12,17 @@
         "command": "npm run typecheck"
       }
     ],
+    "SessionStart": [
+      {
+        "command": "npm run ai:session-start --silent"
+      }
+    ],
     "Stop": [
       {
         "command": "npm run ai:digest"
+      },
+      {
+        "command": "npm run ai:dashboard"
       }
     ]
   }

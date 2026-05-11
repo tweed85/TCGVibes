@@ -615,9 +615,57 @@ export function resolveAttackEffects(
         postHooks.push(() => {
           const opp = state.players[ctx.defenderOwner];
           if (opp.bench.length === 0) return;
-          // Auto-distribute: place all counters on most-damaged bench Pokémon.
-          // Real card lets the player choose distribution; future improvement.
-          const sorted = opp.bench.slice().sort((a, b) => b.damage - a.damage);
+          // Phase 5G: v2-aware spread placement.
+          // v1 keeps the legacy "most-damaged first" auto-distribution.
+          // v2 prefers (1) targets the placement would KO outright,
+          // (2) high-prize-value rule-box targets close to KO range,
+          // (3) engine-piece names (Bibarel/Dudunsparce/Fan Rotom etc.),
+          // (4) then most-damaged. Within KO candidates, sort by prize
+          // value descending so the AI takes the biggest prize first.
+          const attackerOwner = state.players[ctx.attackerOwner];
+          const v2 = attackerOwner.aiVersion === "v2";
+          const scoreTarget = (t: import("./types").PokemonInPlay): number => {
+            const maxHp = effectiveMaxHp(t, state);
+            const remainingHp = maxHp - t.damage;
+            const wouldKo = e.counters * 10 >= remainingHp;
+            let score = 0;
+            if (wouldKo) {
+              // KO: prize value × big constant. Highest priority.
+              const prize =
+                (t.card.subtypes ?? []).includes("VMAX") ||
+                (t.card.subtypes ?? []).includes("V-UNION") ||
+                (t.card.subtypes ?? []).some((s) => /Mega Evolution/i.test(s))
+                  ? 3
+                  : (t.card.subtypes ?? []).some((s) =>
+                        /^(ex|V|VSTAR|GX)$/i.test(s),
+                      )
+                    ? 2
+                    : 1;
+              score += 10000 + prize * 1000;
+            }
+            // Rule-box targets close to KO range deserve a softer bump even
+            // when the placement won't finish them — sets up next-turn gust.
+            const isRuleBox = (t.card.subtypes ?? []).some((s) =>
+              /^(ex|V|VSTAR|VMAX|GX|V-UNION)$/i.test(s),
+            );
+            if (isRuleBox && !wouldKo && remainingHp - e.counters * 10 <= 60) {
+              score += 500;
+            }
+            // Known engine-piece names. KOing these breaks opp tempo even
+            // if the prize value is just 1.
+            const enginePieces = new Set([
+              "Bibarel", "Dudunsparce", "Fan Rotom", "Fezandipiti ex",
+              "Munkidori", "Teal Mask Ogerpon ex",
+              "Team Rocket's Spidops", "Blaziken ex",
+            ]);
+            if (wouldKo && enginePieces.has(t.card.name)) score += 200;
+            // Fallback: most-damaged tiebreaker.
+            score += t.damage;
+            return score;
+          };
+          const sorted = v2
+            ? opp.bench.slice().sort((a, b) => scoreTarget(b) - scoreTarget(a))
+            : opp.bench.slice().sort((a, b) => b.damage - a.damage);
           let remaining = e.counters;
           for (const t of sorted) {
             if (remaining <= 0) break;
@@ -695,19 +743,38 @@ export function resolveAttackEffects(
           const pl = state.players[ctx.attackerOwner];
           const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
           if (allies.length === 0) return;
-          let i = 0;
-          let attached = 0;
-          while (true) {
-            const idx = pl.hand.findIndex(
-              (c) => c.supertype === "Energy" && c.subtypes.includes("Basic"),
-            );
-            if (idx < 0) break;
-            const [en] = pl.hand.splice(idx, 1) as [import("./types").EnergyCard];
-            allies[i % allies.length].attachedEnergy.push(en);
-            i++;
-            attached++;
+          const handBasicCount = pl.hand.filter(
+            (c) => c.supertype === "Energy" && c.subtypes.includes("Basic"),
+          ).length;
+          if (handBasicCount === 0) return;
+          if (pl.isAI) {
+            let i = 0;
+            let attached = 0;
+            while (true) {
+              const idx = pl.hand.findIndex(
+                (c) => c.supertype === "Energy" && c.subtypes.includes("Basic"),
+              );
+              if (idx < 0) break;
+              const [en] = pl.hand.splice(idx, 1) as [import("./types").EnergyCard];
+              allies[i % allies.length].attachedEnergy.push(en);
+              i++;
+              attached++;
+            }
+            if (attached > 0) logEvent(state, ctx.attackerOwner, `${ctx.move.name}: attaches ${attached} Basic Energy from hand.`);
+            return;
           }
-          if (attached > 0) logEvent(state, ctx.attackerOwner, `${ctx.move.name}: attaches ${attached} Basic Energy from hand.`);
+          state.pendingInPlayTarget = {
+            player: ctx.attackerOwner,
+            label: `${ctx.move.name}: pick a Pokémon for the next Basic Energy from hand (${handBasicCount} left, Cancel to stop)`,
+            scope: "own",
+            slot: "anywhere",
+            filter: "anyPokemon",
+            action: {
+              kind: "attackAttachBasicFromHandToAlly",
+              remaining: handBasicCount,
+              attackName: ctx.move.name,
+            },
+          };
         });
         break;
       }
@@ -740,6 +807,16 @@ export function resolveAttackEffects(
         break;
       }
       case "discardAnyEnergyAcrossOwnForDamage": {
+        // Phase 7 — humans pre-discard via the picker (state.preComputedDiscardForDamage).
+        // If set, the energy is already gone — just scale the damage.
+        if (state.preComputedDiscardForDamage !== null) {
+          const discarded = state.preComputedDiscardForDamage;
+          damage += e.damagePer * discarded;
+          if (discarded > 0) {
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: ${discarded} Energy discarded → +${e.damagePer * discarded}.`);
+          }
+          break;
+        }
         const pl = state.players[ctx.attackerOwner];
         const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
         let discarded = 0;
@@ -3950,11 +4027,41 @@ export function resolveAttackEffects(
       }
 
       case "moveAnyEnergyAcrossOwn": {
-        // No-op auto-resolution; this is a player-driven choice. We log it
-        // and skip — the AI doesn't have a generic re-arrange heuristic and
-        // the human-side picker isn't wired for this action. Recognized so
-        // the attack flags as "wired" without engine drift.
-        logEvent(state, ctx.attackerOwner, `${ctx.move.name}: (Energy redistribution skipped.)`);
+        // Delcatty Energy Blender / Forretress Iron Shake-Up — move any
+        // amount of Energy (optionally typed) between your own Pokémon
+        // "in any way you like". Humans get a re-arming source/dest picker
+        // (Cancel to stop); AI keeps the prior auto-skip — no generic
+        // re-arrange heuristic, but at least the attack damage still applies.
+        const pl = state.players[ctx.attackerOwner];
+        const allies = [pl.active, ...pl.bench].filter(
+          (p): p is PokemonInPlay => !!p,
+        );
+        const energyType: import("./types").EnergyType | null = e.energyType ?? null;
+        const hasMovableEnergy = allies.some((p) =>
+          p.attachedEnergy.some((en) =>
+            energyType == null ? true : en.provides.includes(energyType),
+          ),
+        );
+        if (allies.length < 2 || !hasMovableEnergy) break;
+        if (pl.isAI) {
+          // AI heuristic: keep the previous no-op (preserves test parity).
+          logEvent(state, ctx.attackerOwner, `${ctx.move.name}: (Energy redistribution skipped.)`);
+          break;
+        }
+        postHooks.push(() => {
+          state.pendingInPlayTarget = {
+            player: ctx.attackerOwner,
+            label: `${ctx.move.name}: pick a Pokémon to move Energy FROM (Cancel to stop)`,
+            scope: "own",
+            slot: "anywhere",
+            filter: "anyPokemon",
+            action: {
+              kind: "attackMoveAnyEnergySource",
+              energyType,
+              attackName: ctx.move.name,
+            },
+          };
+        });
         break;
       }
 
@@ -4082,6 +4189,15 @@ export function resolveAttackEffects(
       }
 
       case "discardEnergyAnywhereForDamage": {
+        // Phase 7 — humans pre-discard via the picker; AI auto-discards greedily.
+        if (state.preComputedDiscardForDamage !== null) {
+          const discarded = Math.min(state.preComputedDiscardForDamage, e.max);
+          damage += discarded * e.damagePer;
+          if (discarded > 0) {
+            logEvent(state, ctx.attackerOwner, `${ctx.move.name}: ${discarded} Energy discarded → +${discarded * e.damagePer}.`);
+          }
+          break;
+        }
         const pl = state.players[ctx.attackerOwner];
         const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
         let discarded = 0;

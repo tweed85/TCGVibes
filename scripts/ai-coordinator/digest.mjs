@@ -6,6 +6,7 @@ import process from "node:process";
 
 const ROOT = process.cwd();
 const QA_PATH = join(ROOT, "ai", "QA.md");
+const INBOX_PATH = join(ROOT, "ai", "inbox.md");
 const SNAPSHOT_FILES = [
   join(ROOT, "ai", "PROJECT_STATE.md"),
   join(ROOT, "ai", "CONTEXT_SUMMARY.md"),
@@ -181,12 +182,12 @@ function snapshotWarnings() {
   return warnings;
 }
 
-function formatBlock(paths, results, flags, warnings) {
+function formatBlock(paths, results, flags, warnings, turnIso) {
   const failed = results.filter((r) => r.status !== 0);
   const status = failed.length > 0 ? "open" : "resolved";
   const duration = ((Date.now() - started) / 1000).toFixed(2);
   const lines = [
-    `## ${isoNow()} [${agent}] digest run`,
+    `## ${turnIso} [${agent}] digest run`,
     "",
     `**Status:** ${status}`,
     "**Re:** post-edit verification",
@@ -223,19 +224,48 @@ function ensureFile(path) {
   if (!existsSync(path)) appendFileSync(path, "");
 }
 
+// Compact turn-end marker for inbox.md — the next agent's session-start
+// hook surfaces the inbox tail, so this is the "I'm done" signal. Body
+// stays one line; the full verification detail lives in QA.md.
+function formatInboxBlock(paths, results, flags, warnings, turnIso) {
+  const failed = results.filter((r) => r.status !== 0).length;
+  const status = failed > 0 ? "open" : "informational";
+  const summary =
+    `${results.length} check(s), ${failed} failed, ` +
+    `${flags.length} manual flag(s), ${warnings.length} warning(s)`;
+  const top = paths.length > 0 ? paths.slice(0, 5).join(", ") : "(none detected)";
+  const more = paths.length > 5 ? ` (+${paths.length - 5} more)` : "";
+  const lines = [
+    `## ${turnIso} [${agent}] turn-end digest`,
+    "",
+    `**Status:** ${status}`,
+    `**Re:** handoff candidate (see ai/QA.md @ ${turnIso} for detail)`,
+    "",
+    `- summary: ${summary}`,
+    `- changed: ${top}${more}`,
+  ];
+  if (failed > 0) lines.push(`- next agent: investigate failures in QA.md before claiming new work`);
+  lines.push("", "---", "");
+  return lines.join("\n");
+}
+
 const paths = changedPaths();
 const selectedChecks = checksFor(paths);
 const results = runChecks(selectedChecks);
 const flags = manualFlags(paths);
 const warnings = [...xfailWarnings(), ...snapshotWarnings()];
-const block = formatBlock(paths, results, flags, warnings);
+const turnIso = isoNow();
+const block = formatBlock(paths, results, flags, warnings, turnIso);
+const inboxBlock = formatInboxBlock(paths, results, flags, warnings, turnIso);
 
 ensureFile(QA_PATH);
 appendFileSync(QA_PATH, block, "utf8");
+ensureFile(INBOX_PATH);
+appendFileSync(INBOX_PATH, inboxBlock, "utf8");
 
 const failures = results.filter((r) => r.status !== 0).length;
 console.log(
-  `[ai:digest] ${results.length} check(s), ${failures} failed, ${flags.length} manual flag(s), ${warnings.length} warning(s). Wrote ai/QA.md.`,
+  `[ai:digest] ${results.length} check(s), ${failures} failed, ${flags.length} manual flag(s), ${warnings.length} warning(s). Wrote ai/QA.md + ai/inbox.md.`,
 );
 
 process.exit(failures > 0 ? 1 : 0);

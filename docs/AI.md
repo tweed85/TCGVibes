@@ -26,7 +26,8 @@ per-change guardrails.
   Dragapult-Blaziken, Dragapult-Dudunsparce, Crustle, Cynthia-Garchomp,
   Grimmsnarl-Froslass, Mega-Starmie-Froslass, Hops-Trevenant. Each
   carries per-archetype bonuses on signature Trainers, Energy-attach
-  targets, bench Basics, and abilities. Plus T1-T3 turn-aware playbooks.
+  targets, bench Basics, and abilities. Plus T1-T3 turn-aware playbooks
+  (`cardBonus` + `abilityBonus` keyed on `state.turn`).
   Sources:
   - Rocket Mewtwo + Dragapult-Blaziken — Prague Regional 2026 R9 replay
   - Dragapult-Dudunsparce + Crustle + Cynthia-Garchomp +
@@ -38,15 +39,47 @@ per-change guardrails.
 - Crustle's playbook intentionally inverts aggro: heavy T2-T3 Hero's Cape +
   Pokémon Center Lady + Colress's Tenacity weight with **no Ascension boost**
   ("wall first, attack last").
-- Threat-aware `scorePosition`: penalize positions where our Active is in
-  opp OHKO range (scaled by prize at risk); reward symmetric bonus for
-  opp; count "ready bench attackers" (≥cost-1 energy + a payable attack).
-  **Gust insurance**: redundant ready bench attackers (≥2) get a
-  non-linear bonus — converts gust threats into swap-and-attack lines.
-- Smart gust targeting — `bestGustTarget` boosts ramp engines (Bibarel,
-  Dudunsparce, Fan Rotom, Teal Mask Ogerpon ex, Spidops, Blaziken ex)
-  **and un-powered rule-box punchers on bench (TR Mewtwo ex,
-  Dragapult ex, Mega Lucario ex, etc.) — KO before they boot**.
+- **`scorePosition` parity-extracted into seven named sub-scores**
+  (Phase 2A): `scorePrizeRace`, `scoreImmediateThreats`,
+  `scoreAttackReadiness`, `scoreBoardDevelopment`, `scoreResourceQuality`,
+  `scoreBenchRisk`, `scoreDisruptionTiming`. Load-bearing constants
+  surfaced with provenance comments
+  (`ACTIVE_OHKO_BASE_PENALTY = 60`, `ACTIVE_OHKO_PRIZE_PENALTY = 80`,
+  `OPP_ACTIVE_OHKO_BASE_BONUS = 50`, `OPP_ACTIVE_OHKO_PRIZE_BONUS = 60`).
+- Threat-aware overlays in `scoreImmediateThreats` /
+  `scoreAttackReadiness` (Phase 2B): game-losing escalator, bench-counter
+  mitigation, game-winning escalator, active-can-attack-now bonus,
+  evolution-in-hand unlocks attacker.
+- **Turn sequencing — candidate-generator loop (Phase 3)**:
+  `tryStepAiTurn` is no longer a fixed greedy step order. Each step
+  collects ranked candidates via `enumerateAiActionCandidates`
+  (priority multiplier `CANDIDATE_BAND = 10000`), with
+  `tryImmediateWinningLine` preserved at the top. Sub-phase guardrails:
+  3A immediate-win short-circuit, 3B search-before-attach scoring
+  (`searchWouldImproveAttachTarget`, `isSearchableAttachBasic`),
+  3C ability-before-Supporter for `drawUntilSeven` etc., 3D ACE SPEC
+  conservation gate (`isAceSpec` + 75/40 threshold via `meetsThreshold`).
+- **Target scorers (Phase 5)** — small, explainable, deterministic:
+  - `bestGustTarget` v2 (5A): game-winning KO, ramp engines, un-powered
+    rule-box punchers (TR Mewtwo ex, Dragapult ex, Mega Lucario ex),
+    future-threat prediction, protection penalty. Used by Boss's Orders
+    + Prime Catcher.
+  - `scoreEnergyTarget` v2 (5B): next-turn-reachable attacks +
+    acceleration awareness, OHKO-range-waste penalty.
+  - Search-pick scoring v2 (5C): playable evolution completions +
+    bench-ready Basics + energy-type-gap-closers.
+  - Bench target scorer v2 (5D): integrates Phase 4 playbook fields.
+  - `pickBestEvolution` v2 (5E): `archetypeBenchBonus × 2` +
+    `playbookCardBonusFromState` + ability-unlock bonuses (draw,
+    `searchBasicEnergy`, energy-from-hand / discard variants).
+  - `attackValue` v2 OHKO path (5F): mid-game prize-swing bonus
+    (+40 when `oppPrize ≥ 2` AND `ourPrizes ≥ 3`), bench-readiness
+    bonus (+30 for ≥1 ready, +15 for ≥2).
+  - `placeCountersOnOppBenchAny` v2 (5G): KO + prize value, rule-box
+    close-to-KO range, engine-piece names, most-damaged fallback.
+- **Gust insurance**: redundant ready bench attackers (≥2) get a
+  non-linear bonus in `scoreAttackReadiness` — converts gust threats
+  into swap-and-attack lines.
 - **AI coin-flip choice**: v2 chooses to go FIRST when opp's deck contains
   a T1-supporter exception (Team Rocket's Proton, Carmine, TR Mewtwo
   signatures) — denying that enabler is worth eating the T1 attack ban.

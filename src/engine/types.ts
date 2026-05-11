@@ -1310,23 +1310,43 @@ export type PendingPickEffectKind =
   | "levincia"
   | "grandTreeStage1" // pick the Stage 1 to evolve onto the captured Basic
   | "grandTreeStage2" // optional Stage 2 search (skippable)
-  | "glassTrumpetEnergyPick"; // step 1: pick basic Energy from discard
+  | "glassTrumpetEnergyPick" // step 1: pick basic Energy from discard
+  | "reconDirective" // Drakloak — top-2 peek, pick 1 to hand, other to bottom
+  | "peekTopMayDiscard"; // Morpeko — top-1 peek, optional discard
 
 // Reveal-opponent's-hand prompt. The initiator (`player`) picks which cards
 // from the target's hand (`target`) to act on (discard / move to bottom).
 // Filter restricts which hand cards are eligible.
+// Pick-one-option menu prompt. The chosen option's `id` flows to the
+// resolver, which dispatches by `effectKind` to apply the matching
+// engine effect.
+export type PendingChoiceMenuEffectKind =
+  | "selectiveSlimeStatus" // Cradily / Grafaiai — pick Burned / Confused / Poisoned to apply to opp Active
+  ;
+
+export interface PendingChoiceMenu {
+  player: PlayerId;
+  label: string;
+  options: { id: string; label: string }[];
+  effectKind: PendingChoiceMenuEffectKind;
+}
+
 export interface PendingHandReveal {
   player: PlayerId;
   target: PlayerId;
   label: string;
   min: number;
   max: number;
-  filter: "item" | "tool" | "itemOrTool" | "supporter" | "pokemon" | "energy" | "any";
-  action: "discard" | "toBottomOfDeck" | "toTopOfDeck";
-  // Stable AI-routing identity. Mirrors PendingPick.effectKind so tests +
-  // future centralized AI dispatch can identify the spawning effect without
-  // parsing `label`.
-  effectKind?: PendingPickEffectKind;
+  filter: "item" | "tool" | "itemOrTool" | "supporter" | "pokemon" | "basicPokemon" | "energy" | "any";
+  // Optional max-HP cap; only consulted when filter selects Pokémon variants.
+  // Used by Mandibuzz Look for Prey (Basic Pokémon with HP ≤ 70).
+  hpMax?: number;
+  action: "discard" | "toBottomOfDeck" | "toTopOfDeck" | "swapWithDeckTop" | "toOppBench";
+  // Stable AI-routing identity. Phase 2.1 — replaced legacy reuse of
+  // `PendingPickEffectKind` with a dedicated `PendingHandRevealEffectKind`
+  // union (see aiPolicies.ts). Existing call sites for `academyAtNight`,
+  // `prismTower`, and `mysteryGarden` migrated.
+  effectKind?: import("./aiPolicies").PendingHandRevealEffectKind;
   // Optional follow-up run by the resolver after the pick completes.
   // `useRevealedCount` (Perrin): when set, the post-search caps at the
   // number of cards the player actually revealed instead of the fixed max
@@ -1366,6 +1386,35 @@ export interface PendingInPlayTarget {
     | { kind: "wallysCompassion" }
     | { kind: "energySwitchSource" } // first step: user picks the source Pokémon
     | { kind: "energySwitchDest"; sourceInstanceId: string } // second step: user picks destination
+    | { kind: "typedEnergySwitchSource"; energyType: EnergyType; asOften?: boolean } // Dewgong Wash Out, Azumarill ex Bubble Gathering
+    | { kind: "typedEnergySwitchDest"; sourceInstanceId: string; energyType: EnergyType; asOften?: boolean }
+    | { kind: "abilityHealAny"; amount: number } // Generic ability "heal N from 1 of your Pokémon"
+    | { kind: "abilityPlaceCountersOnOpp"; counters: number; abilityName: string } // Mega Greninja ex Mortal Shuriken et al.
+    | { kind: "abilitySwitchBenchedTypeWithStatus"; energyType: EnergyType; status: StatusCondition; excludeSameName: boolean; holderName: string; abilityName: string }
+    | { kind: "abilitySwapWithBenchForceOppPromote"; abilityName: string }
+    | { kind: "abilityDevolveOppEvolution"; abilityName: string }
+    // Magneton Overvolt Discharge — re-arming. Each click picks one Basic
+    // Energy from discard and attaches to the clicked typed ally; remaining
+    // decrements; on close, the holder self-KOs.
+    | { kind: "abilityAttachAnyBasicFromDiscardToTyped"; remaining: number; typeFilter: import("./types").EnergyType; holderInstanceId: string; abilityName: string }
+    // Infernape Pyro Dance — re-arming. Each click attaches the first eligible
+    // typed Basic Energy from hand (typeA or typeB) to the clicked ally.
+    | { kind: "abilityAttachMixedFromHand"; remaining: number; typeA: import("./types").EnergyType; typeB: import("./types").EnergyType; abilityName: string }
+    // Energy Blender / Iron Shake-Up — re-arming move source picker. Cancel
+    // to stop. `energyType` undefined = any energy (Delcatty Energy Blender).
+    | { kind: "attackMoveAnyEnergySource"; energyType: import("./types").EnergyType | null; attackName: string }
+    | { kind: "attackMoveAnyEnergyDest"; sourceInstanceId: string; energyType: import("./types").EnergyType | null; attackName: string }
+    // Top-N peek + multi-attach distribution. After resolving the peek-pick,
+    // the chosen energies are queued and the user clicks an ally per energy.
+    | { kind: "abilityAttachQueuedEnergyToAlly"; queue: import("./types").EnergyCard[]; abilityName: string }
+    // Attach all Basic Energy from hand to your Pokémon "in any way".
+    | { kind: "attackAttachBasicFromHandToAlly"; remaining: number; attackName: string }
+    // Phase 7 — pre-attack discard-for-damage picker. Opens BEFORE the
+    // attack runs. Each click discards one matching Energy from the
+    // clicked ally; increment `discarded`. Cancel / max → resume the
+    // attack via `resumeDamageScalingAttack` with the count in
+    // `state.preComputedDiscardForDamage`.
+    | { kind: "attackDiscardForDamagePicker"; discarded: number; max: number; energyType: EnergyType | null; attackerOwner: PlayerId; attackIndex: number; attackName: string }
     | { kind: "jacintheHeal" } // Jacinthe — heal 150 from a damaged Psychic
     | { kind: "pokeVitalAHeal" } // Poké Vital A — heal 150 from any damaged ally
     | { kind: "potionHeal" } // Potion — heal 30 from any 1 of your Pokémon
@@ -1624,6 +1673,17 @@ export interface GameState {
   // Pokémon to complete a switch (e.g., the Switch item). The UI shows a
   // status prompt; clicking a bench Pokémon resolves it.
   pendingSwitchTarget: PlayerId | null;
+  // A small menu-of-options prompt (e.g. "choose Burned / Confused /
+  // Poisoned"). Distinct from PendingInPlayTarget — there's no Pokémon to
+  // click, just an option to select. Used by Cradily Selective Slime,
+  // Grafaiai Miraculous Paint, and future menu-pick cards.
+  pendingChoiceMenu: PendingChoiceMenu | null;
+  // Phase 7 — pre-attack discard-for-damage picker support. When a
+  // damage-scaling discard effect (Inferno X / Bellowing Thunder / Spill
+  // the Tea) opens a picker, the count of discarded Energy is recorded
+  // here so the effect dispatcher can read it on attack resume instead
+  // of running its own auto-discard.
+  preComputedDiscardForDamage: number | null;
   // If non-null, a player must click an in-play Pokémon (own or opponent,
   // scoped by the action) to complete a trainer effect that needs a target
   // (Enhanced Hammer, Crushing Hammer on heads, Tool Scrapper, Heavy Baton,

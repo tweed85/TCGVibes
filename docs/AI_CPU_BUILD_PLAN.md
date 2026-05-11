@@ -14,20 +14,59 @@ Start here, then read:
 - `src/engine/ai.ts`
 - `src/engine/aiArchetype.ts`
 
-## Status snapshot (2026-05-10)
+## Status snapshot (2026-05-11)
 
 | Phase | Status | Notes |
 |-------|--------|-------|
 | Phase 0 — picker AI lanes + bug fixes | ✅ Complete | All 11 cards have explicit AI lanes; Glass Trumpet + Grand Tree picker bugs fixed; Stadium activation reaches both the normal CPU turn loop and MCTS; v2 Arboliva can replace its own non-Forest Stadium with Forest of Vitality when it unlocks a same-turn Grass evolution chain. |
 | Phase 1 — `aiDecisionQuality.test.ts` | ✅ Complete | 9/9 scenarios green. Unfair Stamp timing wired in `scoreTrainerForNow` (KO gate + tiered opp-hand-size). Spread-aware bench discipline shipped as the first additive overlay. |
-| Phase 2A — `scorePosition` parity extraction | ✅ Complete | Seven named sub-scores; load-bearing OHKO penalty/bonus constants extracted; `scoreBenchRisk` carries the first additive v2 overlay. Behavior preserved (verified via `aiBenchmark.test.ts` quick run + full suite parity). |
-| Phase 2B — sub-score overlays | ⏭ Next | `scoreImmediateThreats` / `scoreAttackReadiness` targeted overlays (gust threat against our bench, attack-readiness deltas next attach). |
-| Phases 2c, 2e, 3–6 | ⏳ Deferred | See per-phase sections below. |
+| Phase 2A — `scorePosition` parity extraction | ✅ Complete | Seven named sub-scores; load-bearing OHKO penalty/bonus constants extracted; `scoreBenchRisk` carries the first additive v2 overlay. Behavior preserved. |
+| Phase 2B — sub-score overlays | ✅ Complete | `scoreImmediateThreats` overlays (game-losing escalator, bench-counter mitigation, game-winning escalator) + `scoreAttackReadiness` overlays (active-can-attack-now, evolution-in-hand unlocks attacker). All gated to v2. |
+| Phase 3 — turn sequencing | ✅ Complete | 3A immediate-win; 3B search-before-attach hardening; 3C ability-before-Supporter; 3D ACE SPEC conservation gate; 3E candidate-generator refactor (`enumerateAiActionCandidates` returns ranked candidates with `CANDIDATE_BAND=10000` priority multiplier). |
+| Phase 4 — archetype playbooks | ✅ Complete | All 12 archetypes wired with T1-T3 `cardBonus` / `abilityBonus`. Dragapult, Crustle, plus the remaining 10 (festival-leads, arboliva, alakazam, lucario-ex, rocket-mewtwo, cynthia-garchomp, grimmsnarl-froslass, mega-starmie-froslass, hops-trevenant). |
+| Phase 5 — tactical micro-search | ✅ Complete | All 7 target scorers shipped: 5A bestGustTarget v2, 5B scoreEnergyTarget v2 (next-turn weighting), 5C search target v2 (evolution + energy-gap), 5D bench target v2, 5E pickBestEvolution v2 (ability-unlock bonuses), 5F attackValue v2 (mid-game OHKO + bench-readiness), 5G placeCountersOnOppBenchAny v2 (KO priority + prize value). All gated to v2 via `v2Active`. |
+| Phase 6 — replay-informed tuning | ⏳ Deferred | Contingent on cloud-replay volume. |
+| Phases 2c, 2e | ✅ Subsumed | Multi-action reordering + ability scoring tune both delivered by Phase 3E candidate-generator refactor. |
 
-Test ledger after Phase 2A: **898 passed | 3 skipped** in `npm run test`,
-0 `it.fails` in `aiDecisionQuality.test.ts`. Quick `aiBenchmark.test.ts`
-run passes; full benchmark not re-run at every PR (see Phase 2 strategy
-note).
+Test ledger after Phase 5G: **938 passed | 3 skipped** in `npm run test`
+(49 scenarios green in `aiDecisionQuality.test.ts`), no `it.fails`.
+Quick `aiBenchmark.test.ts` run passes; full benchmark not re-run at
+every PR (see Phase 2 strategy note).
+
+## Phase 3 decomposition (active queue)
+
+Phase 3 spec ("improve turn sequencing") is too broad for one PR. The
+sub-phases below ship independently; 3A–3D are mostly orthogonal, 3E
+depends on the prior four because it's a structural refactor that
+benefits from per-rule scenario tests already pinning correct order.
+
+| Sub | Title | Touches | Depends on |
+|-----|-------|---------|------------|
+| 3A | Immediate-win sequencing | `tryStepAiTurn` early-out + scenarios | — |
+| 3B | Search-before-attach hardening | item-pick step + Stadium-replacement ordering | 3A |
+| 3C | Ability-before-Supporter ordering | scenario tests pinning current order | 3A |
+| 3D | ACE SPEC conservation gate | `scoreTrainerForNow` ACE SPEC threshold | 3A |
+| 3E | Candidate-generator refactor | replace fixed greedy step order with score-then-pick loop | 3A–3D |
+
+## Phase 4 decomposition (queued)
+
+| Sub | Title | Touches |
+|-----|-------|---------|
+| 4A | Dragapult playbook fields | `aiArchetype.ts` `dragapult-blaziken` + `dragapult-dudunsparce` profiles + scenario test |
+| 4B | Crustle playbook fields | `aiArchetype.ts` `crustle` profile (wall-first plan) + scenario test |
+| 4C | Remaining 10 playbook profiles | Festival Leads, Arboliva, Alakazam, Lucario, Rocket Mewtwo, Cynthia Garchomp, Grimmsnarl-Froslass, Mega Starmie-Froslass, Hops-Trevenant + scenario tests |
+
+## Phase 5 decomposition (queued)
+
+| Sub | Title |
+|-----|-------|
+| 5A | Gust target scorer rewrite (tighten `bestGustTarget`) |
+| 5B | Energy attach scorer rewrite (`scoreEnergyTarget` next-turn weighting) |
+| 5C | Search target scorer rewrite (deck-pick scoring with archetype context) |
+| 5D | Bench target scorer (which Pokémon to bench, integrates with Phase 4) |
+| 5E | Evolution target scorer (which line to evolve, integrates with Phase 4) |
+| 5F | Attack choice scorer with full lookahead context |
+| 5G | Spread/counter placement scorer (Phantom Dive / Cursed Drop targeting) |
 
 ## Goal
 

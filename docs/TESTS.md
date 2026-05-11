@@ -1,6 +1,6 @@
 # Test suite
 
-**Vitest — 789 tests passing across 49 files** (3 skipped, AI_BENCH-gated).
+**Vitest — 938 tests passing across 57 files** (3 skipped, AI_BENCH-gated).
 See [../CLAUDE.md](../CLAUDE.md) for the project entry point.
 
 ## Engine tests — [../src/engine/__tests__/](../src/engine/__tests__/)
@@ -11,6 +11,24 @@ See [../CLAUDE.md](../CLAUDE.md) for the project entry point.
   trainerDetection, weakness, undoRng, undoIntegration,
   phantomDiveHuman, attackPreflight, unspentTurnSlots, mvpPickers,
   aiScenarios, mcts, aiBenchmark (gated)
+- **aiPickerLanes** — one scenario per Phase-0 picker card (Prime
+  Catcher, Precious Trolley, Energy Search Pro, Glass Trumpet,
+  Scramble Switch, Academy at Night, Prism Tower, Mystery Garden,
+  Levincia, Surfing Beach, Grand Tree) — pins explicit AI choices,
+  not just first-legal-option fallback.
+- **aiDecisionQuality** — 49 shaped-state scenarios covering the AI
+  build plan: Phase 1 baseline (gust into game-winning KO, energy
+  attach next-turn attacker, archetype-Basic before filler, Unfair
+  Stamp timing, promote-can-attack-soon, avoid over-benching under
+  spread); Phase 3A-3D sequencing (immediate-win, search-before-attach,
+  ability-before-Supporter, ACE SPEC conservation); Phase 4A-4C
+  archetype playbooks (dragapult, crustle, remaining 10); Phase 5A-5G
+  target scorers (gust, energy, search-pick, bench, evolution, attack
+  choice, spread placement). Public AI entrypoints only — no private
+  helper imports.
+- **aiScorePosition** — 5+ behavior-path parity tests for the seven
+  named sub-scores; pins won/lost terminal, prize-race gradient,
+  catastrophic-no-mons no-throw, v2 threat-aware overlay.
 - **findingsGaps** — pendingPromoteQueue AI lookahead, mid-queue
   game-over safety net, non-terminal (Run Away Draw) +
   terminal (attack-KO) pendingPromote phase mixing, passive

@@ -11,6 +11,7 @@
 import {
   attachEnergy,
   attack,
+  attackPreflight,
   endTurn,
   evolve,
   playBasicToBench,
@@ -40,12 +41,15 @@ import {
   turnAttackBonus,
   turnDamageReduction,
   abilitiesActiveOn,
+  abilitiesActiveOnInstance,
   passiveAttackBonus,
   passiveDamageReduction,
 } from "./ongoingEffects";
 import { resolvePendingPick, resolvePendingSearchNotice } from "./pendingPick";
 import { getAttackEffects } from "../data/effectPatterns";
-import { resolveAiHandReveal } from "./trainerEffects";
+import { resolveAiChoiceMenu, resolveAiHandReveal, resolveAiPendingInPlayTarget } from "./trainerEffects";
+import { AI_PICK_POLICIES, registerAiPickPolicy } from "./aiPolicies";
+import type { AIPickPolicy } from "./aiPolicies";
 import { precheckStadium, stadiumHasActivatedEffect, useStadium } from "./stadiumActivated";
 import { logEvent } from "./rules";
 import {
@@ -84,6 +88,7 @@ const isItem = (c: Card): c is TrainerCard => isTrainer(c) && c.subtypes.include
 const isStadium = (c: Card): c is TrainerCard => isTrainer(c) && c.subtypes.includes("Stadium");
 const isTool = (c: Card): c is TrainerCard =>
   isTrainer(c) && (c.subtypes.includes("Pokémon Tool") || c.subtypes.includes("Tool"));
+const isAceSpec = (c: Card): boolean => c.subtypes.includes("ACE SPEC");
 
 const RULE_BOX = ["ex", "EX", "V", "VMAX", "VSTAR", "V-UNION", "GX"];
 // Hoisted out of the evolve-scoring hot loop.
@@ -476,6 +481,16 @@ function attackValue(
     // Among multiple OHKOs, prefer the cheaper one (preserves energy for
     // next turn / the bench attacker after we get traded).
     v -= cost * 3;
+    // Phase 5F: v2 lookahead context — prefer multi-prize KOs more
+    // sharply when our prize lead is small, and reward setups that
+    // leave a ready bench attacker behind (gust-insurance / continuity).
+    if (v2Active(state, owner)) {
+      const defPrize = prizeValue(defender!.card);
+      if (defPrize >= 2 && ourPrizesLeft >= 3) v += 40; // 2-prize swings matter more mid-game
+      const readyBench = countReadyBenchAttackers(state, owner);
+      if (readyBench >= 1) v += 30; // we have follow-up if traded
+      if (readyBench >= 2) v += 15; // redundancy bonus
+    }
     return v;
   }
   // Non-KO path: self-lock is a real cost because we used this turn to deal
@@ -546,12 +561,13 @@ function scoreTrainerForNow(
     case "searchTRSupporter":
       // Less valuable if bench is full and we already have plenty of Pokémon.
       if (pl.bench.length >= 5 && countPokemonInHand(pl.hand) >= 2) return 10;
-      return 90;
+      return 90 + searchWouldImproveAttachTarget(state, player, card);
 
     case "searchAnyPokemon":
       // Ultra Ball: costs 2 hand cards. Good if hand is large and full of
       // filler; weak if hand is already thin.
       if (pl.hand.length < 3) return 0; // can't pay cost
+      if (searchWouldImproveAttachTarget(state, player, card) > 0) return 95;
       if (pl.hand.length >= 5) return 85;
       return 30;
 
@@ -651,10 +667,19 @@ function scoreTrainerForNow(
 
     // --- Draw supporters --------------------------------------------------
     case "drawUntilSeven":
-      // Professor's Research / Iono / Marnie. Great on small hands, awful on big.
+      // Professor's Research stays aggressive when the hand is thin. Iono /
+      // Marnie-style shuffle draw is more conservative at medium hand sizes:
+      // a free ability draw that brings us from 4 -> 5 should make the AI hold
+      // it instead of immediately resetting a playable hand.
+      if (card.name === "Professor's Research") {
+        if (hand <= 3) return 100;
+        if (hand <= 5) return 55;
+        if (hand <= 7) return 25;
+        return 5;
+      }
       if (hand <= 3) return 100;
-      if (hand <= 5) return 55;
-      if (hand <= 7) return 25;
+      if (hand <= 4) return 55;
+      if (hand <= 7) return 20;
       return 5; // don't shuffle 8 good cards away
 
     case "shuffleHandDraw6OrEight":
@@ -783,6 +808,74 @@ function scoreTrainerForNow(
   }
 }
 
+function searchWouldImproveAttachTarget(
+  state: GameState,
+  player: PlayerId,
+  card: TrainerCard,
+): number {
+  if (!v2Active(state, player)) return 0;
+  const pl = state.players[player];
+  if (pl.energyAttachedThisTurn || pl.bench.length >= 5) return 0;
+  const energy = pl.hand.find(isEnergyCard);
+  if (!energy) return 0;
+
+  const current = pickEnergyAttachTarget(state, player, energy);
+  const arch = archetypeOf(state, player);
+  const currentScore = current
+    ? scoreEnergyTarget(state, player, current, energy) + archetypeAttachBonus(arch, current)
+    : -Infinity;
+
+  let bestIncoming = -Infinity;
+  for (const c of pl.deck) {
+    if (!isSearchableAttachBasic(card.effectId, c)) continue;
+    const simulated = mkSimulatedBenchPokemon(c);
+    const score =
+      scoreEnergyTarget(state, player, simulated, energy) +
+      archetypeAttachBonus(arch, simulated) +
+      archetypeBenchBonus(arch, c);
+    bestIncoming = Math.max(bestIncoming, score);
+  }
+
+  if (bestIncoming <= currentScore + 10) return 0;
+  return 35;
+}
+
+function isSearchableAttachBasic(effectId: string | undefined, card: Card): card is PokemonCard {
+  if (!effectId || !isPokemonCard(card) || !isBasic(card)) return false;
+  switch (effectId) {
+    case "searchBasicPokemon2Poffin":
+      return card.hp <= 70;
+    case "searchBasicPokemon1":
+    case "searchUpTo2Basic":
+    case "searchAnyPokemonFree":
+    case "searchNonRuleBoxPokemon":
+    case "searchPokemonCoinFlip":
+    case "duskBall":
+    case "searchAnyBasicsToBench":
+    case "searchHopsBasics":
+    case "searchFightingBasicOrEnergy":
+    case "searchAnyPokemon":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function mkSimulatedBenchPokemon(card: PokemonCard): PokemonInPlay {
+  return {
+    instanceId: "__ai_search_attach_candidate__",
+    card,
+    damage: 0,
+    attachedEnergy: [],
+    evolvedFrom: [],
+    tools: [],
+    playedThisTurn: true,
+    evolvedThisTurn: false,
+    statuses: [],
+    abilityUsedThisTurn: false,
+  } as PokemonInPlay;
+}
+
 function countPokemonInHand(hand: Card[]): number {
   return hand.filter(isPokemonCard).length;
 }
@@ -849,6 +942,17 @@ function activeCantAttack(state: GameState, player: PlayerId): boolean {
 
 // --- Gust target selection -------------------------------------------------
 
+const GUST_MIN_SCORE = 120;
+const GUST_KO_BASE = 150;
+const GUST_KO_PRIZE_MULTIPLIER = 60;
+const GUST_GAIN_KO_BONUS = 80;
+const GUST_HIGHER_PRIZE_BONUS = 50;
+const GUST_ACTIVE_KO_DISCOUNT = 100;
+const GUST_GAME_WIN_BONUS = 10000;
+const GUST_FUTURE_THREAT_MIN_DAMAGE = 120;
+const GUST_FUTURE_THREAT_MULTIPLIER = 1.25;
+const GUST_PROTECTED_TARGET_PENALTY = 10000;
+
 // "What's the best opponent bench Pokémon to pull into the Active spot?"
 // Returns the instance id, or null if no gust is worth playing.
 function bestGustTarget(state: GameState, player: PlayerId): PokemonInPlay | null {
@@ -864,25 +968,20 @@ function bestGustTarget(state: GameState, player: PlayerId): PokemonInPlay | nul
   );
   if (usable.length === 0) return null;
 
-  // v2: also weight gust targets that are "engine pieces" — ramp Pokémon
-  // (Teal Mask Ogerpon ex, Bibarel-equivalents, Dudunsparce, Fan Rotom)
-  // that drive the opp's plan. Removing one of those cripples tempo for
-  // multiple turns, even if the gust target itself doesn't yield a KO.
   const v2 = v2Active(state, player);
 
   let best: PokemonInPlay | null = null;
   let bestScore = 0;
   for (const b of opp.bench) {
     for (const move of usable) {
-      let score = gustValue(state, player, atk, move, b);
-      if (v2) score += rampEngineBonus(b);
+      const score = gustValue(state, player, atk, move, b, v2);
       if (score > bestScore) {
         bestScore = score;
         best = b;
       }
     }
   }
-  return bestScore >= 120 ? best : null;
+  return bestScore >= GUST_MIN_SCORE ? best : null;
 }
 
 // Pokémon that act as engine pieces in their decks. Targeting one with a
@@ -929,8 +1028,27 @@ function gustValue(
   attacker: PokemonInPlay,
   move: Attack,
   target: PokemonInPlay,
+  includeV2Tactics = false,
 ): number {
-  const dmg = estimateDamage(state, owner, attacker, move, target);
+  const damage = estimateDamage(state, owner, attacker, move, target);
+  let score = scoreGustPrizeExchange(state, owner, attacker, move, target, damage);
+  if (!includeV2Tactics) return score;
+
+  score += scoreGustGameWinningKo(state, owner, target, damage);
+  score += rampEngineBonus(target);
+  score += scoreGustFutureThreat(state, owner, target);
+  score -= scoreGustProtectionPenalty(state, attacker, move, target, damage);
+  return score;
+}
+
+function scoreGustPrizeExchange(
+  state: GameState,
+  owner: PlayerId,
+  attacker: PokemonInPlay,
+  move: Attack,
+  target: PokemonInPlay,
+  dmg: number,
+): number {
   const maxHp = effectiveMaxHp(target, state);
   const isKO = target.damage + dmg >= maxHp;
   const prizes = prizeValue(target.card);
@@ -945,12 +1063,137 @@ function gustValue(
   // OHKO on bench. Worth more than the current-Active option if:
   //   a) we couldn't OHKO the Active, or
   //   b) the bench target is a higher prize-value card.
-  let s = 150 + prizes * 60;
-  if (!currentKO) s += 80; // we gain a KO we wouldn't have otherwise
-  if (prizes > currentPrizes) s += (prizes - currentPrizes) * 50;
+  let s = GUST_KO_BASE + prizes * GUST_KO_PRIZE_MULTIPLIER;
+  if (!currentKO) s += GUST_GAIN_KO_BONUS; // we gain a KO we wouldn't have otherwise
+  if (prizes > currentPrizes) s += (prizes - currentPrizes) * GUST_HIGHER_PRIZE_BONUS;
   // Less valuable if we'd deal the same or more prizes by just hitting Active.
-  if (currentKO && prizes <= currentPrizes) s -= 100;
+  if (currentKO && prizes <= currentPrizes) s -= GUST_ACTIVE_KO_DISCOUNT;
   return s;
+}
+
+function scoreGustGameWinningKo(
+  state: GameState,
+  owner: PlayerId,
+  target: PokemonInPlay,
+  dmg: number,
+): number {
+  if (target.damage + dmg < effectiveMaxHp(target, state)) return 0;
+  return state.players[owner].prizes.length <= prizeValue(target.card)
+    ? GUST_GAME_WIN_BONUS
+    : 0;
+}
+
+function scoreGustFutureThreat(
+  state: GameState,
+  owner: PlayerId,
+  target: PokemonInPlay,
+): number {
+  const damage = gustTargetMaxDamageNextTurn(state, owner, target);
+  if (damage < GUST_FUTURE_THREAT_MIN_DAMAGE) return 0;
+  return damage * GUST_FUTURE_THREAT_MULTIPLIER;
+}
+
+function gustTargetMaxDamageNextTurn(
+  state: GameState,
+  owner: PlayerId,
+  target: PokemonInPlay,
+): number {
+  const ourActive = state.players[owner].active;
+  if (!ourActive) return 0;
+
+  const targetOwner = opponentOf(owner);
+  const opp = state.players[targetOwner];
+  const provided = energyPoolForCost(target, state);
+  const primary = deckPrimaryEnergy(opp.deck, opp.hand);
+  const hasExtraAvailable =
+    !!primary &&
+    opp.hand
+      .concat(opp.deck)
+      .some(
+        (c) =>
+          c.supertype === "Energy" &&
+          c.subtypes.includes("Basic") &&
+          (c as EnergyCard).provides.includes(primary),
+      );
+  const providedNext = hasExtraAvailable && primary
+    ? [...provided, primary]
+    : provided;
+
+  let max = 0;
+  for (const move of target.card.attacks) {
+    const cost = effectiveAttackCost(state, target, move.cost);
+    if (!canPayCost(providedNext, cost)) continue;
+    max = Math.max(max, estimateDamage(state, targetOwner, target, move, ourActive));
+  }
+  return max;
+}
+
+function scoreGustProtectionPenalty(
+  state: GameState,
+  attacker: PokemonInPlay,
+  move: Attack,
+  target: PokemonInPlay,
+  dmg: number,
+): number {
+  if (!hasMeaningfulAttackDamage(move)) return 0;
+  if (dmg > 0 && !hasFullDamagePreventionAbility(state, attacker, target)) return 0;
+  return GUST_PROTECTED_TARGET_PENALTY;
+}
+
+function hasMeaningfulAttackDamage(move: Attack): boolean {
+  if (move.damage > 0) return true;
+  return getAttackEffects(move).some((effect) =>
+    effect.kind === "flipHeadsBonus" ||
+    effect.kind === "flipHeadsDouble" ||
+    effect.kind === "flipAllHeadsBonus" ||
+    effect.kind === "flipMultiCoinsPerHeads" ||
+    effect.kind === "flipUntilTailsPerHeads" ||
+    effect.kind === "perAttachedEnergy" ||
+    effect.kind === "perFriendlyBench" ||
+    effect.kind === "perOpponentBench" ||
+    effect.kind === "perBothBench" ||
+    effect.kind === "perDamageCounterOnSelf" ||
+    effect.kind === "perDamageCounterOnDefender" ||
+    effect.kind === "perEnergyOnDefender" ||
+    effect.kind === "perPrizeOppTaken" ||
+    effect.kind === "benchSnipe" ||
+    effect.kind === "snipeOnePerEnergy"
+  );
+}
+
+function hasFullDamagePreventionAbility(
+  state: GameState,
+  attacker: PokemonInPlay,
+  target: PokemonInPlay,
+): boolean {
+  if (!abilitiesActiveOnInstance(state, target)) return false;
+  const abilityNames = new Set((target.card.abilities ?? []).map((a) => a.name));
+  const attackerSubtypes = attacker.card.subtypes ?? [];
+
+  if (abilityNames.has("Cornerstone Stance") && (attacker.card.abilities ?? []).length > 0) {
+    return true;
+  }
+  if (abilityNames.has("Mysterious Rock Inn") && attackerSubtypes.some((s) => /^(?:ex|EX)$/.test(s))) {
+    return true;
+  }
+  if (abilityNames.has("Safeguard") && attackerSubtypes.some((s) => /^(?:ex|EX)$/.test(s))) {
+    return true;
+  }
+  if (
+    abilityNames.has("Armor Tail") &&
+    attackerSubtypes.includes("Basic") &&
+    attackerSubtypes.some((s) => /^(?:ex|EX)$/.test(s))
+  ) {
+    return true;
+  }
+  if (abilityNames.has("Sparkling Scales") && attackerSubtypes.includes("Tera")) {
+    return true;
+  }
+  if (abilityNames.has("Mighty Shell") && attacker.attachedEnergy.some((e) => e.subtypes.includes("Special"))) {
+    return true;
+  }
+
+  return false;
 }
 
 // --- Energy-attach target selection ----------------------------------------
@@ -963,6 +1206,14 @@ function pickEnergyAttachTarget(
   player: PlayerId,
   energy: EnergyCard,
 ): PokemonInPlay | null {
+  return pickEnergyAttachTargetWithScore(state, player, energy)?.target ?? null;
+}
+
+function pickEnergyAttachTargetWithScore(
+  state: GameState,
+  player: PlayerId,
+  energy: EnergyCard,
+): { target: PokemonInPlay; score: number } | null {
   const pl = state.players[player];
   const candidates: PokemonInPlay[] = [];
   if (pl.active) candidates.push(pl.active);
@@ -981,7 +1232,7 @@ function pickEnergyAttachTarget(
     s += archetypeAttachBonus(arch, p);
     if (s > bestScore) { bestScore = s; best = p; }
   }
-  return best;
+  return best ? { target: best, score: bestScore } : null;
 }
 
 function scoreEnergyTarget(
@@ -1044,6 +1295,16 @@ function scoreEnergyTarget(
   // Active preference as tiebreaker when unlock is the same.
   if (isActive) s += 5;
 
+  if (v2Active(state, player)) {
+    if (enablesAttackNextTurn(state, player, p, energy)) {
+      s += nextTurnAttackValue(state, player, p, energy, provided, simulated, costs);
+    }
+
+    if (isLikelyWastedAttachTarget(state, player, p, simulated)) {
+      s -= 10000;
+    }
+  }
+
   // Don't attach to a Basic that's about to evolve into something totally
   // different in energy requirements — we can't tell reliably, so we just
   // lightly prefer Pokémon that are already in their "final" form visible.
@@ -1051,6 +1312,125 @@ function scoreEnergyTarget(
   // Penalize attaching to a heavily-damaged bench Pokémon that's about to die.
   if (p.damage >= effectiveMaxHp(p, state) - 20) s -= 30;
   return s;
+}
+
+function enablesAttackNextTurn(
+  state: GameState,
+  player: PlayerId,
+  p: PokemonInPlay,
+  energy: EnergyCard,
+): boolean {
+  const provided = energyPoolForCost(p, state);
+  const simulated = [...provided, ...energy.provides];
+  const costs = p.card.attacks.map((a) => effectiveAttackCost(state, p, a.cost));
+  return nextTurnAttackValue(state, player, p, energy, provided, simulated, costs) > 0;
+}
+
+function nextTurnAttackValue(
+  state: GameState,
+  player: PlayerId,
+  p: PokemonInPlay,
+  energy: EnergyCard,
+  provided: string[],
+  simulated: string[],
+  costs: EnergyType[][],
+): number {
+  let best = 0;
+  const defender = state.players[opponentOf(player)].active;
+  const budget = 1 + knownAttachAccelerationBudget(state, player);
+  const futurePools = likelyFutureEnergyPools(state, player, energy, simulated, budget);
+
+  for (let i = 0; i < p.card.attacks.length; i++) {
+    const atk = p.card.attacks[i];
+    const cost = costs[i];
+    if (canPayCost(provided, cost) || canPayCost(simulated, cost)) continue;
+    if (!futurePools.some((pool) => canPayCost(pool, cost))) continue;
+
+    const damage = estimateDamage(state, player, p, atk, defender);
+    best = Math.max(best, 180 + damage / 2);
+  }
+  return best;
+}
+
+function knownAttachAccelerationBudget(state: GameState, player: PlayerId): number {
+  return state.players[player].hand.some((c) =>
+    isTrainer(c) &&
+    (
+      c.effectId === "glassTrumpet" ||
+      c.effectId === "wondrousPatchPsychic" ||
+      c.effectId === "searchTopBasicEnergyAttach" ||
+      c.effectId === "searchEnergyToBench" ||
+      c.effectId === "moveBenchEnergyToActive"
+    )
+  )
+    ? 1
+    : 0;
+}
+
+function likelyFutureEnergyPools(
+  state: GameState,
+  player: PlayerId,
+  energy: EnergyCard,
+  simulated: string[],
+  budget: number,
+): string[][] {
+  const pools: string[][] = [];
+  const primary = deckPrimaryEnergy(state.players[player].deck, state.players[player].hand);
+  const likelyTypes = new Set<EnergyType>(energy.provides);
+  if (primary) likelyTypes.add(primary);
+  for (const t of likelyTypes) {
+    pools.push([...simulated, ...Array.from({ length: budget }, () => t)]);
+  }
+  return pools;
+}
+
+function isLikelyWastedAttachTarget(
+  state: GameState,
+  player: PlayerId,
+  p: PokemonInPlay,
+  simulated: string[],
+): boolean {
+  if (state.players[player].active !== p) return false;
+  const incoming = opponentMaxDamageAgainstNextTurn(state, player, p);
+  if (incoming <= 0) return false;
+  if (p.damage + incoming < effectiveMaxHp(p, state)) return false;
+  return !p.card.attacks.some((a) =>
+    canPayCost(simulated, effectiveAttackCost(state, p, a.cost)),
+  );
+}
+
+function opponentMaxDamageAgainstNextTurn(
+  state: GameState,
+  player: PlayerId,
+  target: PokemonInPlay,
+): number {
+  const opp = state.players[opponentOf(player)];
+  const oppAct = opp.active;
+  if (!oppAct) return 0;
+
+  const provided = energyPoolForCost(oppAct, state);
+  const primary = deckPrimaryEnergy(opp.deck, opp.hand);
+  const hasExtraAvailable =
+    !!primary &&
+    opp.hand
+      .concat(opp.deck)
+      .some(
+        (c) =>
+          c.supertype === "Energy" &&
+          c.subtypes.includes("Basic") &&
+          (c as EnergyCard).provides.includes(primary),
+      );
+  const providedNext = hasExtraAvailable && primary
+    ? [...provided, primary]
+    : provided;
+
+  let max = 0;
+  for (const move of oppAct.card.attacks) {
+    const cost = effectiveAttackCost(state, oppAct, move.cost);
+    if (!canPayCost(providedNext, cost)) continue;
+    max = Math.max(max, estimateDamage(state, opponentOf(player), oppAct, move, target));
+  }
+  return max;
 }
 
 // --- Attack selection ------------------------------------------------------
@@ -1124,13 +1504,271 @@ function scorePickedPokemon(
   return s;
 }
 
+function scorePickedPokemonForAi(
+  state: GameState,
+  player: PlayerId,
+  card: PokemonCard,
+  primaryEnergy: EnergyType | null,
+): number {
+  let s = scorePickedPokemon(state, player, card, primaryEnergy);
+  if (!v2Active(state, player)) return s;
+
+  const arch = archetypeOf(state, player);
+  if (isBasic(card)) s += archetypeBenchBonus(arch, card);
+  s += playbookCardBonusFromState(state, player, card.name);
+  s += evolutionCompletionSearchBonus(state, player, card);
+  s += benchAttackReadinessSearchBonus(state, player, card);
+  if (stage2HasRareCandyBaseInPlay(state, player, card)) s += 180;
+  return s;
+}
+
+function scoreBenchTarget(
+  state: GameState,
+  player: PlayerId,
+  card: PokemonCard,
+  primaryEnergy: EnergyType | null,
+): number {
+  let s = scorePickedPokemon(state, player, card, primaryEnergy);
+  if (!v2Active(state, player)) return s;
+
+  const arch = archetypeOf(state, player);
+  s += archetypeBenchBonus(arch, card);
+  s += playbookCardBonusFromState(state, player, card.name);
+  s += benchEvolutionReadinessBonus(state, player, card);
+  s += benchSelfAttackReadinessBonus(state, player, card);
+  s += benchFillerPenalty(state, player, card);
+  return s;
+}
+
+function benchEvolutionReadinessBonus(
+  state: GameState,
+  player: PlayerId,
+  card: PokemonCard,
+): number {
+  if (!isBasic(card)) return 0;
+  const pl = state.players[player];
+  const hasRareCandy = pl.hand.some(
+    (c) => isTrainer(c) && c.effectId === "rareCandyEvolve",
+  );
+  let best = 0;
+  for (const c of pl.hand) {
+    if (!isPokemonCard(c) || c.evolvesFrom !== card.name) continue;
+    if (c.subtypes.includes("Stage 1")) best = Math.max(best, 70);
+    else if (c.subtypes.includes("Stage 2")) best = Math.max(best, hasRareCandy ? 80 : 35);
+    else best = Math.max(best, 30);
+  }
+  return best;
+}
+
+function benchSelfAttackReadinessBonus(
+  state: GameState,
+  player: PlayerId,
+  card: PokemonCard,
+): number {
+  if (!isBasic(card)) return 0;
+  const pl = state.players[player];
+  if (pl.bench.length >= 5) return 0;
+
+  const simulated = mkSimulatedBenchPokemon(card);
+  let best = 0;
+  for (const attack of card.attacks) {
+    const cost = effectiveAttackCost(state, simulated, attack.cost);
+    if (canPayCost([], cost)) {
+      best = Math.max(best, 35 + attack.damage / 4);
+    }
+  }
+
+  if (!pl.energyAttachedThisTurn) {
+    for (const energy of pl.hand.filter(isEnergyCard)) {
+      const score = scoreEnergyTarget(state, player, simulated, energy);
+      if (score > 0) best = Math.max(best, Math.min(50, score / 4));
+    }
+  }
+
+  return best;
+}
+
+function benchFillerPenalty(
+  state: GameState,
+  player: PlayerId,
+  card: PokemonCard,
+): number {
+  const pl = state.players[player];
+  if (pl.bench.length < 3) return 0;
+  if (!opponentHasBenchSpreadThreat(state, player)) return 0;
+
+  const arch = archetypeOf(state, player);
+  if (archetypeBenchBonus(arch, card) > 0) return 0;
+  if (hasEvolutionInLibrary(pl, card.name)) return 0;
+  if (basicCouldAttackSoon(card)) return 0;
+  return -40;
+}
+
+function evolutionCompletionSearchBonus(
+  state: GameState,
+  player: PlayerId,
+  card: PokemonCard,
+): number {
+  if (!card.evolvesFrom) return 0;
+  const pl = state.players[player];
+  const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+  for (const ally of allies) {
+    if (ally.card.name !== card.evolvesFrom) continue;
+    if (ally.playedThisTurn || ally.evolvedThisTurn) continue;
+    return 120;
+  }
+  return 0;
+}
+
+function benchAttackReadinessSearchBonus(
+  state: GameState,
+  player: PlayerId,
+  card: PokemonCard,
+): number {
+  if (!isBasic(card)) return 0;
+  const pl = state.players[player];
+  if (pl.bench.length >= 5) return 0;
+
+  const simulated = mkSimulatedBenchPokemon(card);
+  let best = 0;
+  for (const attack of card.attacks) {
+    const cost = effectiveAttackCost(state, simulated, attack.cost);
+    if (canPayCost([], cost)) {
+      best = Math.max(best, 70 + attack.damage / 2);
+    }
+  }
+
+  if (!pl.energyAttachedThisTurn) {
+    for (const energy of pl.hand.filter(isEnergyCard)) {
+      const score = scoreEnergyTarget(state, player, simulated, energy);
+      if (score > 0) best = Math.max(best, Math.min(90, score / 3));
+    }
+  }
+
+  return best;
+}
+
+function stage2HasRareCandyBaseInPlay(
+  state: GameState,
+  player: PlayerId,
+  stage2: PokemonCard,
+): boolean {
+  if (!stage2.subtypes.includes("Stage 2") || !stage2.evolvesFrom) return false;
+  const pl = state.players[player];
+  const allKnownCards: Card[] = [
+    ...pl.deck,
+    ...pl.hand,
+    ...pl.discard,
+    ...pl.prizes,
+    ...(state.pendingPick?.player === player ? state.pendingPick.pool : []),
+    ...(state.pendingPick?.player === player ? state.pendingPick.nonEligiblePool ?? [] : []),
+  ];
+  if (pl.active) {
+    allKnownCards.push(pl.active.card, ...pl.active.evolvedFrom);
+  }
+  for (const bench of pl.bench) {
+    allKnownCards.push(bench.card, ...bench.evolvedFrom);
+  }
+
+  const rareCandyBases = new Set<string>();
+  for (const card of allKnownCards) {
+    if (
+      isPokemonCard(card) &&
+      card.name === stage2.evolvesFrom &&
+      card.evolvesFrom
+    ) {
+      rareCandyBases.add(card.evolvesFrom);
+    }
+  }
+  if (rareCandyBases.size === 0) return false;
+
+  return [pl.active, ...pl.bench]
+    .filter((p): p is PokemonInPlay => !!p)
+    .some((p) =>
+      p.card.subtypes.includes("Basic") &&
+      !p.playedThisTurn &&
+      !p.evolvedThisTurn &&
+      rareCandyBases.has(p.card.name),
+    );
+}
+
 function scorePickedEnergy(
   card: EnergyCard,
   primaryEnergy: EnergyType | null,
+  state?: GameState,
+  player?: PlayerId,
 ): number {
-  if (isBasicEnergy(card) && primaryEnergy && card.provides.includes(primaryEnergy)) return 40;
-  if (isBasicEnergy(card)) return 25;
-  return 15; // special energy, treat as okay
+  let s = 0;
+  if (isBasicEnergy(card) && primaryEnergy && card.provides.includes(primaryEnergy)) s = 40;
+  else if (isBasicEnergy(card)) s = 25;
+  else s = 15; // special energy, treat as okay
+
+  if (state && player && v2Active(state, player)) {
+    s += energySearchGapBonus(state, player, card);
+  }
+  return s;
+}
+
+function energySearchGapBonus(
+  state: GameState,
+  player: PlayerId,
+  energy: EnergyCard,
+): number {
+  const pl = state.players[player];
+  const allies = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+  const defender = state.players[opponentOf(player)].active;
+  let best = 0;
+
+  for (const ally of allies) {
+    const provided = energyPoolForCost(ally, state);
+    const simulated = [...provided, ...energy.provides];
+    for (const attack of ally.card.attacks) {
+      const cost = effectiveAttackCost(state, ally, attack.cost);
+      if (canPayCost(provided, cost)) continue;
+
+      if (canPayCost(simulated, cost)) {
+        const damage = estimateDamage(state, player, ally, attack, defender);
+        best = Math.max(best, 140 + damage / 2);
+        continue;
+      }
+
+      if (energy.provides.some((type) => costNeedsMoreType(provided, cost, type))) {
+        const remaining = missingSpecificEnergyCount(simulated, cost);
+        best = Math.max(best, 55 - remaining * 8);
+      }
+    }
+  }
+
+  return best;
+}
+
+function costNeedsMoreType(
+  provided: string[],
+  cost: EnergyType[],
+  type: EnergyType,
+): boolean {
+  if (type === "Colorless") return false;
+  const required = cost.filter((c) => c === type).length;
+  if (required === 0) return false;
+  const available = provided.filter((p) => p === type).length;
+  return available < required;
+}
+
+function missingSpecificEnergyCount(
+  provided: string[],
+  cost: EnergyType[],
+): number {
+  const available = new Map<string, number>();
+  for (const type of provided) available.set(type, (available.get(type) ?? 0) + 1);
+
+  let missing = 0;
+  for (const type of cost) {
+    if (type === "Colorless") continue;
+    const have = available.get(type) ?? 0;
+    if (have <= 0) missing++;
+    else available.set(type, have - 1);
+  }
+  return missing;
 }
 
 function scorePickedTrainer(state: GameState, player: PlayerId, card: TrainerCard): number {
@@ -1140,6 +1778,63 @@ function scorePickedTrainer(state: GameState, player: PlayerId, card: TrainerCar
   if (card.subtypes.includes("Stadium")) return 30;
   if (card.subtypes.includes("Pokémon Tool") || card.subtypes.includes("Tool")) return 35;
   return 40; // item — usually helpful
+}
+
+function pickAttachImprovingBenchSearchTargets(
+  state: GameState,
+  player: PlayerId,
+  eligible: number[],
+  max: number,
+): number[] | null {
+  const pick = state.pendingPick;
+  if (!pick?.toBench || !v2Active(state, player)) return null;
+  const pl = state.players[player];
+  if (pl.energyAttachedThisTurn || max <= 0) return null;
+  const energy = pl.hand.find(isEnergyCard);
+  if (!energy) return null;
+
+  const arch = archetypeOf(state, player);
+  const current = pickEnergyAttachTarget(state, player, energy);
+  const currentScore = current
+    ? scoreEnergyTarget(state, player, current, energy) + archetypeAttachBonus(arch, current)
+    : -Infinity;
+
+  const scored = eligible
+    .map((i) => {
+      const card = pick.pool[i];
+      if (!isPokemonCard(card)) return null;
+      const simulated = mkSimulatedBenchPokemon(card);
+      const attachScore =
+        scoreEnergyTarget(state, player, simulated, energy) +
+        archetypeAttachBonus(arch, simulated) +
+        archetypeBenchBonus(arch, card);
+      const genericScore = scorePickedPokemonForAi(
+        state,
+        player,
+        card,
+        deckPrimaryEnergy(pl.deck, pl.hand),
+      );
+      return { i, card, attachScore, genericScore };
+    })
+    .filter((x): x is NonNullable<typeof x> => !!x);
+
+  scored.sort((a, b) =>
+    b.attachScore - a.attachScore ||
+    b.genericScore - a.genericScore,
+  );
+
+  const best = scored[0];
+  if (!best || best.attachScore <= currentScore + 10) return null;
+
+  const picked: number[] = [];
+  const seenNames = new Set<string>();
+  for (const candidate of scored) {
+    if (picked.length >= max) break;
+    if (seenNames.has(candidate.card.name)) continue;
+    picked.push(candidate.i);
+    seenNames.add(candidate.card.name);
+  }
+  return picked.length > 0 ? picked : null;
 }
 
 // Picks the top-N cards from the pool by our own scoring. Handles Nest Ball,
@@ -1166,100 +1861,21 @@ function resolveAiPendingPickSmart(state: GameState, player: PlayerId): boolean 
   // the picker) rather than parsing `label`. Falls through to the
   // generic / label-based logic below if no effectKind is set or the
   // kind has no specialized handler yet.
-  if (pick.effectKind) {
-    switch (pick.effectKind) {
-      case "preciousTrolley": {
-        // Pick up to `max` Basics, ranked by archetype evolution support
-        // first then generic Pokémon score.
-        const evolvesFromSet = new Set<string>();
-        for (const c of pl.deck) {
-          if (isPokemonCard(c) && c.evolvesFrom) evolvesFromSet.add(c.evolvesFrom);
-        }
-        for (const c of pl.hand) {
-          if (isPokemonCard(c) && c.evolvesFrom) evolvesFromSet.add(c.evolvesFrom);
-        }
-        const scored = eligible.map((i) => {
-          const c = pick.pool[i];
-          let s = 0;
-          if (isPokemonCard(c)) {
-            s = scorePickedPokemon(state, player, c, primaryEnergy);
-            if (evolvesFromSet.has(c.name)) s += 40;
-          }
-          return { i, c, s };
-        });
-        scored.sort((a, b) => b.s - a.s);
-        const picked: number[] = [];
-        const seenNames = new Set<string>();
-        for (const s of scored) {
-          if (picked.length >= max) break;
-          if (!isPokemonCard(s.c)) continue;
-          if (seenNames.has(s.c.name)) continue;
-          picked.push(s.i);
-          seenNames.add(s.c.name);
-        }
-        resolvePendingPick(state, player, picked);
-        return true;
-      }
-      case "energySearchPro": {
-        // Different basic-Energy types only. Resolver enforces uniqueness;
-        // here we de-dupe ourselves so the AI never gets caught by the
-        // resolver-side rejection.
-        const seenTypes = new Set<string>();
-        const picked: number[] = [];
-        const scored = eligible.map((i) => {
-          const c = pick.pool[i];
-          const s = isEnergyCard(c) ? scorePickedEnergy(c, primaryEnergy) : 0;
-          return { i, c, s };
-        });
-        scored.sort((a, b) => b.s - a.s);
-        for (const s of scored) {
-          if (picked.length >= max) break;
-          if (!isEnergyCard(s.c)) continue;
-          const t = s.c.provides[0];
-          if (!t || seenTypes.has(t)) continue;
-          seenTypes.add(t);
-          picked.push(s.i);
-        }
-        resolvePendingPick(state, player, picked);
-        return true;
-      }
-      case "levincia": {
-        // All eligible discard Energy is already filtered to Basic Lightning
-        // — just take up to `max`.
-        resolvePendingPick(state, player, eligible.slice(0, max));
-        return true;
-      }
-      case "glassTrumpetEnergyPick": {
-        // Pull up to 2 Basic Energy from discard. Prefer the deck's primary
-        // type to fuel the Tera attacker.
-        const scored = eligible.map((i) => {
-          const c = pick.pool[i];
-          const s = isEnergyCard(c) ? scorePickedEnergy(c, primaryEnergy) : 0;
-          return { i, s };
-        });
-        scored.sort((a, b) => b.s - a.s);
-        resolvePendingPick(state, player, scored.slice(0, max).map((x) => x.i));
-        return true;
-      }
-      case "grandTreeStage1":
-      case "grandTreeStage2": {
-        // The captured-instance afterPick handlers in pendingPick.ts apply
-        // the chosen Stage 1 / Stage 2 to the right ally. AI just picks
-        // the first eligible card (only one card matches by construction
-        // — the predicate is name-keyed). For Stage 2 (optional), still
-        // take it: the surrounding stadiumActivated AI lane already
-        // decides whether to run the chain.
-        resolvePendingPick(state, player, eligible.slice(0, max));
-        return true;
-      }
-      case "academyAtNight":
-      case "prismTower":
-      case "mysteryGarden":
-        // These spawn pendingHandReveal, not pendingPick. Defensive
-        // fallthrough — if a future change ever spawns a pendingPick under
-        // these kinds, take the generic-scoring path below.
-        break;
-    }
+  // Phase 2.5 — per-effectKind dispatch via the AI_PICK_POLICIES registry.
+  // The lanes themselves are registered at the bottom of this file
+  // (`AI_PICK_POLICIES` initialization). Falls through to the generic
+  // per-supertype scorer below if no policy is registered for the kind.
+  if (pick.effectKind && AI_PICK_POLICIES[pick.effectKind]) {
+    const policy = AI_PICK_POLICIES[pick.effectKind]!;
+    resolvePendingPick(state, player, policy(state, player, pick));
+    return true;
+  }
+
+  const attachImprovingBenchPick =
+    pickAttachImprovingBenchSearchTargets(state, player, eligible, max);
+  if (attachImprovingBenchPick) {
+    resolvePendingPick(state, player, attachImprovingBenchPick);
+    return true;
   }
 
   // Special handling: Buddy-Buddy Poffin — pick TWO DIFFERENT low-HP Basics
@@ -1278,7 +1894,7 @@ function resolveAiPendingPickSmart(state: GameState, player: PlayerId): boolean 
       const c = pick.pool[i];
       let s = 0;
       if (isPokemonCard(c)) {
-        s = scorePickedPokemon(state, player, c, primaryEnergy);
+        s = scorePickedPokemonForAi(state, player, c, primaryEnergy);
         if (evolvesFromSet.has(c.name)) s += 40;
       }
       return { i, c, s };
@@ -1302,8 +1918,8 @@ function resolveAiPendingPickSmart(state: GameState, player: PlayerId): boolean 
   const scored = eligible.map((i) => {
     const c = pick.pool[i];
     let s = 0;
-    if (isPokemonCard(c)) s = scorePickedPokemon(state, player, c, primaryEnergy);
-    else if (isEnergyCard(c)) s = scorePickedEnergy(c, primaryEnergy);
+    if (isPokemonCard(c)) s = scorePickedPokemonForAi(state, player, c, primaryEnergy);
+    else if (isEnergyCard(c)) s = scorePickedEnergy(c, primaryEnergy, state, player);
     else if (isTrainer(c)) s = scorePickedTrainer(state, player, c);
     return { i, s };
   });
@@ -1337,6 +1953,18 @@ export function aiStep(state: GameState, player: PlayerId): boolean {
   }
   if (state.pendingHandReveal && state.pendingHandReveal.player === player) {
     resolveAiHandReveal(state);
+    return true;
+  }
+  if (state.pendingChoiceMenu && state.pendingChoiceMenu.player === player) {
+    resolveAiChoiceMenu(state);
+    return true;
+  }
+  if (state.pendingInPlayTarget && state.pendingInPlayTarget.player === player) {
+    // Phase 2.4 — defensive drain. Most ability/trainer handlers branch on
+    // pl.isAI and resolve inline before opening this prompt, but the
+    // multi-step distribution pickers (Overvolt Discharge / Pyro Dance /
+    // etc.) and any future AI-side prompt openings need a central resolver.
+    resolveAiPendingInPlayTarget(state);
     return true;
   }
   if (state.pendingSearchNotice && state.pendingSearchNotice.player === player) {
@@ -1486,98 +2114,18 @@ export function takeAiTurn(state: GameState, player: PlayerId): void {
 // re-evaluate from the top (so benefits from earlier steps — new Pokémon in
 // play after Nest Ball, fresh hand after Professor's Research — are visible).
 function tryStepAiTurn(state: GameState, player: PlayerId): boolean {
+  // Phase 3A: before spending actions on setup, take a deterministic
+  // immediate-win line. This is v2-only so v1 remains the stable baseline.
+  if (tryImmediateWinningLine(state, player)) return true;
+
+  const candidates = enumerateAiActionCandidates(state, player);
+  candidates.sort((a, b) => b.score - a.score || a.order - b.order);
+  for (const candidate of candidates) {
+    if (candidate.score <= 0) break;
+    if (candidate.execute()) return true;
+  }
+
   const pl = state.players[player];
-
-  // Step 1: bench Basics if we're thin. Bench < 3 is below the v2
-  // bench-discipline threshold, so shouldBenchBasicNow always passes here;
-  // the gate is included for symmetry with Step 4 / future tightening.
-  if (pl.bench.length < 3) {
-    const idx = findPrimaryBasic(state, player);
-    if (idx >= 0 && shouldBenchBasicNow(state, player, pl.hand[idx])) {
-      if (playBasicToBench(state, player, idx).ok) return true;
-    }
-  }
-
-  // Step 2: search Items before Supporters. Deck-thinning makes the Supporter
-  // more impactful and hand info richer when deciding what to play next.
-  const itemPick = pickBestTrainer(state, player, isItem);
-  if (itemPick && itemPick.score >= 40) {
-    if (playTrainer(state, player, itemPick.index).ok) return true;
-  }
-
-  // Step 3: activate free-value abilities (draw, energy acceleration, heal).
-  if (tryActivateAbility(state, player)) return true;
-
-  // Step 4: evolve anything ready. Evolving now (a) keeps the chain moving and
-  // (b) can power-up a benched attacker to replace a dying Active.
-  if (tryEvolve(state, player)) return true;
-
-  // Fill remaining bench before we spend the Supporter. Some searches want
-  // bench slots free. v2 gates this through shouldBenchBasicNow so we don't
-  // hand a free prize to a spreader by benching dead-weight filler when
-  // the board is already developed.
-  if (pl.bench.length < 4) {
-    const idx = findPrimaryBasic(state, player);
-    if (idx >= 0 && shouldBenchBasicNow(state, player, pl.hand[idx])) {
-      if (playBasicToBench(state, player, idx).ok) return true;
-    }
-  }
-
-  // Step 5: best Supporter now. We've already searched, drawn from abilities,
-  // and evolved — so the Supporter decision has full information.
-  if (!pl.supporterPlayedThisTurn) {
-    const supPick = pickBestTrainer(state, player, isSupporter);
-    if (supPick && supPick.score >= 45) {
-      // Targetable Supporters (gust) need target info; handled in the play.
-      if (tryPlaySupporterWithTarget(state, player, supPick.index)) return true;
-    }
-  }
-
-  // Play a Stadium if we have one and none is on the field (or ours would
-  // displace the opponent's). v2 Arboliva gets one extra exception: replace
-  // our own non-Forest Stadium with Forest of Vitality when it immediately
-  // unlocks a Grass evolution chain this turn.
-  const stadiumIdx = pickStadiumToPlay(state, player);
-  if (stadiumIdx >= 0) {
-    const alreadyOurs = state.stadium?.controller === player;
-    const card = pl.hand[stadiumIdx];
-    const replacingOwnForForest =
-      isTrainer(card) &&
-      card.name === "Forest of Vitality" &&
-      forestOfVitalityUnlocksGrassEvolution(state, player);
-    if (
-      (!alreadyOurs || replacingOwnForForest) &&
-      playTrainer(state, player, stadiumIdx).ok
-    ) return true;
-  }
-
-  // Activate the in-play Stadium's once-per-turn effect. Each activated
-  // Stadium's `run()` already short-circuits to an AI-friendly auto-resolve
-  // path (no human picker spawned), so this just needs to fire useStadium
-  // when the precheck passes.
-  // Lumiose City already short-circuits via `endTurnOnResolve`, so the
-  // auto-pick path consumes the Bench-search and ends the turn cleanly.
-  if (
-    !pl.stadiumUsedThisTurn &&
-    state.stadium &&
-    stadiumHasActivatedEffect(state.stadium.card.name)
-  ) {
-    const pre = precheckStadium(state, player);
-    if (pre.ok) {
-      const r = useStadium(state, player);
-      if (r.ok) return true;
-    }
-  }
-
-  // Step 6: attach Energy — after searches/evolves so the right attacker
-  // exists on the field.
-  if (!pl.energyAttachedThisTurn) {
-    const eIdx = pl.hand.findIndex(isEnergyCard);
-    if (eIdx >= 0) {
-      const target = pickEnergyAttachTarget(state, player, pl.hand[eIdx] as EnergyCard);
-      if (target && attachEnergy(state, player, eIdx, target.instanceId).ok) return true;
-    }
-  }
 
   // Step 7: attach Tools to the Active (simple: first one, first free holder).
   const toolIdx = pl.hand.findIndex(isTool);
@@ -1613,29 +2161,349 @@ function tryStepAiTurn(state: GameState, player: PlayerId): boolean {
   return false;
 }
 
+type AiActionCandidate = {
+  kind: string;
+  label: string;
+  order: number;
+  score: number;
+  execute: () => boolean;
+};
+
+const CANDIDATE_BAND = 10_000;
+
+function actionScore(priority: number, localScore: number): number {
+  return priority * CANDIDATE_BAND + localScore;
+}
+
+function enumerateAiActionCandidates(
+  state: GameState,
+  player: PlayerId,
+): AiActionCandidate[] {
+  let order = 0;
+  const nextOrder = (): number => order++;
+  return [
+    ...enumerateBenchBasicCandidates(state, player, 3, 9, nextOrder),
+    ...enumerateItemCandidates(state, player, nextOrder),
+    ...enumerateAbilityCandidates(state, player, nextOrder),
+    ...enumerateEvolutionCandidates(state, player, nextOrder),
+    ...enumerateBenchBasicCandidates(state, player, 4, 5, nextOrder),
+    ...enumerateSupporterCandidates(state, player, 45, 4, nextOrder),
+    ...enumerateStadiumCandidates(state, player, nextOrder),
+    ...enumerateEnergyAttachCandidates(state, player, nextOrder),
+  ];
+}
+
+function enumerateBenchBasicCandidates(
+  state: GameState,
+  player: PlayerId,
+  benchLimit: number,
+  priority: number,
+  nextOrder: () => number,
+): AiActionCandidate[] {
+  const pl = state.players[player];
+  if (pl.bench.length >= benchLimit) return [];
+  const pick = pickPrimaryBasic(state, player);
+  if (!pick || !shouldBenchBasicNow(state, player, pl.hand[pick.index])) return [];
+  return [{
+    kind: "bench-basic",
+    label: String(pl.hand[pick.index]?.name ?? "Basic"),
+    order: nextOrder(),
+    score: actionScore(priority, pick.score),
+    execute: () => playBasicToBench(state, player, pick.index).ok,
+  }];
+}
+
+function enumerateItemCandidates(
+  state: GameState,
+  player: PlayerId,
+  nextOrder: () => number,
+): AiActionCandidate[] {
+  const pl = state.players[player];
+  const pick = pickBestTrainer(
+    state,
+    player,
+    isItem,
+    (card, score) =>
+      card.effectId === "rareCandyEvolve"
+        ? !!pickBestRareCandyTarget(state, player) && score >= 40
+        : score >= (isAceSpec(card) ? 75 : 40),
+  );
+  if (!pick) return [];
+  const card = pl.hand[pick.index];
+  const rareCandyTarget =
+    isTrainer(card) && card.effectId === "rareCandyEvolve"
+      ? pickBestRareCandyTarget(state, player)
+      : null;
+  return [{
+    kind: "item",
+    label: pl.hand[pick.index]?.name ?? "Item",
+    order: nextOrder(),
+    score: actionScore(8, pick.score),
+    execute: () => {
+      if (isTrainer(card) && isGustTrainerEffect(card.effectId)) {
+        return tryPlaySupporterWithTarget(state, player, pick.index);
+      }
+      return playTrainer(
+        state,
+        player,
+        pick.index,
+        rareCandyTarget
+          ? { kind: "inPlay", instanceId: rareCandyTarget.targetId }
+          : undefined,
+      ).ok;
+    },
+  }];
+}
+
+function enumerateAbilityCandidates(
+  state: GameState,
+  player: PlayerId,
+  nextOrder: () => number,
+): AiActionCandidate[] {
+  const pick = pickBestAbility(state, player);
+  if (!pick) return [];
+  return [{
+    kind: "ability",
+    label: pick.name,
+    order: nextOrder(),
+    score: actionScore(7, pick.score),
+    execute: () =>
+      activateAbility(state, player, pick.holder.instanceId, pick.abilityIdx).ok,
+  }];
+}
+
+function enumerateEvolutionCandidates(
+  state: GameState,
+  player: PlayerId,
+  nextOrder: () => number,
+): AiActionCandidate[] {
+  const pick = pickBestEvolution(state, player);
+  if (!pick) return [];
+  const pl = state.players[player];
+  return [{
+    kind: "evolve",
+    label: pl.hand[pick.handIdx]?.name ?? "Evolution",
+    order: nextOrder(),
+    score: actionScore(6, pick.score),
+    execute: () => evolve(state, player, pick.handIdx, pick.targetId).ok,
+  }];
+}
+
+function enumerateSupporterCandidates(
+  state: GameState,
+  player: PlayerId,
+  threshold: number,
+  priority: number,
+  nextOrder: () => number,
+): AiActionCandidate[] {
+  const pl = state.players[player];
+  if (pl.supporterPlayedThisTurn) return [];
+  const pick = pickBestTrainer(state, player, isSupporter);
+  if (!pick || pick.score < threshold) return [];
+  return [{
+    kind: "supporter",
+    label: pl.hand[pick.index]?.name ?? "Supporter",
+    order: nextOrder(),
+    score: actionScore(priority, pick.score),
+    execute: () => tryPlaySupporterWithTarget(state, player, pick.index),
+  }];
+}
+
+function enumerateStadiumCandidates(
+  state: GameState,
+  player: PlayerId,
+  nextOrder: () => number,
+): AiActionCandidate[] {
+  const pl = state.players[player];
+  const candidates: AiActionCandidate[] = [];
+
+  const stadiumIdx = pickStadiumToPlay(state, player);
+  if (stadiumIdx >= 0) {
+    const alreadyOurs = state.stadium?.controller === player;
+    const card = pl.hand[stadiumIdx];
+    if (!isTrainer(card)) return candidates;
+    const replacingOwnForForest =
+      card.name === "Forest of Vitality" &&
+      forestOfVitalityUnlocksGrassEvolution(state, player);
+    if (!alreadyOurs || replacingOwnForForest) {
+      candidates.push({
+        kind: "stadium",
+        label: card.name,
+        order: nextOrder(),
+        score: actionScore(3, scoreTrainerForNow(state, player, card)),
+        execute: () => playTrainer(state, player, stadiumIdx).ok,
+      });
+    }
+  }
+
+  if (
+    !pl.stadiumUsedThisTurn &&
+    state.stadium &&
+    stadiumHasActivatedEffect(state.stadium.card.name)
+  ) {
+    const pre = precheckStadium(state, player);
+    if (pre.ok) {
+      candidates.push({
+        kind: "stadium-ability",
+        label: state.stadium.card.name,
+        order: nextOrder(),
+        score: actionScore(3, 1),
+        execute: () => useStadium(state, player).ok,
+      });
+    }
+  }
+
+  return candidates;
+}
+
+function enumerateEnergyAttachCandidates(
+  state: GameState,
+  player: PlayerId,
+  nextOrder: () => number,
+): AiActionCandidate[] {
+  const pl = state.players[player];
+  if (pl.energyAttachedThisTurn) return [];
+  const eIdx = pl.hand.findIndex(isEnergyCard);
+  if (eIdx < 0) return [];
+  const energy = pl.hand[eIdx] as EnergyCard;
+  const pick = pickEnergyAttachTargetWithScore(state, player, energy);
+  if (!pick) return [];
+  return [{
+    kind: "energy",
+    label: energy.name,
+    order: nextOrder(),
+    score: actionScore(2, pick.score),
+    execute: () => attachEnergy(state, player, eIdx, pick.target.instanceId).ok,
+  }];
+}
+
+function tryImmediateWinningLine(state: GameState, player: PlayerId): boolean {
+  if (!v2Active(state, player)) return false;
+  if (state.firstTurnNoAttack) return false;
+  if (state.phase !== "main" || state.activePlayer !== player) return false;
+
+  const pl = state.players[player];
+  const opp = state.players[opponentOf(player)];
+  if (!pl.active || pl.prizes.length === 0) return false;
+
+  // Best line: if the current Active is already a last-prize KO, attack now
+  // before playing any setup cards.
+  const directWinningAttack = findWinningAttackIndexAgainst(state, player, opp.active);
+  if (directWinningAttack !== null) {
+    return attack(state, player, directWinningAttack).ok;
+  }
+
+  // Second line: if a gust card can pull a bench target that our Active can
+  // KO for the last prize(s), play the gust now. The next aiStep loop starts
+  // from the top again, sees the target as Active, and attacks before setup.
+  const gustTarget = pickImmediateWinningGustTarget(state, player);
+  if (!gustTarget) return false;
+
+  const gustIdx = findImmediateWinningGustCardIndex(state, player);
+  if (gustIdx < 0) return false;
+
+  const card = pl.hand[gustIdx];
+  if (!isTrainer(card)) return false;
+
+  const res = playTrainer(state, player, gustIdx, {
+    kind: "oppInPlay",
+    instanceId: gustTarget.instanceId,
+  });
+  return res.ok;
+}
+
+function findWinningAttackIndexAgainst(
+  state: GameState,
+  player: PlayerId,
+  defender: PokemonInPlay | null,
+): number | null {
+  const pl = state.players[player];
+  const attacker = pl.active;
+  if (!attacker || !defender || pl.prizes.length === 0) return null;
+
+  let best: { index: number; value: number } | null = null;
+  for (let i = 0; i < attacker.card.attacks.length; i++) {
+    if (!attackPreflight(state, player, i).ok) continue;
+    const move = attacker.card.attacks[i];
+    const damage = estimateDamage(state, player, attacker, move, defender);
+    const wouldKo = defender.damage + damage >= effectiveMaxHp(defender, state);
+    if (!wouldKo) continue;
+
+    const prizesTaken = prizeValue(defender.card);
+    if (prizesTaken < pl.prizes.length) continue;
+
+    const value = attackValue(state, player, attacker, move, defender);
+    if (!best || value > best.value) best = { index: i, value };
+  }
+  return best?.index ?? null;
+}
+
+function pickImmediateWinningGustTarget(
+  state: GameState,
+  player: PlayerId,
+): PokemonInPlay | null {
+  const opp = state.players[opponentOf(player)];
+  if (opp.bench.length === 0) return null;
+
+  // Reuse the existing gust heuristic when it already selects a winning
+  // target, then fall back to a strict last-prize scan so final prizes are
+  // never missed because a generic exchange score sat below threshold.
+  const preferred = bestGustTarget(state, player);
+  if (preferred && findWinningAttackIndexAgainst(state, player, preferred) !== null) {
+    return preferred;
+  }
+
+  let best: { target: PokemonInPlay; score: number } | null = null;
+  const attacker = state.players[player].active;
+  if (!attacker) return null;
+  for (const target of opp.bench) {
+    const attackIndex = findWinningAttackIndexAgainst(state, player, target);
+    if (attackIndex === null) continue;
+    const move = attacker.card.attacks[attackIndex];
+    const score = prizeValue(target.card) * 1000 + estimateDamage(state, player, attacker, move, target);
+    if (!best || score > best.score) best = { target, score };
+  }
+  return best?.target ?? null;
+}
+
+function findImmediateWinningGustCardIndex(state: GameState, player: PlayerId): number {
+  const pl = state.players[player];
+  return pl.hand.findIndex((card) => {
+    if (!isTrainer(card)) return false;
+    const id = card.effectId;
+    if (id === "gustOppBenched") return !pl.supporterPlayedThisTurn;
+    if (id === "primeCatcher") return true;
+    // Counter Catcher is not currently mapped as a distinct engine effect;
+    // if it later routes through gustOppBenched, the branch above picks it up.
+    return false;
+  });
+}
+
 // Finds the most-useful Basic Pokémon in hand to bench (prefers evolution
 // chain bases, then type-matching).
-function findPrimaryBasic(state: GameState, player: PlayerId): number {
+function pickPrimaryBasic(
+  state: GameState,
+  player: PlayerId,
+): { index: number; score: number } | null {
   const pl = state.players[player];
   const primary = deckPrimaryEnergy(pl.deck, pl.hand);
-  // v2: bias bench picks toward archetype-defining Basics so the AI always
-  // sets up its plan first (Riolu for Lucario, Smoliv for Arboliva, etc.).
-  const arch = v2Active(state, player) ? archetypeOf(state, player) : "generic";
   let bestIdx = -1;
   let bestScore = -Infinity;
   for (let i = 0; i < pl.hand.length; i++) {
     const c = pl.hand[i];
     if (!isPokemonCard(c) || !isBasic(c)) continue;
-    let s = scorePickedPokemon(state, player, c, primary);
-    s += archetypeBenchBonus(arch, c);
+    const s = scoreBenchTarget(state, player, c, primary);
     if (s > bestScore) { bestScore = s; bestIdx = i; }
   }
-  return bestIdx;
+  return bestIdx >= 0 ? { index: bestIdx, score: bestScore } : null;
 }
 
-// Activate the highest-value free ability on the board. Draw beats heal beats
+// Picks the highest-value free ability on the board. Draw beats heal beats
 // switch — in that order, roughly.
-function tryActivateAbility(state: GameState, player: PlayerId): boolean {
+function pickBestAbility(
+  state: GameState,
+  player: PlayerId,
+): { holder: PokemonInPlay; abilityIdx: number; score: number; name: string } | null {
   const pl = state.players[player];
   const holders = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
   // v2: signature abilities (Teal Dance, Psychic Draw, Heave-Ho Catcher)
@@ -1643,7 +2511,7 @@ function tryActivateAbility(state: GameState, player: PlayerId): boolean {
   // generic free-value ability competes for the same turn slot.
   const v2 = v2Active(state, player);
   const arch = v2 ? archetypeOf(state, player) : "generic";
-  let bestTarget: { holder: PokemonInPlay; abilityIdx: number; score: number } | null = null;
+  let bestTarget: { holder: PokemonInPlay; abilityIdx: number; score: number; name: string } | null = null;
 
   for (const holder of holders) {
     if (holder.abilityUsedThisTurn) continue;
@@ -1656,13 +2524,11 @@ function tryActivateAbility(state: GameState, player: PlayerId): boolean {
       score += archetypeAbilityBonus(arch, ab.name);
       if (v2) score += playbookAbilityBonusFromState(state, player, ab.name);
       if (score > 0 && (!bestTarget || score > bestTarget.score)) {
-        bestTarget = { holder, abilityIdx: ai, score };
+        bestTarget = { holder, abilityIdx: ai, score, name: ab.name };
       }
     }
   }
-  if (!bestTarget) return false;
-  const res = activateAbility(state, player, bestTarget.holder.instanceId, bestTarget.abilityIdx);
-  return res.ok;
+  return bestTarget;
 }
 
 function scoreAbility(
@@ -1948,10 +2814,13 @@ function scoreAbility(
   return 0;
 }
 
-// Evolves whichever in-play Pokémon would most benefit. Stage-2-from-Stage-1
-// beats Stage-1-from-Basic, all else equal, because Stage 2's are usually the
-// real attackers.
-function tryEvolve(state: GameState, player: PlayerId): boolean {
+// Picks whichever in-play Pokémon would most benefit from evolving.
+// Stage-2-from-Stage-1 beats Stage-1-from-Basic, all else equal, because
+// Stage 2's are usually the real attackers.
+function pickBestEvolution(
+  state: GameState,
+  player: PlayerId,
+): { handIdx: number; targetId: string; score: number } | null {
   const pl = state.players[player];
   type Option = { handIdx: number; targetId: string; score: number };
   const options: Option[] = [];
@@ -1999,15 +2868,80 @@ function tryEvolve(state: GameState, player: PlayerId): boolean {
           s -= 20;
         }
       }
+      // Phase 5E: v2 archetype + playbook + ability-unlock overlays.
+      // - Archetype bench bonus carries over to evolution priority (e.g.
+      //   evolving onto Drakloak in dragapult-* archetype is more valuable
+      //   than evolving onto a generic Stage 1).
+      // - Playbook card bonus (Phase 4) — same scoring lane already used
+      //   for trainer selection; consistent value-of-the-evolved-card.
+      // - Ability unlock: if the evolved form has an ability that draws,
+      //   searches, or accelerates energy, that's significant tempo. Score
+      //   it so the AI prioritizes engine-piece evolutions.
+      if (v2Active(state, player)) {
+        const arch = archetypeOf(state, player);
+        s += archetypeBenchBonus(arch, c) * 2;
+        s += playbookCardBonusFromState(state, player, c.name);
+        const unlockedAbilities = c.abilities ?? [];
+        for (const ab of unlockedAbilities) {
+          if (!ab.effect) continue;
+          const k = ab.effect.kind;
+          if (k === "drawOne" || k === "drawTwo" || k === "drawN") s += 15;
+          if (k === "drawNActiveOnly") s += 12;
+          if (k === "searchBasicEnergy" || k === "attachEnergyFromHand" || k === "attachEnergyFromDiscardToSelf" || k === "attachEnergyFromDiscardToBench") s += 18;
+        }
+      }
       options.push({ handIdx: i, targetId: t.instanceId, score: s });
     }
   }
-  if (options.length === 0) return false;
+  if (options.length === 0) return null;
   options.sort((a, b) => b.score - a.score);
   const pick = options[0];
   // Reject very-bad evolutions outright (e.g., Mega without immediate attack).
-  if (pick.score <= -100) return false;
-  return evolve(state, player, pick.handIdx, pick.targetId).ok;
+  if (pick.score <= -100) return null;
+  return pick;
+}
+
+function pickBestRareCandyTarget(
+  state: GameState,
+  player: PlayerId,
+): { stage2HandIdx: number; targetId: string; score: number } | null {
+  if (isPlayersFirstTurn(state, player)) return null;
+  const pl = state.players[player];
+  const targets = [pl.active, ...pl.bench].filter((p): p is PokemonInPlay => !!p);
+  let best: { stage2HandIdx: number; targetId: string; score: number } | null = null;
+
+  for (let i = 0; i < pl.hand.length; i++) {
+    const stage2 = pl.hand[i];
+    if (!isPokemonCard(stage2) || !stage2.subtypes.includes("Stage 2")) continue;
+    if (!stage2HasRareCandyBaseInPlay(state, player, stage2)) continue;
+
+    const stage1Name = stage2.evolvesFrom;
+    if (!stage1Name) continue;
+    const baseNames = new Set<string>();
+    for (const card of [...pl.deck, ...pl.hand, ...pl.discard, ...pl.prizes]) {
+      if (isPokemonCard(card) && card.name === stage1Name && card.evolvesFrom) {
+        baseNames.add(card.evolvesFrom);
+      }
+    }
+
+    for (const target of targets) {
+      if (!target.card.subtypes.includes("Basic")) continue;
+      if (target.playedThisTurn || target.evolvedThisTurn) continue;
+      if (!baseNames.has(target.card.name)) continue;
+
+      let score = stage2.hp - target.card.hp + 60;
+      score += playbookCardBonusFromState(state, player, stage2.name);
+      const provided = energyPoolForCost(target, state);
+      if (stage2.attacks.some((attack) => canPayCost(provided, attack.cost))) {
+        score += 25;
+      }
+      if (!best || score > best.score) {
+        best = { stage2HandIdx: i, targetId: target.instanceId, score };
+      }
+    }
+  }
+
+  return best;
 }
 
 function pickStadiumToPlay(state: GameState, player: PlayerId): number {
@@ -2054,6 +2988,7 @@ function pickBestTrainer(
   state: GameState,
   player: PlayerId,
   kind: (c: Card) => c is TrainerCard,
+  meetsThreshold?: (card: TrainerCard, score: number) => boolean,
 ): { index: number; score: number } | null {
   const pl = state.players[player];
   // v2: archetype-defining Trainers get a fixed bonus so the AI prefers
@@ -2069,6 +3004,7 @@ function pickBestTrainer(
     let s = scoreTrainerForNow(state, player, c);
     s += archetypeTrainerBonus(arch, c as TrainerCard);
     if (v2) s += playbookCardBonusFromState(state, player, c.name);
+    if (meetsThreshold && !meetsThreshold(c, s)) continue;
     if (s > (best?.score ?? 0)) best = { index: i, score: s };
   }
   return best;
@@ -2082,7 +3018,7 @@ function tryPlaySupporterWithTarget(state: GameState, player: PlayerId, handIdx:
   if (!card || !isTrainer(card)) return false;
   const id = (card as TrainerCard).effectId;
 
-  if (id === "gustOppBenched" || id === "flipGustOppBenched" || id === "primeCatcher" || id === "gustConfuseOppBasic") {
+  if (isGustTrainerEffect(id)) {
     const target = bestGustTarget(state, player);
     if (!target) return false;
     logEvent(state, player, `[AI] gusts ${target.card.name} to win the prize exchange.`);
@@ -2093,6 +3029,13 @@ function tryPlaySupporterWithTarget(state: GameState, player: PlayerId, handIdx:
   }
 
   return playTrainer(state, player, handIdx).ok;
+}
+
+function isGustTrainerEffect(effectId: string | undefined): boolean {
+  return effectId === "gustOppBenched" ||
+    effectId === "flipGustOppBenched" ||
+    effectId === "primeCatcher" ||
+    effectId === "gustConfuseOppBasic";
 }
 
 // Estimate the opponent's peak damage to our Active on their next turn.
@@ -2391,6 +3334,10 @@ export function cloneStateForSearchWithSeed(state: GameState, seed: number): Gam
     pendingSecondAttack: state.pendingSecondAttack ? { ...state.pendingSecondAttack } : null,
     pendingPick: state.pendingPick ? { ...state.pendingPick, pool: [...state.pendingPick.pool] } : null,
     pendingSwitchTarget: state.pendingSwitchTarget,
+    pendingChoiceMenu: state.pendingChoiceMenu
+      ? { ...state.pendingChoiceMenu, options: state.pendingChoiceMenu.options.map((o) => ({ ...o })) }
+      : null,
+    preComputedDiscardForDamage: state.preComputedDiscardForDamage,
     pendingInPlayTarget: state.pendingInPlayTarget ? { ...state.pendingInPlayTarget } : null,
     pendingHandReveal: state.pendingHandReveal ? { ...state.pendingHandReveal } : null,
     pendingSearchNotice: state.pendingSearchNotice ? { ...state.pendingSearchNotice } : null,
@@ -2450,6 +3397,16 @@ function drainPending(sim: GameState, maxSteps = 30): void {
     }
     if (sim.pendingHandReveal) {
       const ok = resolveAiHandReveal(sim);
+      if (!ok) return;
+      continue;
+    }
+    if (sim.pendingChoiceMenu) {
+      const ok = resolveAiChoiceMenu(sim);
+      if (!ok) return;
+      continue;
+    }
+    if (sim.pendingInPlayTarget) {
+      const ok = resolveAiPendingInPlayTarget(sim);
       if (!ok) return;
       continue;
     }
@@ -2930,3 +3887,137 @@ function pickBestAttackWithLookahead(
 
   return { index: bestIdx, value: bestScore };
 }
+
+// ---------------------------------------------------------------------------
+// Phase 2.3 — AI policy registry population.
+//
+// Each lane that used to live inside the `resolveAiPendingPickSmart` switch
+// is now a registered policy. The closures capture file-local scoring
+// helpers (scorePickedPokemonForAi, scorePickedEnergy, …) — keeping them
+// here avoids the circular import that would arise if aiPolicies.ts had
+// to depend on ai.ts. Parity is preserved: each closure is a verbatim
+// extraction of the prior switch case.
+// ---------------------------------------------------------------------------
+
+const policyPreciousTrolley: AIPickPolicy = (state, player, pick) => {
+  const pl = state.players[player];
+  const primaryEnergy = deckPrimaryEnergy(pl.deck, pl.hand);
+  const eligible = pick.eligibleIndexes ?? pick.pool.map((_, i) => i);
+  const max = Math.min(pick.max, eligible.length);
+  const evolvesFromSet = new Set<string>();
+  for (const c of pl.deck) {
+    if (isPokemonCard(c) && c.evolvesFrom) evolvesFromSet.add(c.evolvesFrom);
+  }
+  for (const c of pl.hand) {
+    if (isPokemonCard(c) && c.evolvesFrom) evolvesFromSet.add(c.evolvesFrom);
+  }
+  const scored = eligible.map((i) => {
+    const c = pick.pool[i];
+    let s = 0;
+    if (isPokemonCard(c)) {
+      s = scorePickedPokemonForAi(state, player, c, primaryEnergy);
+      if (evolvesFromSet.has(c.name)) s += 40;
+    }
+    return { i, c, s };
+  });
+  scored.sort((a, b) => b.s - a.s);
+  const picked: number[] = [];
+  const seenNames = new Set<string>();
+  for (const s of scored) {
+    if (picked.length >= max) break;
+    if (!isPokemonCard(s.c)) continue;
+    if (seenNames.has(s.c.name)) continue;
+    picked.push(s.i);
+    seenNames.add(s.c.name);
+  }
+  return picked;
+};
+
+const policyEnergySearchPro: AIPickPolicy = (state, player, pick) => {
+  const pl = state.players[player];
+  const primaryEnergy = deckPrimaryEnergy(pl.deck, pl.hand);
+  const eligible = pick.eligibleIndexes ?? pick.pool.map((_, i) => i);
+  const max = Math.min(pick.max, eligible.length);
+  const seenTypes = new Set<string>();
+  const picked: number[] = [];
+  const scored = eligible.map((i) => {
+    const c = pick.pool[i];
+    const s = isEnergyCard(c) ? scorePickedEnergy(c, primaryEnergy, state, player) : 0;
+    return { i, c, s };
+  });
+  scored.sort((a, b) => b.s - a.s);
+  for (const s of scored) {
+    if (picked.length >= max) break;
+    if (!isEnergyCard(s.c)) continue;
+    const t = s.c.provides[0];
+    if (!t || seenTypes.has(t)) continue;
+    seenTypes.add(t);
+    picked.push(s.i);
+  }
+  return picked;
+};
+
+const policyLevincia: AIPickPolicy = (_state, _player, pick) => {
+  const eligible = pick.eligibleIndexes ?? pick.pool.map((_, i) => i);
+  const max = Math.min(pick.max, eligible.length);
+  return eligible.slice(0, max);
+};
+
+const policyGlassTrumpetEnergyPick: AIPickPolicy = (state, player, pick) => {
+  const pl = state.players[player];
+  const primaryEnergy = deckPrimaryEnergy(pl.deck, pl.hand);
+  const eligible = pick.eligibleIndexes ?? pick.pool.map((_, i) => i);
+  const max = Math.min(pick.max, eligible.length);
+  const scored = eligible.map((i) => {
+    const c = pick.pool[i];
+    const s = isEnergyCard(c) ? scorePickedEnergy(c, primaryEnergy, state, player) : 0;
+    return { i, s };
+  });
+  scored.sort((a, b) => b.s - a.s);
+  return scored.slice(0, max).map((x) => x.i);
+};
+
+const policyGrandTreeSlice: AIPickPolicy = (_state, _player, pick) => {
+  const eligible = pick.eligibleIndexes ?? pick.pool.map((_, i) => i);
+  const max = Math.min(pick.max, eligible.length);
+  return eligible.slice(0, max);
+};
+
+const policyReconDirective: AIPickPolicy = (_state, _player, pick) => {
+  const eligible = pick.eligibleIndexes ?? pick.pool.map((_, i) => i);
+  const max = Math.min(pick.max, eligible.length);
+  const scored = eligible.map((i) => {
+    const c = pick.pool[i];
+    const s =
+      c.supertype === "Pokémon"
+        ? 200
+        : c.supertype === "Trainer"
+          ? 100
+          : 0;
+    return { i, s };
+  });
+  scored.sort((a, b) => b.s - a.s);
+  return scored.slice(0, max).map((x) => x.i);
+};
+
+const policyPeekTopMayDiscard: AIPickPolicy = (_state, _player, pick) => {
+  const eligible = pick.eligibleIndexes ?? pick.pool.map((_, i) => i);
+  const top = eligible[0] != null ? pick.pool[eligible[0]] : null;
+  const shouldDiscard = top != null && top.supertype !== "Pokémon";
+  return shouldDiscard ? [eligible[0]] : [];
+};
+
+registerAiPickPolicy("preciousTrolley", policyPreciousTrolley);
+registerAiPickPolicy("energySearchPro", policyEnergySearchPro);
+registerAiPickPolicy("levincia", policyLevincia);
+registerAiPickPolicy("glassTrumpetEnergyPick", policyGlassTrumpetEnergyPick);
+registerAiPickPolicy("grandTreeStage1", policyGrandTreeSlice);
+registerAiPickPolicy("grandTreeStage2", policyGrandTreeSlice);
+registerAiPickPolicy("reconDirective", policyReconDirective);
+registerAiPickPolicy("peekTopMayDiscard", policyPeekTopMayDiscard);
+// academyAtNight / prismTower / mysteryGarden spawn pendingHandReveal, not
+// pendingPick — they're registered under AI_HANDREVEAL_POLICIES, not here.
+
+// Touch the import so `AI_PICK_POLICIES` is treated as used (the registry is
+// also consumed by `resolveAiPendingPickSmart`).
+void AI_PICK_POLICIES;

@@ -41,6 +41,7 @@ export type PendingPrompt =
   | SwitchPrompt
   | PromotePrompt
   | HandRevealPrompt
+  | ChoiceMenuPrompt
   | SearchNoticePrompt
   | RareCandyChoicePrompt
   | HeavyBatonPrompt;
@@ -88,12 +89,22 @@ export interface PromotePrompt extends BasePrompt {
   kind: "promote";
 }
 
+export interface ChoiceMenuPrompt extends BasePrompt {
+  kind: "choiceMenu";
+  options: { id: string; label: string }[];
+  /** Stable AI-routing identifier mirroring PendingChoiceMenu.effectKind. */
+  effectKind: string;
+}
+
 export interface HandRevealPrompt extends BasePrompt {
   kind: "handReveal";
   /** Whose hand is being revealed (the `target` player). The `player` on
    *  the prompt is who clicks to resolve it. */
   target: PlayerId;
-  filter: "item" | "tool" | "itemOrTool" | "supporter" | "pokemon" | "energy" | "any";
+  filter: "item" | "tool" | "itemOrTool" | "supporter" | "pokemon" | "basicPokemon" | "energy" | "any";
+  /** Optional HP cap (consulted by the resolver, surfaced to the UI for
+   *  display only). Mandibuzz Look for Prey: Basic Pokémon with HP ≤ 70. */
+  hpMax?: number;
   min: number;
   max: number;
 }
@@ -166,6 +177,16 @@ export function activePrompts(state: GameState): PendingPrompt[] {
   }
   if (state.pendingHandReveal) {
     out.push(pendingHandRevealToPrompt(state.pendingHandReveal));
+  }
+  if (state.pendingChoiceMenu) {
+    const m = state.pendingChoiceMenu;
+    out.push({
+      kind: "choiceMenu",
+      player: m.player,
+      label: m.label,
+      options: m.options.map((o) => ({ ...o })),
+      effectKind: m.effectKind,
+    });
   }
   if (state.pendingSearchNotice) {
     out.push(pendingSearchNoticeToPrompt(state.pendingSearchNotice));
@@ -257,6 +278,7 @@ export function pendingHandRevealToPrompt(p: PendingHandReveal): HandRevealPromp
     label: p.label,
     target: p.target,
     filter: p.filter,
+    hpMax: p.hpMax,
     min: p.min,
     max: p.max,
   };

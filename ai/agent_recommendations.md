@@ -190,6 +190,24 @@ jobs:
 
 Skip Playwright in CI initially — the smoke has a known mulligan-modal flake (see `docs/AUDIT_FIXES_REVIEW.md:25-27`). Add `npm run e2e` once stabilized.
 
+### Surface 3: handoff peer auto-review (`scripts/ai-coordinator/handoff.mjs`)
+
+`npm run ai:handoff` appends the Schema-A inbox block, then optionally launches
+the peer agent for one headless review pass:
+
+- `[codex]` handoffs spawn `claude -p "<review prompt>"`.
+- `[claude]` handoffs spawn `codex --ask-for-approval never exec -C "$ROOT" --sandbox workspace-write "<review prompt>"`.
+- CLI lookup honors `CLAUDE_CLI_PATH` / `CODEX_CLI_PATH` first, then checks common install paths. For Codex it also discovers the VS Code ChatGPT extension binary under `~/.vscode/extensions/openai.chatgpt-*/bin/macos-aarch64/codex`, which covers shells where `codex` is not on `PATH`.
+- Before launching, handoff preflights auth: `claude auth status` for Claude and `codex login status` for Codex. If either is logged out, the script skips the peer launch and prints the exact login command to run.
+- `AI_AUTO_REVIEW=0` disables the launch and only writes the inbox block.
+- `AI_CHAIN_DEPTH` caps chaining at one peer invocation, preventing Claude →
+  Codex → Claude loops.
+
+The auto-invoked peer should run `npm run ai:session-start`, inspect
+`ai/inbox.md`, `ai/TODO.md`, and the diff, then either queue/claim the next
+phase or write a rework handoff. It should not broaden into implementation
+unless the handoff explicitly asks for that.
+
 ### Trigger policy
 
 | Trigger | Action | Approval |
@@ -197,6 +215,8 @@ Skip Playwright in CI initially — the smoke has a known mulligan-modal flake (
 | Edit/Write on `src/engine/**` | `npm run typecheck` via PostToolUse | automatic |
 | Edit/Write on `src/ui/**` | `npm run typecheck` via PostToolUse | automatic |
 | Agent session Stop | `npm run ai:digest` | automatic |
+| `npm run ai:handoff -- --agent codex ...` | append inbox + launch Claude review unless disabled | automatic |
+| `npm run ai:handoff -- --agent claude ...` | append inbox + launch Codex review unless disabled | automatic |
 | `git push` | CI typecheck + test | automatic |
 | `docs/AI_CPU_BUILD_PLAN.md` change | Manual: append PROJECT_STATE.md note | manual |
 | `supabase/migrations/**` change | Manual SQL review; never auto-apply | manual |
@@ -245,6 +265,23 @@ Expose via `package.json`:
 ```
 
 The agent calling `npm run ai:digest` is identified via `--agent codex` / `--agent claude` flag (defaults to the user-set `AI_AGENT` env var, else `unknown`).
+
+## Live dashboard: `scripts/ai-coordinator/dashboard.mjs`
+
+Regenerates `ai/dashboard.md` to show **currently-running peer processes** (chain-fired codex / claude sessions) with their pid, elapsed time, log file path, and log size. Plus the three most recently modified peer-session logs.
+
+Two refresh modes:
+
+| Command | Behavior |
+|---|---|
+| `npm run ai:dashboard` | One-shot write, then exit. Fired automatically by the `Stop` hook after `ai:digest`. |
+| `npm run ai:dashboard:watch` | Polls every 3 seconds (override: `npm run ai:dashboard:watch -- <seconds>`). Run in a dedicated terminal during active loop sessions. |
+
+**Recommended viewing**: open `ai/dashboard.md` in VSCode's markdown preview pane (Cmd+Shift+V) — the preview auto-refreshes on file change, so the polling watch mode gives near-real-time visibility into peer-session lifecycles. Schema C frontmatter (freshness: 30s) means `digest.mjs` will warn if the file is left stale.
+
+**Scope intentionally narrow**: peer-process status only. Phase progress, inbox tail, log-tail rendering are NOT shown — `ai:session-start` already surfaces inbox + actionable TODOs, and `ai/QA.md` carries the verification history. Add new sections inside `render()` if scope expands.
+
+**Peer-process detection**: `ps -ax -o pid,etime,command` filtered for the `codex --ask-for-approval ... exec` and `claude -p|--print` cmdline shapes the chain-fire uses. The user-facing IDE Claude wrapper (different flag shape) is excluded. Each running peer is paired with its log file by reverse-chronological filename match within the same agent prefix.
 
 ## Scheduled Tasks (folded into trigger_rules)
 
