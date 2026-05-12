@@ -498,12 +498,21 @@ function finishHit(
   if (phaseAfter !== "gameOver") endTurnRule(state);
 }
 
-// Read-only check: returns ok if `attack(state, player, attackIndex)` would
-// commit, otherwise the same `fail` reason the engine would emit. Drives the
-// UI's pre-click attack-button disable + tooltip so the player sees WHY an
-// attack isn't legal before they click instead of getting a post-click
-// rejection toast. attack() itself routes through this so the UI and engine
-// can never disagree about legality.
+/**
+ * Read-only legality check — returns `ok` if `attack(state, player, idx)`
+ * would commit, else the same `fail` reason the engine would emit. Mutates
+ * nothing. Drives the UI's pre-click attack-button disable + tooltip so
+ * the player sees WHY an attack isn't legal before they click, instead
+ * of getting a post-click rejection toast. `attack()` itself routes
+ * through this so the UI and engine can never disagree about legality.
+ *
+ * Gates checked, in order: gameOver, ownership of turn, main phase,
+ * Active exists, first-turn-attack ban (Debut Performance bypass),
+ * asleep/paralyzed status, `cantAttackUntilTurn`, Power Saver active
+ * condition, attack index in range, per-attack lock, Born to Slack
+ * (requires opp ex/V in play), Energy cost via `canPayCost` against
+ * the effective pool.
+ */
 export function attackPreflight(
   state: GameState,
   player: PlayerId,
@@ -660,10 +669,14 @@ export function attack(
   return ok;
 }
 
-// Phase 7 — re-enter the attack flow after the pre-attack discard-for-damage
-// picker resolves. Records the chosen discard count in
-// `state.preComputedDiscardForDamage`, skips preflight + confusion (already
-// done on the first pass), and runs executeAttackHit + finishHit.
+/**
+ * Mid-pipeline re-entry: called when the pre-attack discard-for-damage
+ * picker resolves (Inferno X / Bellowing Thunder / Spill the Tea). Records
+ * the chosen discard count in `state.preComputedDiscardForDamage`, then
+ * runs `executeAttackHit` + `finishHit` — preflight + confusion flip are
+ * skipped because the first pass already cleared them. Single-use
+ * overrides (snipe target, discard count) clear after the call.
+ */
 export function resumeDamageScalingAttack(
   state: GameState,
   player: PlayerId,
@@ -677,12 +690,17 @@ export function resumeDamageScalingAttack(
   state.preComputedDiscardForDamage = null;
 }
 
-// Resume a queued Festival Lead second hit after the opponent has promoted a
-// new Active. Called by promoteBenchToActive when onPromoteResolved is
-// "secondAttack". Re-checks legality: the attacker may have been KO'd by an
-// on-damage / passive trigger; the opp may have no Active to receive the hit
-// (game-over edge); the attacker may have been put Asleep/Paralyzed by an
-// ongoing condition that landed mid-promote.
+/**
+ * Mid-pipeline re-entry: resume a queued Festival Lead second hit after
+ * the opponent has promoted a new Active. Called by `promoteBenchToActive`
+ * when `state.onPromoteResolved === "secondAttack"`. Re-checks legality
+ * because the world may have shifted during the promote:
+ *   - attacker may have been KO'd by an on-damage / passive trigger
+ *   - opp may have no Active to receive the hit (game-over edge)
+ *   - attacker may have been put Asleep / Paralyzed by an ongoing
+ *     condition that landed mid-promote
+ * Aborted second hits fall through to `endTurnRule` directly.
+ */
 export function resumeSecondAttack(state: GameState): void {
   const queued = state.pendingSecondAttack;
   if (!queued) return;

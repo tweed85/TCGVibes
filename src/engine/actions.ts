@@ -654,11 +654,21 @@ export function retreat(
   return ok;
 }
 
-// User-facing action when the game is paused on pendingPromote. Dispatches
-// to the continuation queued by the code that triggered the promote:
-//   - "endTurn" (default): run end-of-turn cleanup + pass to opponent
-//   - "passTurn": skip cleanup (already happened) and pass
-//   - null: do nothing more (promote happened mid-main-phase, rare)
+/**
+ * Promote a Bench Pokémon to Active. Called when the game is paused on
+ * `pendingPromote`. Dispatches to the continuation queued by whatever
+ * triggered the promote (`state.onPromoteResolved`):
+ *   - `"endTurn"` (default for attack-driven KOs): run end-of-turn
+ *     cleanup + pass to opponent
+ *   - `"passTurn"`: skip cleanup (already happened during Checkup) and
+ *     pass turn
+ *   - `"secondAttack"`: resume a queued Festival Lead second hit before
+ *     ending the turn
+ *   - `null`: do nothing more (non-terminal promote mid-main-phase —
+ *     Run Away Draw, Cursed Blast — player keeps playing)
+ * Drains `pendingPromoteQueue` FIFO when multiple players need to
+ * promote (both-Active simultaneous KO).
+ */
 export function promoteBenchToActive(
   state: GameState,
   player: PlayerId,
