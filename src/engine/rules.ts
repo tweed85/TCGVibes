@@ -18,6 +18,15 @@ export const isPokemon = (c: Card): c is PokemonCard =>
 export const isBasic = (c: Card): c is PokemonCard =>
   isPokemon(c) && c.subtypes.includes("Basic");
 
+/**
+ * Construct a fresh `PokemonInPlay` instance for `card`. Defaults set the
+ * "played this turn" flag — every Pokémon entering play (Bench from hand,
+ * search-to-Bench, recovery-to-Bench, evolve target) gets the same
+ * just-arrived treatment, which gates evolution (can't evolve a Pokémon
+ * played this turn), the Bench-placement damage trigger, and on-play
+ * ability triggers. Setup callers override `playedThisTurn = false` so
+ * opening Pokémon can be evolved on turn 1.
+ */
 export function makePokemonInPlay(card: PokemonCard): PokemonInPlay {
   return {
     instanceId: newInstanceId(),
@@ -252,6 +261,13 @@ export function chooseFirstPlayer(
 const _EXPLOSIVENESS_RECOGNIZED = "Explosiveness";
 void _EXPLOSIVENESS_RECOGNIZED;
 
+/**
+ * Complete opening setup for one player. Phase-gated to `"setup"`;
+ * rejects if already setup-complete, if Active isn't Basic, if bench
+ * picks aren't all Basic, or if bench size > 5. Returns null on success,
+ * or a validation error string. When BOTH players finish, transitions
+ * to `phase = "main"` and runs the first player's turn-1 draw inline.
+ */
 export function completeSetup(
   state: GameState,
   player: PlayerId,
@@ -356,13 +372,22 @@ export {
 };
 export type { KoContext } from "./rules/prizeKo";
 
-// Standard post-evolve cleanup. Used by both the regular evolve action and
-// Rare Candy paths so the rules stay in lockstep:
-//   - Special Conditions clear (except Confused under Dizzying Valley)
-//   - abilityUsedThisTurn resets so the evolved form's ability is fresh
-//   - evolvedThisTurn flag set
-//   - Per-turn / per-instance flags scheduled on the prior card clear
-//     (Corrosive Sludge schedule, shield, attack lock, weakness suppression)
+/**
+ * Standard post-evolve cleanup. Used by BOTH the regular evolve action
+ * AND the Rare Candy paths so the rules stay in lockstep. Mutates `target`:
+ *   - Special Conditions clear (except Confused, which persists if the
+ *     Dizzying Valley stadium is in play)
+ *   - `abilityUsedThisTurn` resets so the evolved form's once-per-turn
+ *     ability is fresh
+ *   - `evolvedThisTurn` is set (gates further evolve / Rare Candy on the
+ *     same target this turn)
+ *   - Scheduled per-turn / per-instance flags on the pre-evolution clear:
+ *     Corrosive Sludge schedule, shield-until-turn, can't-attack-until-turn,
+ *     and noWeakness-until-turn all reset.
+ *
+ * Caller is responsible for the actual card replacement (pushing the
+ * pre-evolution onto `evolvedFrom` and swapping in the new top card).
+ */
 export function applyEvolveSideEffects(state: GameState, target: PokemonInPlay): void {
   if (state.stadium?.card.name === "Dizzying Valley") {
     const wasConfused = target.statuses.includes("confused");

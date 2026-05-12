@@ -87,12 +87,24 @@ function damageFromStatus(
   }
 }
 
-// Pokémon Checkup: runs at the end of each turn, before switching players.
-// Rulebook order is Poison → Burn → Asleep → Paralyzed, and each condition
-// is resolved for *both* Actives before moving to the next. We apply that
-// interleaving here. Paralyze is cleared only on the owner's own Checkup —
-// a Paralyze applied by the opponent persists through the opponent's
-// Checkup and only wears off at the end of the owner's next turn.
+/**
+ * Pokémon Checkup: runs at the end of each turn, before switching players.
+ * Rulebook order is Poison → Burn → Asleep → Paralyzed, and each
+ * condition is resolved for **both** Actives before moving to the next.
+ * The interleaving matters: a Poison KO on player A's Active happens
+ * before player B's burn flip in the same Checkup, which affects which
+ * trigger orderings are observable.
+ *
+ * Paralyze clears only on the owner's OWN Checkup — a Paralyze applied
+ * by the opponent persists through the opponent's Checkup and wears off
+ * at the end of the owner's next turn.
+ *
+ * Before the status pass, two passive-ability sweeps run: Festival
+ * Grounds status-immunity cleanup, then Sand Stream + Freezing Shroud
+ * damage placement. Any KO triggered mid-Checkup routes through
+ * `knockOutIfNeeded`; if `state.phase` flips to `"gameOver"`, the
+ * function early-returns without finishing the status pass.
+ */
 export function pokemonCheckup(state: GameState): void {
   if (state.phase === "gameOver") return;
   const ORDER: PlayerId[] = ["p1", "p2"];

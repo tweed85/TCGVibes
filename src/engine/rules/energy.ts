@@ -79,6 +79,14 @@ export function effectiveEnergyProvides(
   return e.provides.slice();
 }
 
+/**
+ * Greedy cost-matching: walks specific-type costs first (consuming exact
+ * type matches from the pool, falling back to wildcards), then checks
+ * remaining pool size against Colorless. Order matters — without
+ * specific-first matching, a wildcard could be spent on Colorless and
+ * leave the specific cost unpayable. The caller's `attached` array is
+ * sliced internally so callers don't need to defensively copy.
+ */
 export function canPayCost(
   attached: string[] | EnergyType[],
   cost: EnergyType[],
