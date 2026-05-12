@@ -1,5 +1,6 @@
 # PandaBananasTCG
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-18.3-61dafb?logo=react&logoColor=000)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-5.4-646cff?logo=vite&logoColor=white)](https://vitejs.dev/)
@@ -65,3 +66,11 @@ Node 18+.
 - [docs/MOBILE.md](docs/MOBILE.md) — iOS / PWA / responsive layout
 - [docs/AI_CPU_BUILD_PLAN.md](docs/AI_CPU_BUILD_PLAN.md) — AI build phases
 - [docs/REFACTOR_PLAN.md](docs/REFACTOR_PLAN.md) — repo-health refactor plan
+
+## License
+
+Released under the [MIT License](LICENSE). The Pokémon TCG card data,
+names, and artwork remain trademarks of The Pokémon Company /
+Nintendo / Game Freak / Creatures Inc. — this project is an
+unaffiliated open-source rules engine that consumes the public TCG
+card schema.
