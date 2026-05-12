@@ -188,6 +188,13 @@ export interface LogEntry {
   turn: number;
   player: PlayerId | "system";
   text: string;
+  // Monotonic sequence number assigned by `logEvent`. Used as a stable
+  // React key by AiActionBanner so duplicate-text entries don't collide
+  // and remount on append. Optional: legacy replays loaded from IDB
+  // (saved before this field existed) and any test fixture that pushes
+  // raw objects onto `state.log` won't have it — UI consumers must
+  // fall back (e.g. `entry.seq ?? \`legacy-${turn}-${i}-${text}\``).
+  seq?: number;
 }
 
 // Minimal RNG interface attached to GameState so effects can flip coins,

@@ -62,7 +62,12 @@ export function logEvent(
   player: PlayerId | "system",
   text: string,
 ): void {
-  state.log.push({ turn: state.turn, player, text });
+  // Derive a monotonic `seq` from the log itself — no new GameState field
+  // needed. Two adjacent identical-text entries get different seq values so
+  // React key stability survives duplicates (AiActionBanner read site).
+  const last = state.log[state.log.length - 1]?.seq;
+  const seq = (last ?? state.log.length - 1) + 1;
+  state.log.push({ turn: state.turn, player, text, seq });
 }
 
 // --- Setup -----------------------------------------------------------------

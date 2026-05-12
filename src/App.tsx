@@ -2389,7 +2389,12 @@ function formatPickerLabel(t: NonNullable<GameState["pendingInPlayTarget"]>): st
   return t.label;
 }
 
-function AiActionBanner({
+// Exported so src/ui/__tests__ can mount it for the key-stability test.
+// Renders the latest few AI / system log entries during the AI's turn so
+// the human sees what the AI is doing without watching the full log
+// panel. Keys derive from LogEntry.seq when present (collision-resistant
+// across duplicates); legacy entries fall back to `turn-${i}-${text}`.
+export function AiActionBanner({
   state,
   active,
 }: {
@@ -2402,12 +2407,16 @@ function AiActionBanner({
   // actually change the tail.
   const tail = useMemo(() => {
     if (!active) return [];
-    const out: { player: PlayerId | "system"; text: string }[] = [];
+    // Carry `turn` + `seq` through so the render-site can key by `seq`
+    // (collision-resistant across duplicate text within a turn) with a
+    // legacy fallback of `turn-${i}-${text}` for entries saved before
+    // `seq` existed.
+    const out: { player: PlayerId | "system"; text: string; turn: number; seq?: number }[] = [];
     for (let i = state.log.length - 1; i >= 0; i--) {
       const e = state.log[i];
       if (e.turn !== state.turn) break;
       if (e.player === aiPlayer || e.player === "system") {
-        out.push({ player: e.player, text: e.text });
+        out.push({ player: e.player, text: e.text, turn: e.turn, seq: e.seq });
         if (out.length >= AI_BANNER_TAIL) break;
       }
     }
@@ -2423,9 +2432,14 @@ function AiActionBanner({
         <div className="ai-banner-stream">
           {tail.map((e, i) => {
             const isLatest = i === tail.length - 1;
+            // Prefer LogEntry.seq for stable identity across re-renders.
+            // Legacy entries (replays saved before seq existed, or test
+            // fixtures pushing raw objects) fall back to a collision-
+            // resistant key derived from turn + index + text.
+            const key = e.seq ?? `legacy-${e.turn}-${i}-${e.text}`;
             return (
               <div
-                key={`${state.log.length}-${i}`}
+                key={key}
                 className={`ai-banner-line ${e.player === aiPlayer ? "ai" : "sys"}${isLatest ? " latest" : ""}`}
               >
                 {e.text}
