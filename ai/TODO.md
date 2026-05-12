@@ -36,7 +36,19 @@ Decomposition lives in `docs/AI_CPU_BUILD_PLAN.md` "Phase 3/4/5 decomposition" t
 
 ## Workflow / quality
 
-- [ ] [unowned] Stabilize Playwright mulligan-modal flake — verify: `npm run e2e` repeated cleanly
+- [ ] [monitor-only] Stabilize Playwright mulligan-modal flake — verify: `npm run e2e` repeated cleanly (no preemptive fix; e2e/smoke.spec.ts:55-59 already has graceful `.catch(() => false)` fallbacks. If CI ever reports a failure here, bump `timeout: 2000` → `5000`. Monitor only.)
 - [ ] [unowned] Review `scripts/ai-coordinator/digest.mjs` after first week of use — verify: digest output is useful and not noisy
-- [ ] [unowned] Add optional `AI_BENCH=quick` PR-boundary checklist item to `/ai/PROJECT_STATE.md` or `/docs/AI_CPU_BUILD_PLAN.md` — verify: documentation-only review
-- [ ] [unowned] Compact `ai/inbox.md` into `ai/archive/2026-05.md` when it crosses ~300 lines — verify: archive file created, originals truncated
+- [x] [claude:2026-05-12T12:35:00Z] Add optional `AI_BENCH=quick` PR-boundary checklist item to `/ai/PROJECT_STATE.md` or `/docs/AI_CPU_BUILD_PLAN.md` — verified: documentation-only review (landed in commit a8e8e52 under non-negotiable constraints in docs/AI_CPU_BUILD_PLAN.md)
+- [x] [claude:2026-05-12T12:35:00Z] Compact `ai/inbox.md` into `ai/archive/2026-05.md` when it crosses ~300 lines — verified: archive created (2089 lines), inbox truncated to 58 lines (commit 3c0c829)
+
+## Refactor track (multi-stage plan: ~/.claude/plans/review-these-recommendations-from-ethereal-donut.md)
+
+- [x] [claude:2026-05-12T12:35:00Z] Stage 1 — Commit 2026-05-11 refactor batch + doc sync (README, AI_CONFIG, types split, JSDoc, REFACTOR_PLAN status, inbox archive, PROJECT_STATE) — verified: typecheck clean; 979 passed | 4 skipped baseline preserved
+- [ ] [unowned] Stage 2a — Discard-pile keyboard handler on both branches in DiscardStack — verify: RTL test
+- [ ] [unowned] Stage 2b — `LogEntry.seq` + AiActionBanner key stability — verify: RTL test for DOM identity across log appends
+- [ ] [unowned] Stage 4A — PR `pandabananastcg` → `main` + Amplify branch verification — verify: PR CI green, Amplify deploys main
+- [ ] [unowned] Stage 5 — `rules.ts` / `actions.ts` internal-module splits (2 PRs)
+- [ ] [unowned] Stage 6 — `effects.ts` / `trainerEffects.ts` / `ai.ts` mechanical extractions (3 substages)
+- [ ] [unowned] Stage 7 — JSDoc sweep completion on remaining exports
+- [ ] [unowned] Stage 8 — Cloud-replay tooling (offline downloader + aggregator)
+- [ ] [unowned] Stage 17 — `state.log` cap + export contract redesign (conditional)

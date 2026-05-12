@@ -1,4 +1,4 @@
-<!-- freshness: 24h | last-touched: 2026-05-11T16:20:00Z | owner: claude -->
+<!-- freshness: 24h | last-touched: 2026-05-12T12:30:00Z | owner: claude -->
 
 # Project State
 
@@ -6,6 +6,7 @@
 
 - Project: `PandaBananasTCG`, a Vite + React + TypeScript Pokemon TCG simulator.
 - Main active workstream: **CPU AI build plan Phases 0-5 complete.** Phase 6 (replay-informed tuning) deferred until cloud-replay corpus exists.
+- 2026-05-11/12 refactor batch landed on `pandabananastcg`: README rewrite; `src/engine/aiConfig.ts` centralising 23 named AI/MCTS constants; `types.ts` split into `src/engine/types/{cards,effects,pending,core}` behind a barrel; JSDoc on 13 load-bearing public exports in `rules.ts` / `actions.ts` / `effects.ts`. Deferred items move forward via the multi-stage plan at `~/.claude/plans/review-these-recommendations-from-ethereal-donut.md` — Stages 5-7 (rules/actions splits, big-file mechanical extractions, JSDoc sweep) come next after Stage 4A PR to `main`.
 - Code and tests remain the source of truth; `/docs` holds durable plans; `/ai` holds coordination state.
 - Multi-agent coordinator (digest / handoff / dashboard / session-start) is wired and stable. Async chain-fire between Claude ↔ Codex runs end-to-end with auth pre-checks + per-session logs at `ai/peer-sessions/`.
 
