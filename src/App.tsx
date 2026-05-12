@@ -2608,9 +2608,11 @@ function FaceDownStack({
 }
 
 // Discard is face-up in real play: show the top card if we have one, otherwise
-// fall back to an empty stack. Clicking opens a modal showing the whole pile
-// (both your own and the opponent's — discards are public information).
-function DiscardStack({
+// fall back to an empty stack. Clicking (or pressing Enter / Space) opens a
+// modal showing the whole pile (both your own and the opponent's — discards
+// are public information). Exported so the keyboard-handler RTL test in
+// src/ui/__tests__ can mount it without booting the whole App.
+export function DiscardStack({
   player,
   onView,
 }: {
@@ -2619,9 +2621,26 @@ function DiscardStack({
 }) {
   const top = player.discard[player.discard.length - 1];
   const count = player.discard.length;
+  // Same keyboard handler shape for both branches: Enter / Space activate
+  // the discard viewer. preventDefault on Space avoids page-scroll.
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onView();
+    }
+  };
   if (!top) {
     return (
-      <div onClick={onView} style={{ cursor: "pointer" }} title="View discard pile">
+      <div
+        onClick={onView}
+        onKeyDown={onKeyDown}
+        role="button"
+        tabIndex={0}
+        aria-label="View discard pile (empty)"
+        data-testid="discard-stack-empty"
+        style={{ cursor: "pointer" }}
+        title="View discard pile"
+      >
         <FaceDownStack count={0} label="Discard" variant="discard" />
       </div>
     );
@@ -2630,8 +2649,11 @@ function DiscardStack({
     <div
       className="zone-stack discard"
       onClick={onView}
+      onKeyDown={onKeyDown}
       role="button"
       tabIndex={0}
+      aria-label={`View discard pile (${count} cards, top: ${top.name})`}
+      data-testid="discard-stack-nonempty"
       style={{ cursor: "pointer" }}
       title={`Discard: ${count} · top: ${top.name} · click to view all`}
     >
