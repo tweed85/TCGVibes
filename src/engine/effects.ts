@@ -490,6 +490,21 @@ export interface ResolvedAttack {
   ignoreOppEffects?: boolean;
 }
 
+/**
+ * Run the attack effect resolver — the data-driven dispatch over
+ * `AttackEffect[]`. Pipeline:
+ *   1. Pre-damage modifiers: damage scaling, conditional base override,
+ *      fizzle predicates, ignore-weakness/resistance, ignore-opp-effects
+ *   2. Damage application: caller applies the returned `damage` through
+ *      `applyDamage` (which routes KOs through `knockOut`)
+ *   3. Post-effect hooks: status applications, snipes, counter placement,
+ *      energy moves, deck searches, etc. Each hook fires after damage
+ *      lands, in source-text order.
+ * Returns `ResolvedAttack` with the final damage and the queued post-hook
+ * list; the caller (`actions.attack`) drives the side-effects. Hooks that
+ * need a player choice (Phantom Dive, Aura Jab) open a `pendingInPlayTarget`
+ * and the attack pauses via `finishHit` deferral.
+ */
 export function resolveAttackEffects(
   state: GameState,
   ctx: AttackContext,

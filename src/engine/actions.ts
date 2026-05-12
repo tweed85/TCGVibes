@@ -88,6 +88,11 @@ function supporterAllowsFirstTurn(card: import("./types").TrainerCard): boolean 
   return T1_SUPPORTER_EXCEPTIONS.has(card.name);
 }
 
+/**
+ * Bench a Basic Pokémon from hand. Phase-gated to `"main"`; rejects if the
+ * bench is full (5) or if the card isn't Basic. Fires on-play ability
+ * triggers via the engine's triggered-ability dispatcher.
+ */
 export function playBasicToBench(
   state: GameState,
   player: PlayerId,
@@ -147,6 +152,15 @@ function findInPlayByInstance(
   return pl.bench.find((p) => p.instanceId === instanceId) ?? null;
 }
 
+/**
+ * Evolve an in-play Pokémon by attaching a hand card whose `evolvesFrom`
+ * matches. Phase-gated to `"main"`. Rejects on the played-this-turn /
+ * evolved-this-turn lock, on first-turn evolve ban (both players' first
+ * turn), and when the chain mark / name doesn't match. Routes through
+ * `applyEvolveSideEffects` so post-evolve cleanup (status clear under
+ * Dizzying Valley, schedule-flag clear, ability reset) stays in sync with
+ * the Rare Candy paths.
+ */
 export function evolve(
   state: GameState,
   player: PlayerId,
@@ -264,6 +278,13 @@ export function evolve(
   return ok;
 }
 
+/**
+ * Attach an Energy card from hand to an in-play Pokémon. Phase-gated to
+ * `"main"`. Enforces the 1-per-turn manual-attach slot
+ * (`energyAttachedThisTurn`). Special Energies do their own ongoing
+ * attachment-rule check via `enforceSpecialEnergyAttachRules` after the
+ * attach lands.
+ */
 export function attachEnergy(
   state: GameState,
   player: PlayerId,
@@ -376,6 +397,17 @@ export function attachEnergy(
   return ok;
 }
 
+/**
+ * Play a Trainer card from hand (Item / Supporter / Stadium / Pokémon Tool).
+ * Phase-gated to `"main"`. Enforces:
+ *   - Supporter slot (one per turn, blocked on going-first T1 except for
+ *     `T1_SUPPORTER_EXCEPTIONS` like Team Rocket's Proton / Carmine)
+ *   - Item lock from Budew's Itchy Pollen (`itemsBlockedNextTurn`)
+ *   - Tool attach cap (max 1 per Pokémon)
+ *   - Stadium replacement (incoming stadium swaps the in-play one)
+ * Effect dispatch lives in `trainerEffects.ts`; this function is the
+ * legality + slot-management shell that delegates.
+ */
 export function playTrainer(
   state: GameState,
   player: PlayerId,
@@ -559,6 +591,15 @@ export type TrainerTarget =
 
 import { applyTrainerEffect, precheckTrainerEffect } from "./trainerEffects";
 
+/**
+ * Retreat the Active to a Bench slot. Phase-gated to `"main"`. Enforces
+ * the 1-retreat-per-turn slot, pays Energy cost via
+ * `effectiveRetreatCost` (honors free-retreat tools / abilities), clears
+ * Special Conditions on the retreating Pokémon (per rulebook), and
+ * triggers `applyOnRetreatTriggers`. Asleep / Paralyzed gates are
+ * enforced in `attackPreflight`-style preflight; retreat itself is also
+ * blocked by Confused under specific Stadium effects.
+ */
 export function retreat(
   state: GameState,
   player: PlayerId,
@@ -1223,6 +1264,18 @@ export function attackPreflight(
   return ok;
 }
 
+/**
+ * Execute an attack. Phase-gated by `attackPreflight` (T1 ban, status
+ * locks, per-attack lock, Power Saver, Born to Slack, Energy cost). Pipeline:
+ *   1. Confusion flip — heads continues, tails self-damages + skips effect
+ *   2. `executeAttackHit` — pre-attack picker (discard-for-damage), pay
+ *      cost, apply damage + effects, route through `applyDamage` so
+ *      opponent-attack-only KO triggers fire
+ *   3. `finishHit` — promote queue + Festival Lead second hit + endTurn,
+ *      deferred when a player-facing picker is still open
+ * `resumeDamageScalingAttack` / `resumeSecondAttack` re-enter mid-pipeline
+ * after pickers / promotes resolve.
+ */
 export function attack(
   state: GameState,
   player: PlayerId,
@@ -1359,6 +1412,11 @@ export function resumeSecondAttack(state: GameState): void {
   state.snipeTargetOverride = null;
 }
 
+/**
+ * Action-layer End Turn — wraps `rules.endTurn` with player-ownership and
+ * phase guards. Use this from UI / AI / replay; the rule-layer `endTurn`
+ * (re-exported from rules.ts) is what runs the actual cleanup pipeline.
+ */
 export function endTurn(state: GameState, player: PlayerId): ActionResult {
   if (state.activePlayer !== player) return fail("Not your turn.");
   if (state.phase !== "main") return fail("Can't end turn now.");

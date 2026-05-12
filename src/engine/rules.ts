@@ -432,6 +432,15 @@ export function hasStatus(p: PokemonInPlay, s: StatusCondition): boolean {
   return p.statuses.includes(s);
 }
 
+/**
+ * Apply a Special Condition to a Pokémon, honoring immunity rules and the
+ * mutually-exclusive Asleep/Confused/Paralyzed slot. Routes through
+ * `isStatusImmune` (Festival Grounds / Insomnia / Antique Fossils / Ancient
+ * Booster Energy Capsule / Bubble Water Energy) and `canBeAfflictedBy`
+ * before mutating. Burned + Poisoned coexist with each other and with the
+ * exclusive trio; applying any of {asleep, confused, paralyzed} clears any
+ * other member of that trio first.
+ */
 export function addStatus(
   state: GameState,
   p: PokemonInPlay,
@@ -644,6 +653,14 @@ export function pokemonCheckup(state: GameState): void {
 
 // --- Damage / KO / win -----------------------------------------------------
 
+/**
+ * Apply damage to the defender's Active. Caller is responsible for applying
+ * Weakness/Resistance and any reductions; this is the post-modifier sink.
+ * Routes through `knockOut` with `byOpponentAttack: true` when HP hits 0 —
+ * which is the gate that lets opponent-attack-only KO triggers (Legacy
+ * Energy, Heavy Baton, Amulet of Hope, Lillie's Pearl) fire. Self-damage
+ * from recoil / status / Cursed Blast must NOT flow through here.
+ */
 export function applyDamage(
   state: GameState,
   defenderOwner: PlayerId,
@@ -690,6 +707,11 @@ export function prizeValue(card: PokemonCard): number {
   return 1;
 }
 
+/**
+ * Move `count` Prize cards from `taker`'s prize pile into their hand.
+ * Caller is responsible for checking the win condition (prizes=0) afterward
+ * — `takePrizes` does not promote the player or set `state.winner`.
+ */
 export function takePrizes(state: GameState, taker: PlayerId, count: number): void {
   const opp = state.players[taker];
   let taken = 0;
@@ -713,7 +735,20 @@ interface KoContext {
   byOpponentAttack?: boolean;
 }
 
-// Knock out the Active Pokémon of `ownerId` and resolve prize/win logic.
+/**
+ * KO the Active Pokémon of `ownerId` and resolve prize/win logic. Ordering:
+ *   1. KO-triggered Tool effects fire BEFORE the card hits discard (so the
+ *      Tool itself is still attached for predicates that check it).
+ *   2. Opponent-attack-only triggers (Legacy Energy, Heavy Baton, Amulet of
+ *      Hope, Lillie's Pearl, Final Chain, Infinite Shadow) only fire when
+ *      `ctx.byOpponentAttack === true` AND the KO didn't happen on the
+ *      victim's own turn. `applyDamage` is the only caller that sets that.
+ *   3. Prizes are taken and the active is cleared, but no promote prompt
+ *      is set here — callers route through `setPendingPromote` (which
+ *      respects the FIFO promote queue) when a new Active is needed.
+ *   4. Win condition (prizes=0 OR no Pokémon left) is evaluated last;
+ *      sets `state.winner` and `state.phase = "gameOver"` in place.
+ */
 export function knockOut(
   state: GameState,
   ownerId: PlayerId,
@@ -1072,13 +1107,15 @@ export function resolveBenchKOs(state: GameState): boolean {
   return any;
 }
 
-// Win-by-deckout: if active player can't draw at start of turn, they lose.
-// Per-turn slots the active player still has available — surfaced by the UI
-// to confirm before End Turn so a careless click doesn't waste an Energy
-// attach or Supporter that the player obviously had on hand. Conservative:
-// only flags slots where the player STILL HAS a relevant card in hand and
-// hasn't used the slot. Returns [] when nothing's wasted, so the common
-// case doesn't get an extra confirmation click.
+/**
+ * Per-turn slots the active player still has available, surfaced by the UI
+ * to confirm before End Turn so a careless click doesn't waste an Energy
+ * attach or Supporter that the player obviously had on hand. Conservative:
+ * only flags slots where the player STILL HAS a relevant card in hand and
+ * hasn't used the slot. Returns [] when nothing's wasted, so the common
+ * case doesn't get an extra confirmation click. Phase-gated to `"main"`
+ * for the caller.
+ */
 export function unspentTurnSlots(
   state: GameState,
   player: PlayerId,
@@ -1101,6 +1138,12 @@ export function unspentTurnSlots(
   return out;
 }
 
+/**
+ * Active player draws 1 at the start of their turn. Win-by-deckout: if the
+ * deck is empty, sets `state.winner` and `state.phase = "gameOver"`
+ * immediately. Caller should not invoke any further turn logic when the
+ * function returns with `state.phase === "gameOver"`.
+ */
 export function startTurnDraw(state: GameState): void {
   const p = state.players[state.activePlayer];
   const drawn = drawCards(p, 1);
@@ -1114,6 +1157,14 @@ export function startTurnDraw(state: GameState): void {
   logEvent(state, state.activePlayer, `draws for turn.`);
 }
 
+/**
+ * Run end-of-turn cleanup for the active player, then hand control to the
+ * opponent. Early-returns if a `pendingPromote` is still active (caller
+ * must resolve the promote first). May pause partway through and open a
+ * `pendingPick` (Powerglass optional discard-attach) — `finishEndTurn`
+ * then resumes via the `powerglassAttach` afterPick handler. The opponent's
+ * Checkup runs inside `pokemonCheckup` (called from `finishEndTurn`).
+ */
 export function endTurn(state: GameState): void {
   if (state.phase === "gameOver") return;
   if (state.pendingPromote) return;
@@ -1158,10 +1209,17 @@ export function endTurn(state: GameState): void {
   finishEndTurn(state);
 }
 
-// Continuation of endTurn after Powerglass's optional picker resolves.
-// Called inline when no picker is needed (AI / no Powerglass / no Basic
-// Energy in discard) and from the `powerglassAttach` afterPick handler
-// once the human picker resolves.
+/**
+ * Continuation of `endTurn` after Powerglass's optional picker resolves.
+ * Runs the rest of end-of-turn cleanup: Ignition Energy discard, TM Tool
+ * discard, per-turn flag reset, Glaceon delayed-counter resolution,
+ * Corrosive Sludge scheduled-KO, then `pokemonCheckup` and a turn flip to
+ * the opponent. Called inline by `endTurn` when no picker is needed (AI /
+ * no Powerglass / no Basic Energy in discard) and from the
+ * `powerglassAttach` afterPick handler once the human picker resolves.
+ * Idempotent against double-fires (early-returns on `gameOver` / pending
+ * promote).
+ */
 export function finishEndTurn(state: GameState): void {
   if (state.phase === "gameOver") return;
   if (state.pendingPromote) return;
