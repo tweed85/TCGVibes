@@ -1,0 +1,470 @@
+{
+  "source_url": "https://www.youtube.com/watch?v=WHRs5xDW-kI",
+  "channel": "Duelist Elite Force (re-upload of official Pokémon TCG / Limitless TCG broadcast)",
+  "title": "Team Rocket Mewtwo VS Dragapult Regional Championships Prague Round 9 2026",
+  "event": "Prague Regional Championships 2026",
+  "round": "Day 2 Phase 2 Round 1 (Round 9 overall)",
+  "format": "Standard",
+  "regulation_marks": ["H", "I", "J"],
+  "recorded_at": "2026-04-29",
+  "transcript_source": "yt-dlp auto-subs (en) — runs 00:00–49:31 of a 49:30 broadcast; transcript truncates mid-sentence on the Game 3 winning play",
+  "broadcast_casters": ["Ross Gilbert", "Joe Bernard"],
+  "players": {
+    "p1": {
+      "handle": "Mateesh (caster pronunciation; likely Mateusz / Mateesz, full name not confirmed in standings — NOT the tournament winner Mateusz Łaszkiewicz, who played Dragapult Dudunsparce)",
+      "deck_archetype": "Team Rocket's Mewtwo (Rocket Mewtwo / Spidops engine)",
+      "decklist_known": false,
+      "decklist_url": "https://limitlesstcg.com/decks/list/26336",
+      "decklist_summary": "Representative archetype list (Fabrizio Tallone, 106th, Prague 2026) — close match for cards seen on stream including the Maximum Belt ACE SPEC the caster called out: 4 Tarountula / 4 Spidops / 2 Mimikyu / 2 Mewtwo ex / 2 Articuno / 1 Lillie's Clefairy ex / 3 Lillie's Determination / 3 Ariana / 3 Proton / 3 Giovanni / 2 Archer / 1 Petrel / 4 Transceiver / 4 Ultra Ball / 3 Bug Catching Set / 1 Night Stretcher / 1 Sacred Ash / 1 Energy Switch / 1 Brave Bangle / 1 Maximum Belt / 3 Team Rocket's Factory / 6 Grass / 4 Team Rocket's Energy / 1 Psychic"
+    },
+    "p2": {
+      "handle": "Alexandra / Alexandre (caster pronunciation varied; full name not confirmed in standings)",
+      "deck_archetype": "Dragapult ex / Blaziken ex / Munkidori (Terror-flavoured Phantom Dive variant)",
+      "decklist_known": false,
+      "decklist_url": "https://limitlesstcg.com/decks/list/26250",
+      "decklist_summary": "Representative archetype list (Vincenzo Cipolla, 8th, Prague 2026) — matches the cards called out on stream including Risky Ruins, Team Rocket's Watchtower, Munkidori, and Lillie's Clefairy ex tech: 4 Dreepy / 4 Drakloak / 2 Dragapult ex / 2 Torchic / 1 Combusken / 2 Blaziken ex / 2 Munkidori / 2 Budew / 1 Shaymin / 1 Lillie's Clefairy ex / 1 Fezandipiti ex / 1 Meowth ex / 4 Lillie's Determination / 3 Boss's Orders / 2 Dawn / 2 Crispin / 4 Buddy-Buddy Poffin / 4 Ultra Ball / 3 Poké Pad / 2 Rare Candy / 2 Night Stretcher / 1 Unfair Stamp / 1 Risky Ruins / 1 Team Rocket's Watchtower / 3 Fire / 3 Psychic / 2 Darkness"
+    }
+  },
+  "coin_flip": { "winner": "p1", "chose": "first" },
+  "match_outcome": {
+    "winner": "incomplete — transcript cuts off mid-Game-3 with Alexandre lining up a 2-prize Mimikyu/Boss's Orders KO at Alexandre 2 prizes / Mateesh ~2-3 prizes; commentary frames Alexandre as 'in such a strong position' but flags an 'intriguing pass' that 'really changed the tide' — game-3 result not visible in caption window 00:00–49:31",
+    "games_played": 3,
+    "set_score": "1-1 entering Game 3, Game 3 result undetermined"
+  },
+  "games": [
+    {
+      "game_number": 1,
+      "winner": "p2 (Alexandre / Dragapult-Blaziken)",
+      "win_condition": "prizes (6-0; transcript: 'Mewtwo goes down, spid goes down. We have six prizes for Alexandria')",
+      "duration_seconds_estimated": 1170,
+      "turns": [
+        {
+          "turn": 1,
+          "active": "p1",
+          "hand_at_start": 7,
+          "actions": [
+            { "kind": "playTrainer", "card": "Team Rocket's Proton", "notes": "T1 supporter exception — searched 3 basic Team Rocket Pokémon to HAND (key archetype interaction, mirrored by the engine's T1_SUPPORTER_EXCEPTIONS gate)" },
+            { "kind": "playBasicToBench", "card": "Team Rocket's Tarountula", "notes": "active was already a TR basic before any plays" },
+            { "kind": "playTrainer", "card": "Ultra Ball", "notes": "fetched Team Rocket's Spidops to hand; no basic-energy discard available — caster flagged this as the only friction in the opening" },
+            { "kind": "playTrainer", "card": "Team Rocket's Transceiver", "notes": "searched Team Rocket's Ariana to hand (item-tutored supporter for T2)" },
+            { "kind": "attachEnergy", "to": "Team Rocket's Tarountula", "energy": "Team Rocket's Energy", "notes": "TR Energy = special, counts as 2 energy" },
+            { "kind": "endTurn" }
+          ],
+          "notes": "Canonical TR Mewtwo T1-going-first opener. Caster: 'phenomenal opener … you ideally stash an extra attachment this turn.'"
+        },
+        {
+          "turn": 2,
+          "active": "p2",
+          "hand_at_start": 7,
+          "actions": [
+            { "kind": "playBasicToBench", "card": "Torchic" },
+            { "kind": "playBasicToBench", "card": "Dreepy" },
+            { "kind": "playTrainer", "card": "Lillie's Determination", "notes": "shuffle-and-draw 8" },
+            { "kind": "playBasicToBench", "card": "Dreepy", "notes": "third Dreepy hit the bench from the Lillie's draw — set up multi-Drakloak line" },
+            { "kind": "playTrainer", "card": "Buddy-Buddy Poffin", "notes": "fetched 2 basics — extra Torchic + Dreepy" },
+            { "kind": "playBasicToBench", "card": "Budew", "notes": "moved into ACTIVE via Itchy Pollen plan" },
+            { "kind": "switchActive", "to": "Budew", "notes": "promoted Budew active to launch Itchy Pollen item-lock" },
+            { "kind": "attack", "card": "Budew", "attack": "Itchy Pollen", "damage": 0, "effect": "opponent cannot play items next turn" }
+          ],
+          "notes": "Textbook Dragapult-Blaziken opener: drop Torchic + Dreepys, Lillie/Poffin into a Budew item-lock to buy stage-2 setup time. Strong candidate for the engine's opening-book entry for this archetype going second on T2."
+        },
+        {
+          "turn": 3,
+          "active": "p1",
+          "hand_at_start": 8,
+          "drawn_or_known_in_hand": ["Team Rocket's Ariana"],
+          "actions": [
+            { "kind": "playTrainer", "card": "Team Rocket's Ariana", "notes": "draw to 8 because all in-play are TR Pokémon — caster: 'a few unplayable items, no energy whatsoever'" },
+            { "kind": "playBasicToBench", "card": "Team Rocket's Spidops", "uncertain": true, "notes": "caster mentions 'a Dloak coming down, a combustion coming down, a recon directive' — items locked, evolution would only fire if in-hand stage-1 was already there. Caster framed the turn as 'the perfect support… two options'" },
+            { "kind": "endTurn", "notes": "no attack possible; no energy attach this turn (Ariana drew dead — no basic energy in hand)" }
+          ],
+          "notes": "First inflection point: Ariana hit no energy. Tarountula's Take Down does 30 to Budew but no Grass attached, and TR Energy alone won't satisfy single-color cost on Tarountula. Caster: 'the first checkpoint has gone in favor of Alexandri.'"
+        },
+        {
+          "turn": 4,
+          "active": "p2",
+          "actions": [
+            { "kind": "playTrainer", "card": "Crispin", "notes": "search 2 special energy: 1 Fire attached directly + 1 Psychic to hand → manually attached" },
+            { "kind": "evolve", "from": "Dreepy", "to": "Drakloak" },
+            { "kind": "playTrainer", "card": "Buddy-Buddy Poffin", "uncertain": true, "notes": "second Drakloak prep; some evolutions/searches in this stretch are not perfectly ordered in commentary" },
+            { "kind": "endTurn", "notes": "no Phantom Dive yet — caster: 'Okay, here's confirmation there will be no phantom dive.' Energies were spread across multiple Drakloak rather than committed to one — explicitly to play around Team Rocket's Giovanni" }
+          ],
+          "notes": "Defensive energy spread vs. gust pressure. Engine note: scorePosition does NOT currently reward 'spreading energy to defuse gust threats' — see engine_notes."
+        },
+        {
+          "turn": 5,
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Team Rocket's Proton", "notes": "second copy of Proton (caster flagged this as unusual: 'normally a one-and-done supporter')" },
+            { "kind": "endTurn", "notes": "still no energy in hand — Mateesh kept passing without attacking" }
+          ],
+          "notes": "Decision worth flagging: Mateesh did NOT bench the Articuno (Repelling Veil) yet, which would have shielded basics from Phantom Dive. Caster called this 'surprising'."
+        },
+        {
+          "turn": 6,
+          "active": "p2",
+          "actions": [
+            { "kind": "evolve", "from": "Drakloak", "to": "Dragapult ex" },
+            { "kind": "playTrainer", "card": "Boss's Orders", "notes": "gusted Team Rocket's Mewtwo ex from bench to active — caster: 'I want to punch this Mewtwo'" },
+            { "kind": "attack", "card": "Dragapult ex", "attack": "Phantom Dive", "damage": 200, "bench_counters_placed": 6, "notes": "Mewtwo @ 280 HP → 200 damage; 6 counters distributed (caster 'six counters straight onto one spidops' — concentrated bench damage)" },
+            { "kind": "endTurn" }
+          ],
+          "notes": "KEY MOMENT: Boss's Orders preemptive on Mewtwo — engine archetype playbook should learn this. See key_moments[0]."
+        },
+        {
+          "turn": 7,
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Bug Catching Set" },
+            { "kind": "attachEnergy", "to": "Team Rocket's Mewtwo ex", "energy": "Grass", "notes": "manual attach + Maximum Belt equipped earlier (top-decked)" },
+            { "kind": "playTool", "card": "Maximum Belt", "to": "Team Rocket's Mewtwo ex" },
+            { "kind": "attack", "card": "Team Rocket's Mewtwo ex", "attack": "Psydrive", "damage": 160, "notes": "no Spidops energy on bench to discard for the +60 per energy effect; caster: 'Spidey did not do the whole charge in energy malarkey, so it is just 160. Had there been a Clefairy down, this would have been a clean KO, but there isn't.'" }
+          ],
+          "notes": "Mewtwo's main attack discards bench energy for +60 each — Mateesh had no bench energy to fuel this. The build path failure compounds: not benching Articuno earlier, no charging-up energy on Spidops, no Clefairy means no extra-prize trade."
+        },
+        {
+          "turn": 8,
+          "active": "p2",
+          "actions": [
+            { "kind": "evolve", "from": "Drakloak", "to": "Dragapult ex" },
+            { "kind": "playTrainer", "card": "Boss's Orders", "notes": "second Boss's — gust Mewtwo (260 damage on it from prior Phantom Dive + 60-damage attack)" },
+            { "kind": "attack", "card": "Dragapult ex", "attack": "Phantom Dive", "damage": 200, "bench_counters_placed": 6, "ko_targets": ["Team Rocket's Mewtwo ex"], "prizes_taken": 2, "notes": "KO Mewtwo for 2 prizes (ex). Phantom Dive bench counters spread onto Spidops to set up next turn's KO."
+            }
+          ],
+          "notes": "Score: p2 took 2 prizes (now 4 remaining)."
+        },
+        {
+          "turn": 9,
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Team Rocket's Giovanni", "notes": "supporter that draws + switches opp active. Used to push Dragapult to bench? Caster: 'Mewtwo to the bench' — actually used to pivot Mateesh's own active. Reads: 'pushing the Mewtwo to the bench' — Mateesh's Mewtwo went bench, fresh attacker active." },
+            { "kind": "playTrainer", "card": "Ultra Ball", "notes": "searched Mimikyu" },
+            { "kind": "attack", "card": "Team Rocket's Spidops", "attack": "Rocket Rush", "damage_estimated": 150, "ko_targets": ["Drakloak"], "prizes_taken": 1 }
+          ],
+          "notes": "Mateesh finally takes a prize but Phantom Dive setup on Spidops is unfavorable — both players at 4-3 prizes."
+        },
+        {
+          "turn": 10,
+          "active": "p2",
+          "actions": [
+            { "kind": "playBasicToBench", "card": "Munkidori", "notes": "caster: 'Monkey Dory's finally made it onto the scene alongside the risky ruins'" },
+            { "kind": "evolve", "from": "Drakloak", "to": "Blaziken ex", "uncertain": true, "notes": "Blaziken came up to attack — actual line was retreat Blaziken-into-Drakloak, then Phantom Dive. Caster: 'we are going for the dragon pot attack here — we can use double sething spirit here to get the dragonot into the equation'" },
+            { "kind": "playTrainer", "card": "Boss's Orders" },
+            { "kind": "attack", "card": "Dragapult ex", "attack": "Phantom Dive", "damage": 200, "bench_counters_placed": 6, "ko_targets": ["Team Rocket's Mewtwo ex (bench, via accumulated counters)", "Team Rocket's Spidops"], "prizes_taken": 3, "notes": "Triple KO turn — Munkidori 'Adrena-Brain' move-counters helped finish Spidops. Caster: 'a three prize swing with phantom dive… we have game one for Alexandri.'" }
+          ],
+          "notes": "GAME 1 ENDS: Alexandre 6-0."
+        }
+      ]
+    },
+    {
+      "game_number": 2,
+      "winner": "p1 (Mateesh / Rocket Mewtwo)",
+      "win_condition": "prizes (6-0)",
+      "duration_seconds_estimated": 600,
+      "turns": [
+        {
+          "turn": 1,
+          "active": "p1",
+          "actions": [
+            { "kind": "playBasicToBench", "card": "Team Rocket's Tarountula", "uncertain": true },
+            { "kind": "passTurn", "notes": "Mateesh active was Mimikyu (psychic basic that requires TR Pokémon to attack); no Proton in hand, no Transceiver — caster flagged 'not a great hand', two TR Energy were prized" }
+          ],
+          "notes": "Bad opening. Two of four Team Rocket's Energy are in the prize cards — major dead-draw risk for Mewtwo's powered attack."
+        },
+        {
+          "turn": 2,
+          "active": "p2",
+          "actions": [
+            { "kind": "playTrainer", "card": "Meowth ex (Pheasant Dip / 'Hand into Lillie' setup)", "notes": "caster: 'Meow for Lily's determination. Get yourself a new hand.'" },
+            { "kind": "playTrainer", "card": "Lillie's Determination" },
+            { "kind": "playTrainer", "card": "Buddy-Buddy Poffin", "uncertain": true },
+            { "kind": "playTrainer", "card": "Buddy-Buddy Poffin", "uncertain": true, "notes": "caster joked about double Poffin — 'apparently I wasn't… you were right'" },
+            { "kind": "attachEnergy", "to": "Torchic", "energy": "Psychic" },
+            { "kind": "switchActive", "to": "Budew", "notes": "pivot into Budew" },
+            { "kind": "attack", "card": "Budew", "attack": "Itchy Pollen", "damage": 0, "effect": "item lock", "notes": "Caster: '11 cards [Ultra Ball + Transceiver + Bug Catching Set] you are going to want next turn… they are all going to be gone.'" }
+          ],
+          "notes": "Item lock established with no Articuno on Mateesh's side — but Mateesh's hand is mostly items, so the item lock hits hard."
+        },
+        {
+          "turn": 3,
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Lillie's Determination", "notes": "no items playable — supporter only" },
+            { "kind": "endTurn", "notes": "couldn't develop board further — caster: 'a little bit awkward'" }
+          ]
+        },
+        {
+          "turn": 4,
+          "active": "p2",
+          "actions": [
+            { "kind": "playBasicToBench", "card": "Pawmi (Bug Catching Set's Pawmi → Pawmot 'Two-Rounder' attacker)", "uncertain": true, "notes": "caster called this out as 'two-rounder' — the bench attacker that bypasses Itchy Pollen by being a 30-damage basic" },
+            { "kind": "switchActive", "to": "Pawmi", "uncertain": true },
+            { "kind": "attack", "card": "Pawmi", "attack": "Two-Rounder (30 dmg basic-attack)", "damage": 30, "ko_targets": ["Team Rocket's Tarountula (50 HP — KO via 2 sequential 30 hits or some accumulated damage)"], "uncertain": true, "notes": "Caster: 'to-rounder is going to do it. I love having a random basic that can hit 30 damage. So if your opponent is trying to block you with PO, you say no.' This card may actually be a different basic — see uncertain flag" }
+          ],
+          "notes": "Aggressive pivot — Alexandre starts taking prizes with a low-HP basic to break the stall."
+        },
+        {
+          "turn": 5,
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Team Rocket's Proton", "notes": "finally accessed Proton — searched a third Pokemon and benched Articuno + flooded basics" },
+            { "kind": "playBasicToBench", "card": "Team Rocket's Articuno", "notes": "Repelling Veil now active — basics shielded from Phantom Dive" },
+            { "kind": "attack", "uncertain": true, "notes": "caster: 'another KO on Boo using that tarantula' — Tarountula KO'd Budew" }
+          ]
+        },
+        {
+          "turn": 6,
+          "active": "p2",
+          "actions": [
+            { "kind": "playTrainer", "card": "Boss's Orders", "notes": "no fire energy in hand → caster: 'no, we can't launch an attack here' — Alexandre ended up just powering up Blaziken ex via charging-up ability" },
+            { "kind": "endTurn" }
+          ],
+          "notes": "Big window of opportunity given to Mateesh."
+        },
+        {
+          "turn": 7,
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Bug Catching Set", "notes": "whiffed — only 1 energy, no extra Pokémon" },
+            { "kind": "retreat", "card": "active", "notes": "freed grass energy via retreat" },
+            { "kind": "playTrainer", "card": "Team Rocket's Giovanni", "notes": "brought up Meowth ex" },
+            { "kind": "activateAbility", "card": "Team Rocket's Spidops", "ability": "Charging Up", "notes": "attached basic energy from discard to Spidops" },
+            { "kind": "attachEnergy", "to": "Team Rocket's Mewtwo ex", "energy": "Grass" },
+            { "kind": "attack", "card": "Team Rocket's Mewtwo ex", "attack": "Psydrive", "damage": 200, "ko_targets": ["Meowth ex"], "prizes_taken": 2, "notes": "Caster: 'two prize knockout'" }
+          ],
+          "notes": "Mewtwo turn — 2 prizes."
+        },
+        {
+          "turn": 8,
+          "active": "p2",
+          "actions": [
+            { "kind": "attachEnergy", "to": "Torchic", "energy": "Psychic", "uncertain": true },
+            { "kind": "endTurn", "notes": "Caster: 'I don't see any hand disruption' — Alexandre lacks Boss's at the right moment" }
+          ]
+        },
+        {
+          "turn": 9,
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Team Rocket's Transceiver", "notes": "fetched Team Rocket's Petrel" },
+            { "kind": "playTrainer", "card": "Team Rocket's Petrel", "notes": "ACE-SPEC search — fetched Maximum Belt" },
+            { "kind": "playTool", "card": "Maximum Belt", "to": "Team Rocket's Mewtwo ex" },
+            { "kind": "attachEnergy", "to": "Team Rocket's Mewtwo ex (manual)", "energy": "Grass" },
+            { "kind": "activateAbility", "card": "Team Rocket's Spidops", "ability": "Charging Up", "notes": "two charging-up uses to fuel Mewtwo's bench-discard mechanic" },
+            { "kind": "attack", "card": "Team Rocket's Mewtwo ex", "attack": "Psydrive (boosted)", "damage": 330, "notes": "160 base + 120 from 2 discarded bench energies + 50 Maximum Belt = 330", "ko_targets": ["Blaziken ex"], "prizes_taken": 2, "notes_2": "KO finishes the game"
+            }
+          ],
+          "notes": "GAME 2 ENDS: Mateesh wins. Beautiful Petrel→ACE-SPEC tutor combo into a maxed-out Mewtwo Psydrive."
+        }
+      ]
+    },
+    {
+      "game_number": 3,
+      "winner": "undetermined (transcript ends mid-game with both players in active position; commentary suggests momentum had shifted Alexandre's way at the very end)",
+      "win_condition": "incomplete",
+      "duration_seconds_estimated": 1100,
+      "turns": [
+        {
+          "turn": 1,
+          "active": "p2",
+          "notes_only": "Alexandre opted to go FIRST this game (despite being the non-Proton archetype) explicitly to deny Mateesh the T1 Proton. Caster: 'opted to go first here simply because of the threat of the Team Rockets Proton.' Lillie's Clefairy ex started active. Bad opening: 4 of 7 basic energies are PRIZED, both Rare Candy are PRIZED.",
+          "actions": [
+            { "kind": "playBasicToBench", "card": "Lillie's Clefairy ex", "uncertain": true },
+            { "kind": "attachEnergy", "to": "Lillie's Clefairy ex", "energy": "Fire-or-Psychic", "uncertain": true },
+            { "kind": "playTrainer", "card": "Ultra Ball", "uncertain": true },
+            { "kind": "endTurn" }
+          ]
+        },
+        {
+          "turn": 2,
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Team Rocket's Factory", "notes": "draw 2 stadium effect" },
+            { "kind": "playBasicToBench", "card": "Team Rocket's Mewtwo ex" },
+            { "kind": "playBasicToBench", "card": "Team Rocket's Tarountula" },
+            { "kind": "playBasicToBench", "card": "Team Rocket's Tarountula" },
+            { "kind": "playTrainer", "card": "Ultra Ball", "notes": "discarded a basic energy — 'discarding energy is so strong here'" },
+            { "kind": "playTrainer", "card": "Team Rocket's Transceiver" },
+            { "kind": "attachEnergy", "to": "Team Rocket's Mewtwo ex", "energy": "Team Rocket's Energy", "notes": "double-counts as 2" },
+            { "kind": "endTurn" }
+          ],
+          "notes": "Good T2 from Mateesh despite no Proton T1 — Factory + Ultra Ball + manual TR Energy attach got Mewtwo to '2 energy effective' fast."
+        },
+        {
+          "turn": 3,
+          "active": "p2",
+          "actions": [
+            { "kind": "playTrainer", "card": "Lillie's Determination", "notes": "fresh 8-card hand; previous hand was 'a stinker'" },
+            { "kind": "attachEnergy", "to": "Lillie's Clefairy ex", "energy": "Psychic" },
+            { "kind": "endTurn", "notes": "Alexandre opted NOT to drop Budew yet — wanted proactive Clefairy attack option. Caster: 'maybe trying to eye up an attack with the Clefairy proactively'" }
+          ]
+        },
+        {
+          "turn": 4,
+          "active": "p1",
+          "actions": [
+            { "kind": "playBasicToBench", "card": "Team Rocket's Spidops", "uncertain": true },
+            { "kind": "attachEnergy", "to": "Team Rocket's Mewtwo ex", "energy": "Grass", "uncertain": true },
+            { "kind": "playTrainer", "card": "Lillie's Determination" },
+            { "kind": "endTurn", "notes": "Mewtwo ready to go — caster: 'that Mewtwo is looking oh so intimidating'" }
+          ]
+        },
+        {
+          "turn": 5,
+          "active": "p2",
+          "actions": [
+            { "kind": "playBasicToBench", "card": "Torchic" },
+            { "kind": "playBasicToBench", "card": "Budew" },
+            { "kind": "switchActive", "to": "Budew", "notes": "now switching INTO Budew because Lillie's Clefairy was insufficient" },
+            { "kind": "playTrainer", "card": "Risky Ruins", "notes": "stadium for Munkidori synergy (counters one of own bench Pokémon → Phantom Dive math)" },
+            { "kind": "attack", "card": "Budew", "attack": "Itchy Pollen", "damage": 0, "effect": "item lock" }
+          ]
+        },
+        {
+          "turn": 6,
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Team Rocket's Giovanni", "notes": "switched opp active — gusted Combusken? Caster: 'go bring that combus up'. Wait — Combusken was bench; Giovanni gust + force-promote = effectively a Boss's"},
+            { "kind": "attack", "card": "Team Rocket's Mewtwo ex", "attack": "Psydrive", "damage": 160, "ko_targets": ["Combusken"], "prizes_taken": 1, "notes": "1-prize KO on Combusken — Alexandre LOSES the only Combusken without a backup torchic in play (rare candies prized)" },
+            { "kind": "activateAbility", "card": "Team Rocket's Spidops", "ability": "Charging Up", "uncertain": true }
+          ],
+          "notes": "First inflection: KOing Combusken cuts off Alexandre's Blaziken plan when both Rare Candies are prized."
+        },
+        {
+          "turn": 7,
+          "active": "p2",
+          "actions": [
+            { "kind": "playTrainer", "card": "Lillie's Determination", "notes": "fresh hand to dig for outs" },
+            { "kind": "playBasicToBench", "card": "Torchic", "notes": "second Torchic recovered" },
+            { "kind": "endTurn", "notes": "still no Drakloak / no Rare Candy / submitting prizes"
+            }
+          ]
+        },
+        {
+          "turn": 8,
+          "active": "p1",
+          "actions": [
+            { "kind": "attachEnergy", "to": "Team Rocket's Tarountula", "energy": "Grass" },
+            { "kind": "attachEnergy", "to": "Team Rocket's Spidops", "energy": "Grass", "uncertain": true, "notes": "energy banking for future Mewtwo" },
+            { "kind": "endTurn", "notes": "no attack — caster surprised Mateesh didn't push for a KO with Tarountula's takedown"
+            }
+          ]
+        },
+        {
+          "turn": 9,
+          "active": "p2",
+          "actions": [
+            { "kind": "evolve", "from": "Dreepy", "to": "Drakloak", "uncertain": true },
+            { "kind": "playTrainer", "card": "Poké Pad" },
+            { "kind": "endTurn", "notes": "Alexandre stuck — no Combusken means Blaziken is unreachable; no Rare Candy means Dragapult is 2 turns away" }
+          ]
+        },
+        {
+          "turn": 10,
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Unfair Stamp", "notes": "ACE SPEC — both shuffle hand to deck and draw fewer (caster: 'just literally it. Evolve into spyops. Announce the attack. Get down to three prize cards remaining'). Wait — Unfair Stamp was the call. Hand disruption."},
+            { "kind": "evolve", "from": "Tarountula", "to": "Spidops" },
+            { "kind": "attack", "card": "Team Rocket's Spidops", "attack": "Rocket Rush", "ko_targets": ["unspecified"], "prizes_taken": 1, "notes": "Mateesh now at 3 prizes" }
+          ]
+        },
+        {
+          "turn": 11,
+          "active": "p2",
+          "actions": [
+            { "kind": "playTrainer", "card": "Crispin", "notes": "search 2 special energies — grabbed Psychic" },
+            { "kind": "attachEnergy", "to": "Drakloak (bench)", "energy": "Psychic" },
+            { "kind": "playTrainer", "card": "Poké Pad", "notes": "fetched Munkidori (caster: 'so quick I nearly missed it')" },
+            { "kind": "playTrainer", "card": "Boss's Orders", "uncertain": true },
+            { "kind": "endTurn" }
+          ],
+          "notes": "Alexandre angling for Dragapult survival to chain into next-turn double Phantom Dive."
+        },
+        {
+          "turn": 12,
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Team Rocket's Ariana", "notes": "drew 6 because all in-play are TR" },
+            { "kind": "playTrainer", "card": "Team Rocket's Factory", "notes": "+2 cards from stadium effect" },
+            { "kind": "playTrainer", "card": "Bug Catching Set", "notes": "WHIFFED — no grass Pokémon, no grass energy" },
+            { "kind": "activateAbility", "card": "Team Rocket's Spidops", "ability": "Charging Up", "notes": "attached basic energy from discard" },
+            { "kind": "passTurn", "notes": "MAJOR DECISION — Mateesh did NOT attack this turn. Caster: 'Is that a pass? Surely not. … I'm very surprised by the outcome myself.' Reason caster speculated: fear of Adrena-Brain (Munkidori) counter-move letting Alexandre survive + chain. This is the 'intriguing pass' that 'changed the tide.'" }
+          ],
+          "notes": "KEY MOMENT: declining a 280-damage Mewtwo Psydrive on Dragapult ex (which had no Articuno protection) — Alexandre survives with Dragapult to launch a multi-prize counter-turn."
+        },
+        {
+          "turn": 13,
+          "active": "p2",
+          "actions": [
+            { "kind": "playTrainer", "card": "Crispin", "notes": "fetched Darkness energy" },
+            { "kind": "evolve", "from": "Combusken-or-rare-candy-substitute", "to": "Blaziken ex", "uncertain": true, "notes": "caster: 'we've already evolved into Blazer King EX cuz if we've got a Monkey Dory, this is a free price turn with a spide and a Mewtwo both going down'" },
+            { "kind": "attack", "card": "Dragapult ex", "attack": "Phantom Dive", "damage": 200, "bench_counters_placed": 6, "ko_targets": ["Team Rocket's Mewtwo ex"], "prizes_taken": 2, "notes": "caster: 'Mw's going to go down for a little bit less value than Six damage counters on the bench. Both spy drops will be set up.'" }
+          ],
+          "notes": "Alexandre now down to 4 prizes; Mateesh down to ~3. Game coming into a tight finish."
+        },
+        {
+          "turn": 14,
+          "active": "p1",
+          "actions": [
+            { "kind": "switchActive", "to": "Team Rocket's Mimikyu", "notes": "promoted Mimikyu after the KO" },
+            { "kind": "playTrainer", "card": "Team Rocket's Archer", "notes": "5-card draw because all-TR-board" },
+            { "kind": "playTrainer", "card": "Team Rocket's Factory", "notes": "+2 stadium draw — but no Lillie's Clefairy, no TR Energy hit" },
+            { "kind": "playTrainer", "card": "Ultra Ball", "notes": "still no TR Energy" },
+            { "kind": "passTurn", "notes": "no Mimikyu Phantom Dive copy — caster: 'we cannot copy. So, it has to be a Mewtwo.' Mimikyu in active with no energy + no path to KO Dragapult"}
+          ]
+        },
+        {
+          "turn": 15,
+          "active": "p2",
+          "actions": [
+            { "kind": "playTrainer", "card": "Boss's Orders", "uncertain": true, "notes": "set up double-prize KO via Mimikyu drag-up" },
+            { "kind": "activateAbility", "card": "Munkidori", "ability": "Adrena-Brain", "notes": "moved 3 damage counters from own side to opp Mimikyu setting up the double-prize KO line" }
+          ],
+          "notes": "TRANSCRIPT TRUNCATES at 49:18 mid-decision with Alexandre lining up the winning play. Caster: 'It's going to be a double prize knockout thanks to the boss's orders. … And then their next turn boss's orders or if you really honestly you can just monkey dory and then [TRUNCATED]'"
+        }
+      ]
+    }
+  ],
+  "key_moments": [
+    {
+      "game": 1,
+      "turn": 6,
+      "description": "Alexandre used Boss's Orders to gust Team Rocket's Mewtwo ex from bench BEFORE attacking with Phantom Dive — preempted the biggest attacker rather than killing the active. The Mewtwo had no bench-energy to discard (Spidops Charging Up hadn't fired yet) so it could only Psydrive for 160, leaving it 1-shottable next turn.",
+      "engine_lesson": "Validates `bestGustTarget` heuristic in src/engine/ai.ts — but 'gust the biggest threat that hasn't yet powered up' is a stronger frame than current 'gust ramp engines'. Mewtwo ex isn't a ramp engine but is a strategic priority gust because removing it before it gets bench energy denies its scaling +60-per-discarded-energy. Suggests adding `gustPriorityForUnpoweredPunchers` to aiArchetype.ts."
+    },
+    {
+      "game": 1,
+      "turn": 4,
+      "description": "Alexandre spread Crispin energies across multiple Drakloak rather than committing both to one — explicitly to defuse Team Rocket's Giovanni gust threat. Caster: 'spread the energy over multiple Pokemon rather than committing to just one'.",
+      "engine_lesson": "src/engine/ai.ts `scorePosition` does NOT currently model 'gust-defusal via redundant energy attachers'. The threat-aware OHKO penalty only looks at the active. Add: when opp has Boss's-equivalent supporter known/likely, reward distributing energy across redundant attackers."
+    },
+    {
+      "game": 2,
+      "turn": 9,
+      "description": "Mateesh chained Team Rocket's Transceiver → Team Rocket's Petrel → Maximum Belt (ACE SPEC) onto Mewtwo, then Spidops Charging Up x2 from discard, then Psydrive boosted to 330 (160 + 120 from 2 discarded bench energies + 50 Maximum Belt) for the GAME-WINNING KO on Blaziken ex.",
+      "engine_lesson": "This is THE canonical TR Mewtwo finishing combo. Encode in aiArchetype.ts as the 'TR Mewtwo Petrel-into-ACE-SPEC line' once the engine has a Rocket Mewtwo archetype detector. Trainer-effects.ts already has `arianaDrawUntilTR` and `protonSearchBasicTR`; would need a `petrelSearchAceSpec` trainer effect to mirror this in-engine."
+    },
+    {
+      "game": 3,
+      "turn": 12,
+      "description": "Mateesh PASSED on a 280-damage Mewtwo Psydrive into a 280-HP Dragapult ex with no Articuno cover — caster framed it as 'fear of Adrena-Brain' (Munkidori counter-play) but called it the 'intriguing pass' that 'changed the tide of this game'. The decision allowed Dragapult to survive and counter-KO with Phantom Dive next turn.",
+      "engine_lesson": "AI v2 should AGGRESSIVELY take 2-prize KOs when they don't expose to immediate counter-KO. Current `scorePosition` rewards prize differential heavily, but the lookahead minimax in ai.ts may currently over-weight 'opp can survive and Adrena-Brain' if Munkidori is on board. Consider a tunable `passOnLetalConservatismFactor` — should default LOW (real human pros also consider this play questionable). This is a perfect Phase 9 self-tuning candidate."
+    },
+    {
+      "game": 3,
+      "turn": 1,
+      "description": "Alexandre (Dragapult-Blaziken, the slower archetype) deliberately CHOSE to go first to deny Mateesh's T1 Team Rocket's Proton — accepting the Phantom Dive T2 ban in exchange for delaying opp's Proton search by one turn.",
+      "engine_lesson": "The engine's `T1_SUPPORTER_EXCEPTIONS` already encodes that Proton works on T1 going first. AI v2's choose-first/second logic in ai.ts should consider 'opp's archetype's T1 supporter exception is strong enough to deny by going first' — currently opening-pick is purely 'maximize own value of T1 supporter'. Add: subtract opp's expected T1-going-first value from going-second value when comparing."
+    }
+  ],
+  "engine_notes": [
+    "TR Mewtwo T1-going-first opener is highly canonical: PROTON → fetch 3 TR Basics to HAND (not bench, important — preserves Ariana scaling) → bench 1 basic + Transceiver-tutor an Ariana for next-turn supporter → Ultra Ball → manual TR Energy attach. Add to data/tournament-replays/opening-book.json as 'rocket-mewtwo' / going_first: true.",
+    "Dragapult-Blaziken T2-going-second opener (this match's game 1): Lillie's Determination + Buddy-Buddy Poffin to flood Torchic + 2-3 Dreepy → Budew active → Itchy Pollen for item lock. Strong candidate for the engine's archetype playbook — note this is a STALL-FIRST opener, not a Phantom-Dive-rush opener. The engine's `aiArchetype.ts` has 'Festival Lead' but no 'Stall + Stage 2 Setup' archetype.",
+    "Both decklists rely on supporter chains: Petrel→ACE-SPEC tutor (TR Mewtwo) and Crispin→energy-search (Dragapult-Blaziken). The engine's `trainerEffects.ts` has Crispin already; would need to add Team Rocket's Petrel as a tutor for ACE SPEC trainer (single-target trainer search restricted to ACE SPEC subtype).",
+    "Munkidori 'Adrena-Brain' is decisive as both a defensive (heal own) AND an offensive (snipe-finish) tool. abilities.ts already has `moveDamageOwnToOpp` listed (interactive). Real game showed it being used for Phantom Dive math twice in a single turn — verify the engine permits multiple uses/turn (it should: ability used per Munkidori instance).",
+    "Mewtwo ex's bench-energy-discard scaling is the central reason TR Mewtwo wants 2+ Spidops fully charged. Engine damage estimator needs to evaluate 'energies on bench Pokémon' for Mewtwo ex's attack — confirm executeAttackHit picks this up.",
+    "Strong evidence that 'spread energy across multiple attackers to defuse gust' is real human pro play that the AI doesn't currently learn. Add a heuristic in scorePosition to reward N_ready_attackers when opp has Boss's/Giovanni-equivalent supporters known.",
+    "Mimikyu copy-attack mechanic was decisive — caster repeatedly noted 'Mimikyu can copy Phantom Dive' to win mirrors. Engine's `effects.ts` has copy-attack pipelines already; verify TR Mimikyu's restriction (Terror-Pokémon attacks only) is properly scoped.",
+    "Game 3 demonstrated the cost of prized engine pieces: 4/7 basic energies + both Rare Candy prized. The engine's mulligan/setup currently doesn't surface 'prize-card composition risk' — minor, but worth noting that pro players often play through bad prizes by leaning on Crispin/Night Stretcher fetch. Crispin and Night Stretcher are both already in trainerEffects.ts."
+  ]
+}

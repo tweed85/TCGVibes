@@ -1,0 +1,240 @@
+{
+  "source_url": "https://www.youtube.com/watch?v=5ewTXCpaGpA",
+  "channel": "Play! Pokémon (official)",
+  "title": "TCG Day 2 | 2026 Pokémon Prague Regional Championships",
+  "event": "Prague Regional Championships 2026",
+  "round": "Finals (Grand Final — Prague Regional Champion)",
+  "format": "Standard",
+  "regulation_marks": ["H", "I", "J"],
+  "recorded_at": "2026-04-29",
+  "transcript_source": "yt-dlp auto-subs (en) — segment ~07:01:00 to 07:50:30",
+  "broadcast_casters": ["Shay Burton", "Freya"],
+  "video_segment": { "start": "07:01:00", "end": "07:50:30" },
+  "players": {
+    "p1": {
+      "handle": "Mateusz Łaszkiewicz",
+      "country": "Poland",
+      "limitless_finish": "1st (CHAMPION)",
+      "deck_archetype": "dragapult-dudunsparce",
+      "decklist_known": false,
+      "decklist_summary": "See prague-2026-top16-dragapult-dudunsparce-vs-grimmsnarl-froslass.json#players.p1. Confirmed list features for finals: Dragapult ex, Drakloak (Recon Directive), Dreepy, Dudunsparce ex (Tenacious Tail 60×opp ex / Destructive Drill 3-energy ignores effects), Dudunsparce nonex (Run-Away Draw), Munkidori (Adrena-Brain), Budew, Brock's Scouting, Lillie's Determination, Boss's Orders, Buddy-Buddy Poffin, Poké Pad ×4 (3 prized in Game 1!), Night Stretcher, Erratic Machinations (caster called this 'a 16-card discard machination — a quarter of the deck'). ACE SPEC: Hero's Cape. Energy: Psychic, Fire, Darkness, basic energies for Dudunsparce 3-cost colorless attacks."
+    },
+    "p2": {
+      "handle": "Elmar Tresp",
+      "country": "Germany",
+      "limitless_finish": "2nd (Finalist)",
+      "deck_archetype": "crustle",
+      "decklist_known": false,
+      "decklist_summary": "See prague-2026-top8-dragapult-vs-crustle.json#players.p2. Notable Game-1 reveal: Cornerstone Mask Ogerpon ex (Cornerstone Stance — ability damage immunity) lead. Also includes Asher Roller's Mischief (situational supporter — 'choose 1 of your Pokémon, immune to opp EX damage if opp has ≤2 prizes'), Risky Ruins (stadium — 20 dmg per turn to your own ability Pokémon), Forest of Vitality (caster mentioned)."
+    }
+  },
+  "coin_flip": { "winner": "p1", "chose": "first", "uncertain": true, "notes": "Mateusz higher seed (Top 16 winner from bottom bracket got higher seed by tournament structure)" },
+  "match_outcome": {
+    "winner": "p1 (Mateusz Łaszkiewicz)",
+    "set_score": "2-0",
+    "games_played": 2,
+    "result": "PRAGUE REGIONAL CHAMPION 2026 — Mateusz's second regional title (first was Stuttgart 2023)",
+    "championship_points": 350,
+    "worlds_invite": "Auto-invite to World Championships in San Francisco"
+  },
+  "games": [
+    {
+      "game_number": 1,
+      "winner": "p1",
+      "win_condition": "concession (after Mateusz's Dudunsparce ex Destructive Drill cleared Crustle wall and Boss's Orders setup left Elmar with no answer)",
+      "duration_seconds_estimated": 1800,
+      "turns": [
+        {
+          "turn": 1,
+          "active": "p1",
+          "actions": [
+            { "kind": "attachEnergy", "to": "active Pokémon", "energy": "Psychic", "uncertain": true },
+            { "kind": "endTurn", "notes": "Caster: 'an attach-pass. That's what could happen when you prize three of your four Poké Pad.' Mateusz had 3 of 4 Poké Pads PRIZED — major opener handicap." }
+          ],
+          "notes": "INFLECTION: 3 of 4 Poké Pads prized. Mateusz was on top of his Brock's Scouting plan — used it Turn 3 instead."
+        },
+        {
+          "turn": 2,
+          "active": "p2",
+          "actions": [
+            { "kind": "playTrainer", "card": "Pokégear 3.0", "notes": "fetched Lillie's Determination" },
+            { "kind": "playTrainer", "card": "Lillie's Determination", "notes": "shuffle + draw 8" },
+            { "kind": "playBasicToBench", "card": "Cornerstone Mask Ogerpon ex", "notes": "active lead" },
+            { "kind": "attachEnergy", "to": "Cornerstone Mask Ogerpon ex (active)", "energy": "Grass" },
+            { "kind": "endTurn", "notes": "no Ascension — Elmar pattern from Top 8 G1: pass on rushing Crustle when no opp pressure" }
+          ]
+        },
+        {
+          "turn": 3,
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Brock's Scouting", "notes": "tutored a Dreepy and a Dudunsparce — caster: 'grab a Dreepy, the Dudunsparce'. Brock's Scouting Evolution-search branch." },
+            { "kind": "playBasicToBench", "card": "Dreepy" },
+            { "kind": "playBasicToBench", "card": "Dudunsparce", "notes": "the nonex draw engine" },
+            { "kind": "attachToolToActive", "card": "Hero's Cape", "to": "Dudunsparce", "notes": "+100 HP — 70 HP base + 100 = 170 HP. KEY: telegraphed Dudunsparce as the matchup-defining attacker. Caster: 'that right there tells me he knows destructive drill is the key to this matchup'" },
+            { "kind": "attachEnergy", "to": "Dudunsparce", "energy": "Fire-or-Psychic", "uncertain": true },
+            { "kind": "endTurn" }
+          ],
+          "notes": "Mateusz committed to Dudunsparce ex line over Dragapult line because Crustle is EX-immune. Hero's Cape on a 1-prize Pokémon = unfavorable prize trade for Elmar."
+        },
+        {
+          "turn": "mid-1",
+          "active": "p2",
+          "actions": [
+            { "kind": "endTurn", "notes": "no meaningful damage attack possible — Elmar attached to Cornerstone again and passed (no energy acceleration in deck)" }
+          ]
+        },
+        {
+          "turn": "mid-2",
+          "active": "p1",
+          "actions": [
+            { "kind": "activateAbility", "card": "Drakloak", "ability": "Recon Directive", "effect": "top 2, take 1 — found Asher Roller's Mischief? No, that was earlier. Found supporter for next turn", "uncertain": true },
+            { "kind": "playTrainer", "card": "Pokégear 3.0", "notes": "top 7, took 1 supporter — only supporter found was Asher Roller's Mischief (caster: 'sneaky tech card we hadn't seen yet')" },
+            { "kind": "playTrainer", "card": "Boss's Orders", "notes": "gusted Dwebble to active" },
+            { "kind": "endTurn", "notes": "no fire energy yet for Dragon Headbutt; Tenacious Tail (60×ex) deals 60 vs 1 ex on opp side — not enough vs 70 HP Dwebble" }
+          ]
+        },
+        {
+          "turn": "key",
+          "active": "p1",
+          "actions": [
+            { "kind": "attachEnergy", "to": "Dudunsparce", "energy": "Darkness" },
+            { "kind": "attack", "card": "Dudunsparce ex", "attack": "Tenacious Tail / Jet Headbutt", "damage": 70, "target": "Dwebble (gusted) — KO", "notes": "first prize for Mateusz" }
+          ]
+        },
+        {
+          "turn": "late-decisive",
+          "active": "p1",
+          "actions": [
+            { "kind": "attack", "card": "Dudunsparce ex", "attack": "Destructive Drill", "damage": 150, "effect": "ignores all effects on opp Pokémon (bypasses Mysterious Rocking Inability)", "target": "Crustle", "notes": "Caster recap: 'Destructive Tail was just too disruptive.' Bypassed Crustle's EX immunity." }
+          ]
+        }
+      ],
+      "summary_recap": "Caster recap: 'Honestly a masterclass for Mateusz. He played everything in this game one. I think it was kind of sad that he led the Cornerstone Ogerpon — he doesn't want to use that, but Mateusz still identified you're not going to get any cheeky damage on my Dudunsparce. Shuffle it away. His time will come and here his time did come. Clutch Boss's Orders and that's what Elma said — I had enough of that game one there. Destructive Tail was just too disruptive.'"
+    },
+    {
+      "game_number": 2,
+      "winner": "p1",
+      "win_condition": "concession after Mateusz Mind Bend confused Elmar's wall with no Switch in hand",
+      "duration_seconds_estimated": 1500,
+      "turns": [
+        {
+          "turn": "early",
+          "active": "p2",
+          "notes": "Elmar got Run-Away (caster: 'did get the Run-Around in play, was able to start drawing some cards'). Slightly better Game-2 setup for Elmar."
+        },
+        {
+          "turn": "mid-1",
+          "active": "p1",
+          "actions": [
+            { "kind": "attack", "card": "Dragapult ex", "attack": "Phantom Dive", "damage": 200, "effect": "+ 60 spread", "notes": "First Phantom Dive of the match — 'first KO with Phantom Dive with the residual damage carrying a Dwebble'" }
+          ],
+          "engine_lesson": "Note: Phantom Dive 'residual damage' = the 6 damage counters spread, not on the active. A KO'd active still allows the spread damage to land — already correctly modeled in distributeDamage."
+        },
+        {
+          "turn": "mid-2",
+          "active": "p2",
+          "actions": [
+            { "kind": "playTrainer", "card": "Erratic Machinations (Risky Ruins?)", "notes": "Wait — caster called Mateusz's discard 'erotic machination' (i.e. Erratic Machinations). 16-CARD discard. Mateusz discarded down to 3 cards in hand voluntarily.", "uncertain": true }
+          ],
+          "notes": "ACTUALLY — Erratic Machinations is in MATEUSZ'S deck (caster: 'Erratic Machinations - Mateusz will have to discard till he has 3 cards remaining in hand'). Caster: 'This might be the biggest Erratic Machinations you've ever seen on stream. And it's not even Alakazam. 16 cards so far. We got a lot more to go.'"
+        },
+        {
+          "turn": "mid-3",
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Erratic Machinations", "notes": "Mateusz triggered — discarded 16 CARDS to refresh hand to 3-card draw. Kept Night Stretcher specifically for Dudunsparce retrieval. Caster: 'a quarter of your deck.'" }
+          ]
+        },
+        {
+          "turn": "decisive-1",
+          "active": "p2",
+          "actions": [
+            { "kind": "attack", "card": "Crustle", "attack": "Superb Scissors", "damage": 120, "target": "Dudunsparce ex (with 10 HP after Adrena-Brain)", "notes": "Caster: 'Adrenrain move off 30 — that takes you to 40 HP. Spiky energy is 20 for each one if you attack into it. That would be a double knockout.'" }
+          ],
+          "notes": "Mateusz set up an INTENTIONAL DOUBLE-KO via Spiky Energy recoil — Dudunsparce ex attacked into Crustle with 2× Spiky Energy = recoil 40, KO'd self. Crustle was already at low HP from Destructive Drill prep."
+        },
+        {
+          "turn": "winning",
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Night Stretcher", "notes": "retrieved Dudunsparce + 1 energy from discard" },
+            { "kind": "playBasicToBench", "card": "Dudunsparce", "uncertain": true },
+            { "kind": "endTurn" }
+          ]
+        },
+        {
+          "turn": "winning-2",
+          "active": "p1",
+          "notes": "Mateusz needed to KO Crustle with 120 HP remaining. Only 1 energy in discard, limited resources for another Destructive Drill.",
+          "actions": [
+            { "kind": "switchActive", "to": "Munkidori", "uncertain": true },
+            { "kind": "attack", "card": "Munkidori", "attack": "Mind Bend", "damage": 60, "effect": "opp Active is Confused", "target": "Crustle", "notes": "Mateusz chose Mind Bend (60 dmg + Confusion) over Dragon Headbutt (70 dmg). Prioritized CONFUSION lock over raw damage. Caster: 'prioritizing that over the dragon headbutt. Prioritizing the confusion.'" }
+          ]
+        },
+        {
+          "turn": "concession",
+          "active": "p2",
+          "actions": [
+            { "kind": "attachEnergy", "to": "Crustle", "energy": "Missed Energy", "notes": "Missed Energy denies effective attacks (used for Confusion attempt). Caster: 'Missed Energy denies the confusion from happening' — but it doesn't HEAL the Confusion, it just prevents the coin flip damage. Without Switch, Elmar can't escape. It's a CONCESSION — Crustle is locked." },
+            { "kind": "concede", "notes": "Caster: 'It's going to be a concession from Elmar. Mateusz, the one-man demolition crew destroying all of Elmar's walls, toppling the Mysterious Rocking. Mateusz, your Prague regional champion.'" }
+          ],
+          "engine_lesson": "Missed Energy interaction with Confusion — Confusion's coin-flip-on-attack penalty is an 'effect on attack' that Missed Energy denies. The Pokémon still must coin-flip during own attack but the heads/tails effect (50 self-damage on tails) is bypassed. NEEDS verification in src/engine/effects.ts — Missed Energy may not be currently modeled as Confusion-bypass."
+        }
+      ],
+      "summary_recap": "Caster recap: 'Mind bend, confusion. Elmar's had enough. And that right there was the turn that Mateusz becomes a two-time regional champion, crowning himself here in Prague.'"
+    }
+  ],
+  "key_moments": [
+    {
+      "game": 1,
+      "turn": 1,
+      "description": "Mateusz had 3 of 4 Poké Pads PRIZED — single biggest opening handicap of the broadcast. Adapted by playing Brock's Scouting on T3 to bypass Poké Pad's role.",
+      "engine_lesson": "Engine should track 'redundancy of search cards' — when a deck has 4× of a search card and 3 are prized, the AI should switch to alternate search trainers (Brock's Scouting, Pokégear 3.0). Currently AI may not adapt to prize-card distribution. Add to scorePosition: penalize prized critical-search-card density."
+    },
+    {
+      "game": 1,
+      "turn": 3,
+      "description": "Mateusz attached Hero's Cape to a NON-EX Dudunsparce, telegraphing 'Destructive Drill is the key.' 1-prize attacker + 100 HP buffer = Crustle must use 2 attacks (240 dmg) for 1 prize — terrible trade for Elmar.",
+      "engine_lesson": "RE-CONFIRMS the Top-16 finding: Hero's Cape on non-EX is mathematically superior to Hero's Cape on EX. Add to aiArchetype.ts dragapult-dudunsparce playbook: ACE SPEC priority = Hero's Cape on Dudunsparce ex (or even regular Dudunsparce as a 1-prize HP wall)."
+    },
+    {
+      "game": 1,
+      "turn": "late",
+      "description": "Mateusz's Dudunsparce ex Destructive Drill (3-energy, 150 dmg, ignores all effects) was THE matchup-defining attack — bypassed Mysterious Rocking Inability that walls all EX attackers.",
+      "engine_lesson": "Engine effects.ts must support 'ignores effects on opp Pokémon' as an attack modifier (Tenacious Tail / Destructive Drill / Mega Starmie's Nebula Beam). Verify this is in the effect resolver. If not, add as a new effect kind — `ignoresOppEffects: true` flag on attacks."
+    },
+    {
+      "game": 2,
+      "turn": "mid",
+      "description": "Mateusz played Erratic Machinations and discarded 16 CARDS — 'a quarter of your deck'. Kept Night Stretcher for Dudunsparce retrieval. Voluntarily reduced own hand to 3 cards to refresh draw engine.",
+      "engine_lesson": "Erratic Machinations evaluation: trade hand-size loss for guaranteed top-3 draw. Engine should evaluate this trainer when (1) hand has too many dead cards and (2) deck has high-value top-deck targets. Currently Erratic Machinations may not be in src/engine/trainerEffects.ts — verify."
+    },
+    {
+      "game": 2,
+      "turn": "decisive",
+      "description": "Mateusz set up an INTENTIONAL double-KO: attacked into 2× Spiky Energy with Dudunsparce ex at 40 HP, taking 40 recoil — KO'd Crustle with Destructive Drill, KO'd own Dudunsparce ex on the recoil. Trade was Dudunsparce ex (2 prizes) for Crustle (2 prizes) but cleared the wall.",
+      "engine_lesson": "Spiky Energy evaluation in damage estimator: when attacking into Spiky Energy, simulate own self-recoil as part of the attack outcome. Already correctly modeled in effects.ts (Spiky Energy is a tool with on-damage handler), but the AI should weight 'intentional double KO' as positive when it removes a wall opponent can't replace."
+    },
+    {
+      "game": 2,
+      "turn": "winning-2",
+      "description": "Mateusz chose Munkidori Mind Bend (60 dmg + Confusion) over Dragon Headbutt (70 dmg) for the final turn. Prioritized lock over damage — knew Elmar had no Switch in hand and couldn't break Confusion without coin flip.",
+      "engine_lesson": "VALIDATES Confusion as a winning lock vs an opponent with limited switching. Engine should evaluate 'Confusion vs no-switch opp' as high-value. Confusion lock-equivalent value ≈ Asleep / Paralyzed when opp has limited pivot. Add to status-effect scoring."
+    },
+    {
+      "game": 2,
+      "turn": "concession",
+      "description": "Elmar attached Missed Energy to Crustle to deny Confusion's coin-flip damage — but couldn't switch out without Switch trainer. Conceded.",
+      "engine_lesson": "Missed Energy interaction with Confusion needs verification in engine. Per caster: Missed Energy denies the COIN FLIP damage from Confusion (50 self-dmg on tails) but does NOT cure Confusion. The status persists, attack attempts still coin-flip. If engine currently treats Missed Energy as full Confusion immunity, that's a bug."
+    }
+  ],
+  "engine_notes": [
+    "FINAL CONFIRMS: Mateusz's dragapult-dudunsparce archetype (T3 Hero's Cape on Dudunsparce + Tenacious Tail / Destructive Drill anti-EX-board line) is a viable WORLD-CLASS variant. Add full T1-T3 playbook to aiArchetype.ts.",
+    "Erratic Machinations is a NEW supporter to verify in src/engine/trainerEffects.ts. Effect: discard hand down to 3 cards, then draw 3. Used as deck-thinning + targeted-keep tool. If not modeled, add as `kind: discardToNDrawN` with N=3.",
+    "Asher Roller's Mischief — situational supporter that Mateusz tutored via Pokégear. Effect per caster: 'choose 1 of your Pokémon, immune to opp EX damage if opp has ≤2 prizes.' Must verify model in trainerEffects.ts.",
+    "Crustle's Mysterious Rocking Inability bypass interaction: Destructive Drill (Dudunsparce ex), Tenacious Tail (Dudunsparce ex 60×opp ex — note this DOES count Crustle even though Crustle is non-EX, only counts opp's EX Pokémon), and ability damage (Cursed Blast Dusknoir, Spirit Tomb).",
+    "Missed Energy + Confusion interaction must be verified — caster description suggests Missed Energy denies the on-attack coin-flip damage but not the lock. If engine differs, fix.",
+    "Multi-archetype validation: Dragapult Phantom Dive damage spread continues to be the most impactful single attack in Standard. Engine's distributeDamage already correctly models the 6-counter spread."
+  ]
+}

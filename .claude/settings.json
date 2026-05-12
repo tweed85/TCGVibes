@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "filePaths": ["src/engine/**/*.ts", "src/data/**/*.ts"],
+        "command": "npm run typecheck"
+      },
+      {
+        "matcher": "Edit|Write",
+        "filePaths": ["src/ui/**/*.tsx", "src/App.tsx"],
+        "command": "npm run typecheck"
+      }
+    ],
+    "SessionStart": [
+      {
+        "command": "npm run ai:session-start --silent"
+      }
+    ],
+    "Stop": [
+      {
+        "command": "npm run ai:digest"
+      },
+      {
+        "command": "npm run ai:dashboard"
+      }
+    ]
+  }
+}

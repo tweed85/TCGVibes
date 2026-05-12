@@ -1,0 +1,138 @@
+{
+  "source_url": "https://www.youtube.com/watch?v=5ewTXCpaGpA",
+  "channel": "Play! Pokémon (official)",
+  "title": "TCG Day 2 | 2026 Pokémon Prague Regional Championships",
+  "event": "Prague Regional Championships 2026",
+  "round": "Top 4 (winner advances to Finals)",
+  "format": "Standard",
+  "regulation_marks": ["H", "I", "J"],
+  "recorded_at": "2026-04-29",
+  "transcript_source": "yt-dlp auto-subs (en) — segment ~04:39:30 to 05:30:00",
+  "broadcast_casters": ["Ross Gilbert", "Joe Bernard"],
+  "video_segment": { "start": "04:39:30", "end": "05:30:00" },
+  "players": {
+    "p1": {
+      "handle": "Elmar Tresp",
+      "country": "Germany",
+      "limitless_finish": "2nd (Finalist)",
+      "deck_archetype": "crustle",
+      "decklist_known": false,
+      "decklist_summary": "See prague-2026-top8-dragapult-vs-crustle.json#players.p2 — same list."
+    },
+    "p2": {
+      "handle": "João Pires (caster pronounced 'Jong' / 'Jiao')",
+      "country": "Portugal",
+      "limitless_finish": "4th",
+      "deck_archetype": "mega-starmie-dusknoir",
+      "decklist_known": false,
+      "decklist_summary": "Mega Starmie ex (Jetting Blow — 120 active + 50 bench, plus rapid-fire attack), Staryu, Dusknoir / Dusclops / Duskull (Cursed Blast — counter placement with self-KO trigger; ignores Mysterious Rocking), Mimikyu (deck has tutor lines), Munkidori, Budew, Meowth ex (1 copy — caster confirmed prized), Blood Moon Ursaluna (1 copy lead Game 2). Trainers: Lillie's Determination ×2, Buddy-Buddy Poffin, Ultra Ball ×3+, Boss's Orders, Night Stretcher, Rare Candy. Energy: Legacy Energy (caster called out attached early), basic Psychic, basic Darkness. Spirit Tomb (per pre-match coverage of João's bracket — likely tech vs Crustle). ACE SPEC: Unfair Stamp."
+    }
+  },
+  "coin_flip": { "winner": "p2", "chose": "first", "uncertain": true, "notes": "Elmar mulliganed twice in Game 1 and three times in Game 2 — caster: 'João won the flip … chose to go first'" },
+  "match_outcome": {
+    "winner": "p1 (Elmar)",
+    "set_score": "2-1",
+    "games_played": 3,
+    "advances_to": "Finals (vs Mateusz Łaszkiewicz / Dragapult-Dudunsparce)"
+  },
+  "games": [
+    {
+      "game_number": 1,
+      "winner": "p1",
+      "win_condition": "prizes — Mega Kangaskhan ex 2-shot KO chain on Mega Starmie ex; final prize via Boss's Orders gust + switch energy on Duskull",
+      "duration_seconds_estimated": 1300,
+      "key_recap": "Caster recap: 'Mega Kangaskhan carrying Elmar through in game one with a rapid fire combo. Didn't even need to take a one hit knock out on the Mega Starmie. Just a two shot was enough.' Critical play: João used Cursed Blast + Jetting Blow combo for exact 120 KO on Mega Kanga, but had to put himself to 1 prize to do it. Elmar then bided time, built energy on a second Mega Kanga, used Boss's Orders on Duskull (gust to active) + Switch Energy + 2nd Boss's Orders to drag the second Duskull up for the final 2 prizes.",
+      "turns": [
+        {
+          "turn": 1,
+          "active": "p1",
+          "notes": "Elmar mulliganed 2× — gave João +2 cards",
+          "actions": [
+            { "kind": "playBasicToBench", "card": "Dwebble" },
+            { "kind": "playTrainer", "card": "Buddy-Buddy Poffin", "uncertain": true, "notes": "fetched additional Dwebble" },
+            { "kind": "endTurn" }
+          ]
+        },
+        {
+          "turn": "key-late",
+          "active": "p2",
+          "actions": [
+            { "kind": "activateAbility", "card": "Dusknoir", "ability": "Cursed Blast", "effect": "places 13 damage counters (130 dmg) on opp Pokémon, KOs self", "notes": "ignores Mysterious Rocking Inability because it's NOT damage from a Pokémon's attack" },
+            { "kind": "attack", "card": "Mega Starmie ex", "attack": "Jetting Blow", "damage": 120, "target": "active Mega Kangaskhan ex (already at 130 dmg)", "notes": "exact 120 = total 250 = KO'd Mega Kanga. Caster: 'Cursed Blast plus Jetting Blow combination for their exact KO 120 damage exactly enough.'" }
+          ],
+          "notes": "INFLECTION: João burnt his Dusknoir to KO Mega Kanga but pushed himself to 1 prize remaining. Elmar's prize lead became insurmountable."
+        },
+        {
+          "turn": "decisive-Elmar",
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Boss's Orders", "notes": "gusted Duskull to active — buy time" },
+            { "kind": "endTurn", "notes": "no attack — building energy" }
+          ]
+        },
+        {
+          "turn": "winning",
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Switch Energy", "notes": "energy switch + 1 more Boss's Orders to drag the second Duskull up", "uncertain": true },
+            { "kind": "playTrainer", "card": "Boss's Orders", "notes": "gust 2nd Duskull" },
+            { "kind": "attack", "card": "Mega Kangaskhan ex", "attack": "rapid-fire (3 heads on 3 coin flips)", "damage": 200, "notes": "caster: 'three heads got rolled' — final KO for the last 2 prizes" }
+          ]
+        }
+      ]
+    },
+    {
+      "game_number": 2,
+      "winner": "p2",
+      "win_condition": "Elmar 'missed some math and lost' — caster (Elmar interview): 'in game two I also hit three heads in a row, sadly I also missed some math and lost'",
+      "duration_seconds_estimated": 1300,
+      "notes": "Elmar mulliganed THREE TIMES going first. João got +3 cards and a 'Hero's Cape prized' — ironic note. Critical: João retrieved Mega Starmie ex via Night Stretcher after Ultra Balling them away (caster: 'Night Stretcher to bring those straight back. Legacy energy is going to get attached'). João's Cursed Blast + Jetting Blow combo lined up multiple times, and Elmar miscounted Crustle's HP buffer in a key turn. ACE SPEC Unfair Stamp likely played here.",
+      "key_recap": "Elmar (interview): 'I hit three heads in a row twice in the set, it's just absurd … but I also missed some math and lost' — Mega Kanga's 200-damage rapid-fire still came online but Elmar made an HP-arithmetic error."
+    },
+    {
+      "game_number": 3,
+      "winner": "p1",
+      "win_condition": "Mega Kangaskhan ex rapid-fire — third 3-heads roll closed the game",
+      "duration_seconds_estimated": 1100,
+      "key_recap": "Elmar (interview): 'to hit three heads in a row twice in the set, it's just absurd. I could not even believe my eyes.' Game 3 was Mega Kanga rolling 3 heads → 200 damage finish. Crustle walled in support."
+    }
+  ],
+  "key_moments": [
+    {
+      "game": 1,
+      "turn": "key",
+      "description": "João used Dusknoir Cursed Blast (placeCountersOnOppThenSelfKO ability — already in engine effects.ts) to bypass Mysterious Rocking Inability and reach exact-OHKO math (130+120=250). Self-KO traded a 2-prize Dusknoir for a 3-prize Mega Kanga — net +1 prize, but João had to put himself to 1 prize remaining first.",
+      "engine_lesson": "VALIDATES the engine's Cursed Blast handler. Self-KO ability evaluation should weight 'opp prize trade' minus 'own prize trade' net delta. Currently scorePosition does this correctly. NO change needed."
+    },
+    {
+      "game": 1,
+      "turn": "decisive",
+      "description": "Elmar SLOWED DOWN after João self-KO'd Dusknoir — built energy on second Mega Kanga across 2 turns instead of immediately attacking. Used Boss's Orders to keep Duskull active rather than chasing the prize race.",
+      "engine_lesson": "scorePosition currently rewards taking prizes faster. Crustle archetype playbook should encode 'when opp is at 1-2 prizes and YOU have a wall, slow down — build the OHKO before swinging.' This is a phase-aware behavior the engine doesn't yet model."
+    },
+    {
+      "game": 1,
+      "turn": "winning",
+      "description": "Elmar used Switch Energy + 2× Boss's Orders to drag Duskull from bench → active despite Crustle's normal retreat lock. Clever use of free retreat from an attached Switch Energy + gust combo for the lethal prize.",
+      "engine_lesson": "Engine handles Switch Energy correctly via energyPoolForCost — but Boss's Orders + Switch Energy chain (multi-step movement) is not currently a tracked pattern in ai.ts. Add to v2 sequencing: 'when prize lethal exists via retreat-then-gust, prioritize Switch Energy attachment AHEAD of attack.'"
+    },
+    {
+      "game": 2,
+      "turn": "?",
+      "description": "Elmar lost to a 'missed math' — explicitly stated by Elmar in post-game interview. Had Mega Kanga rolling 3 heads (200 dmg) but didn't account for some HP buffer.",
+      "engine_lesson": "AI is IMMUNE to math errors — this is an inherent advantage the engine has over human play. The engine should simulate opponent math errors at lower difficulty levels (out of scope for current Phase 8 work, but worth noting for human-vs-AI difficulty tuning)."
+    },
+    {
+      "game": 3,
+      "turn": "winning",
+      "description": "Elmar (interview): 'I hit three heads in a row TWICE in the set' — Mega Kangaskhan ex rapid-fire variance carried two of three games. Single-coin-flip probability = 12.5% per attempt; hitting twice in one set ≈ 1.5%.",
+      "engine_lesson": "The Mega Kangaskhan ex 'rapid-fire combo' (presumably Mega Punch attack: flip a coin per energy attached, deal 100 per heads) is an extreme high-variance attacker. v2 ai.ts should evaluate coin-flip attacks by EXPECTED damage (50 per energy), not max — otherwise the engine over-weights variance plays. Confirm this is already correct in ai.ts damage estimator."
+    }
+  ],
+  "engine_notes": [
+    "VALIDATES putCountersOnOppThenSelfKO (Cursed Blast) handler — game-decisive in Game 1.",
+    "Mega Starmie ex / Dusknoir (mega-starmie-dusknoir) is a NEW archetype not in aiArchetype.ts. Signature cards: Mega Starmie ex (Jetting Blow + rapid-fire), Staryu, Dusknoir + Dusclops + Duskull (Cursed Blast — KEY anti-Crustle counter), Munkidori, Spirit Tomb. Plays Cursed Blast as the rule-box bypass tool. Suggested archetype string: `mega-starmie-dusknoir`. Add to playbook list.",
+    "ANTI-CRUSTLE CARDS — engine should mark these in scorePosition matchup-evaluation: Cursed Blast (Dusknoir line), Tenacious Tail (Dudunsparce ex, anti-EX-board), Curse-Blast-style snipe abilities, non-EX attackers (Cynthia's Garchomp). Without one of these, the matchup vs Crustle is structurally near-unwinnable.",
+    "Mega Kangaskhan ex's rapid-fire variance is high — engine should NOT use max-damage estimator for coin-flip attacks. Verify ai.ts damage estimator uses expected value (E[heads] × per-heads damage)."
+  ]
+}

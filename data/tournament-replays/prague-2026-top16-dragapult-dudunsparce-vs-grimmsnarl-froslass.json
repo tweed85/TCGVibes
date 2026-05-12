@@ -1,0 +1,205 @@
+{
+  "source_url": "https://www.youtube.com/watch?v=5ewTXCpaGpA",
+  "channel": "Play! Pokémon (official)",
+  "title": "TCG Day 2 | 2026 Pokémon Prague Regional Championships",
+  "event": "Prague Regional Championships 2026",
+  "round": "Asymmetrical Top Cut — Top 16 (winner advances to Top 8)",
+  "format": "Standard",
+  "regulation_marks": ["H", "I", "J"],
+  "recorded_at": "2026-04-29",
+  "transcript_source": "yt-dlp auto-subs (en) — segment ~02:25:30 to 03:05:01 of the 8h11m broadcast",
+  "broadcast_casters": ["Shay Burton", "Freya"],
+  "video_segment": { "start": "02:25:30", "end": "03:05:01" },
+  "players": {
+    "p1": {
+      "handle": "Mateusz Łaszkiewicz",
+      "country": "Poland",
+      "limitless_finish": "1st (eventual champion)",
+      "deck_archetype": "dragapult-dudunsparce",
+      "decklist_known": false,
+      "decklist_summary": "Dragapult ex / Drakloak / Dreepy core + a 2-2-1 split Dudunsparce (Run-Away Draw nonex line) and 1 Dudunsparce ex (Tenacious Tail — 60×opponent ex Pokémon, Shred ignores effects). Munkidori (Adrena-Brain). Crispin, Lillie's Determination, Buddy-Buddy Poffin, Ultra Ball, Poké Pad, Boss's Orders, Rare Candy. ACE SPEC: Hero's Cape (+100 HP — caster called this 'spicy choice over the more common Unfair Stamp'). One Budew (only copy, prized in Game 1)."
+    },
+    "p2": {
+      "handle": "Nicklas Rosu",
+      "country": "Sweden",
+      "limitless_finish": "12th (Top 16 exit)",
+      "deck_archetype": "grimmsnarl-froslass",
+      "decklist_known": false,
+      "decklist_summary": "Maman's Grimmsnarl ex (Shadow Bullet 180+30 bench, Punk Up energy-acceleration ability), Maman's Morgrem, Maman's Impidimp, Maman's Tatsugiri (Order Up — top-6 supporter tutor), Frosmoth/Frostlass (Freezing Shroud — checkup damage to abilities), Munkidori, Snorunt. Spike Muff Gym stadium (search any Maman Pokémon — item-lock immune). ACE SPEC: Unfair Stamp. Trainers: Lillie's Determination, Crispin, Team Rocket's Petrel (Order Up tutor target), Boss's Orders, Buddy-Buddy Poffin, Pokégear 3.0."
+    }
+  },
+  "coin_flip": { "winner": "p1", "chose": "first", "notes": "Mateusz higher seed (top-cut rule: higher seed chooses)" },
+  "match_outcome": {
+    "winner": "p1 (Mateusz)",
+    "set_score": "2-0",
+    "games_played": 2,
+    "advances_to": "Top 8 (vs winner of Tor vs Elmar bracket — turned out to be Tord Reklev's bracket but Tor lost top 8)"
+  },
+  "games": [
+    {
+      "game_number": 1,
+      "winner": "p1",
+      "win_condition": "concession (Nicklas scooped after Mateusz built a multi-prize threat with Boss's Orders + Phantom Dive sweeping monkey-doried Pokémon)",
+      "duration_seconds_estimated": 1700,
+      "turns": [
+        {
+          "turn": 1,
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Buddy-Buddy Poffin", "notes": "fetched Dreepy + Munkidori; Munkidori benched alongside an existing Dreepy" },
+            { "kind": "playBasicToBench", "card": "Dreepy" },
+            { "kind": "playBasicToBench", "card": "Munkidori" },
+            { "kind": "playTrainer", "card": "Poké Pad", "notes": "tutored a Drakloak into hand" },
+            { "kind": "attachEnergy", "to": "Dreepy (active)", "energy": "Psychic" },
+            { "kind": "endTurn" }
+          ],
+          "notes": "Standard Dragapult-Dudunsparce going-first opener: Poffin to fan out the Dreepys + Munkidori, Poké Pad for Drakloak prep, no T1 supporter (legal exceptions don't apply). No Budew (only copy is prized) — caster: 'guaranteed not coming this turn.'"
+        },
+        {
+          "turn": 2,
+          "active": "p2",
+          "actions": [
+            { "kind": "playTrainer", "card": "Buddy-Buddy Poffin", "notes": "fetched Tatsugiri + Snorunt (caster: 'fantastic start … double Buddy Buddy Poffin')" },
+            { "kind": "playTrainer", "card": "Buddy-Buddy Poffin", "notes": "second Poffin — fetched Maman's Impidimp + Budew" },
+            { "kind": "playBasicToBench", "card": "Maman's Tatsugiri" },
+            { "kind": "playBasicToBench", "card": "Snorunt" },
+            { "kind": "playBasicToBench", "card": "Maman's Impidimp" },
+            { "kind": "playBasicToBench", "card": "Budew" },
+            { "kind": "switchActive", "to": "Maman's Tatsugiri", "notes": "free retreat (caster: 'free retreat into the Tatsugiri')" },
+            { "kind": "activateAbility", "card": "Maman's Tatsugiri", "ability": "Attract Customers / Order Up", "effect": "look at top 6 of deck, take 1 supporter — picked Team Rocket's Petrel" },
+            { "kind": "attachEnergy", "to": "Maman's Tatsugiri (active)", "energy": "Darkness" },
+            { "kind": "endTurn", "notes": "passed without Itchy Pollen — Nicklas chose Petrel-into-Lillie's bank over T2 item-lock; caster flagged this as a clear strategic choice given no Itchy Pollen window vs Dragapult-Dudunsparce" }
+          ],
+          "notes": "Tatsugiri Order Up engine setting up a future supporter chain. Caster commentary: 'prioritized finding a supporter for the Lillie's no matter what.'"
+        },
+        {
+          "turn": 3,
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Ultra Ball", "notes": "discarded 2 cards, fetched a Drakloak (now 2 in hand)" },
+            { "kind": "playTrainer", "card": "Lillie's Determination", "notes": "shuffle hand into deck, draw 8 — strong T3 (caster: 'best supporter in the game right now')" },
+            { "kind": "attachEnergy", "to": "Dreepy (active)", "energy": "Psychic" },
+            { "kind": "endTurn", "notes": "no evolutions yet this turn — Mateusz banking attachments behind the Dreepy active" }
+          ]
+        },
+        {
+          "turn": 4,
+          "active": "p2",
+          "actions": [
+            { "kind": "playTrainer", "card": "Lillie's Determination", "notes": "shuffle + draw 8 — supporter chain off the Petrel/Order Up line" },
+            { "kind": "playTrainer", "card": "Spike Muff Gym", "notes": "stadium — searches any Maman Pokémon when needed; item-lock immune" },
+            { "kind": "evolve", "from": "Snorunt", "to": "Frostlass", "uncertain": true, "notes": "caster: 'we are going to see Freezing Shroud Frostlass hit the field. We are going to see Maman's Morgrem hit the field.'" },
+            { "kind": "evolve", "from": "Maman's Impidimp", "to": "Maman's Morgrem" },
+            { "kind": "switchActive", "to": "Munkidori", "uncertain": true, "notes": "needed to retreat Tatsugiri before attacking" },
+            { "kind": "attack", "card": "Munkidori", "attack": "Clutch", "damage": 50, "effect": "20 base × 2 (weakness Dark→Psychic) + 10 from Freezing Shroud, defender retreat-locked", "notes": "caster: 'weak to dark, so 40 + 10 from Freezing Shroud = 50 damage on the active'" }
+          ],
+          "notes": "Itchy Pollen unavailable (no item-lock window). Clutch retreat-lock chosen because Mateusz has no out — 'he's prioritizing clutch knowing it's going to give him another turn.'"
+        },
+        {
+          "turn": 5,
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Crispin", "notes": "tutored 2 different basic energies — attached Psychic to active, Fire-or-Psychic to hand. Mateusz did NOT promote a Mind Bend (60 + Confusion) attacker to break Clutch lock — caster: 'we're not going to be seeing a mind bend.'" },
+            { "kind": "activateAbility", "card": "Dreepy / Drakloak", "ability": "Recon Directive", "uncertain": true, "notes": "Hero's Cape pulled into hand off Recon Directive" },
+            { "kind": "endTurn" }
+          ],
+          "notes": "Crispin played for energy, NOT Mind Bend break — Mateusz absorbed another Clutch turn rather than coin-flip the lock break. Caster: 'I would have minded the mind bend but it looks like recon directive now.'"
+        },
+        {
+          "turn": "6+",
+          "gap": "commentary off-game / interview interlude",
+          "notes": "Approximately 02:36–02:50 transcript focuses on caster discussion and an interview. Game state visible in next clean window: Nicklas had Frostlass + Grimmsnarl line set up; Mateusz had Drakloak evolved and was preparing the Phantom Dive line."
+        },
+        {
+          "turn": "late-game",
+          "active": "p1",
+          "actions": [
+            { "kind": "playTrainer", "card": "Boss's Orders", "uncertain": true, "notes": "'Matt finishing things off there with the Boss's Orders' — gusted a damaged Munkidori onto the active for a multi-prize takedown" },
+            { "kind": "attack", "card": "Dragapult ex", "attack": "Phantom Dive", "damage": 200, "effect": "+ 60 spread (6 counters across opp bench)", "notes": "caster (recap): 'just clinically dissected Nicholas's boards … picking off these Pokémon slowly but surely'" }
+          ],
+          "notes": "Caster recap: 'questionable benching from Nicholas ended up biting him … little Budew came back to bite him for a four-five prize'"
+        }
+      ],
+      "notes": "Game 1 driven by Phantom Dive spread on Nicklas's wide rule-box bench. Heroes Cape on Dragapult kept Mateusz's main attacker out of OHKO range from Shadow Bullet (180), forcing Nicklas to whiff multi-turn KO math."
+    },
+    {
+      "game_number": 2,
+      "winner": "p1",
+      "win_condition": "prizes / concession — caster recap: 'Nicholas adapted, set up a wide board of Munkidori, but Matteusz counter-adapted and just did not — was laser focused on targeting down his Munkidori'",
+      "duration_seconds_estimated": 1100,
+      "turns": [
+        {
+          "turn": 1,
+          "active": "p2",
+          "notes": "Nicklas chose to go FIRST in Game 2 (loser of Game 1 chooses). 3 mulligans (no Basic) before drawing Snorunt — Mateusz drew 3 extra cards.",
+          "actions": [
+            { "kind": "playBasicToBench", "card": "Maman's Impidimp", "uncertain": true },
+            { "kind": "playTrainer", "card": "Spike Muff Gym", "notes": "stadium — searched a Maman Pokémon (caster: 'Snorunt active, bench Maman's Impidimp, Spike Muff Gym which we can use')" },
+            { "kind": "playTrainer", "card": "Poké Pad", "notes": "tutored a non-rule-box Pokémon to bench — Munkidori" },
+            { "kind": "playBasicToBench", "card": "Munkidori" },
+            { "kind": "attachEnergy", "to": "Munkidori", "energy": "Darkness" },
+            { "kind": "endTurn", "notes": "caster: 'fantastic turn one going first … Munkidori benched immediately gets a dark energy on it'" }
+          ]
+        },
+        {
+          "turn": 2,
+          "active": "p1",
+          "notes": "Mateusz starts +3 cards from mulligans (~10 in hand)",
+          "actions": [
+            { "kind": "playTrainer", "card": "Poké Pad", "notes": "fetched Dreepy" },
+            { "kind": "playBasicToBench", "card": "Dreepy" },
+            { "kind": "attachEnergy", "to": "Dreepy", "energy": "Psychic", "notes": "caster: 'turn attach to the Dreepy. That definitely means he hasn't got Budew — normally you'd attach to the active so you can retreat'" },
+            { "kind": "endTurn" }
+          ],
+          "notes": "Mateusz signaled no-Budew via energy attach pattern (attached to bench Dreepy not active)."
+        },
+        {
+          "turn": 3,
+          "active": "p2",
+          "actions": [
+            { "kind": "playTrainer", "card": "Lillie's Determination", "notes": "shuffle + draw 8 — Mateusz's hand exploded: Buddy-Buddy Poffin, Munkidori, Poké Pad, additional Dreepy, Drakloak — caster: 'he's off to the races'" }
+          ],
+          "notes": "Game 2 inflection: Mateusz's Lillie hit perfectly. Three Dreepy on bench by end of turn."
+        }
+      ],
+      "key_recap": "Caster recap: 'Munkidori were not long for this world. They were immediately getting sent to the discard pile. Mateusz with his tricky ace spec of choice — that Hero's Cape was just pushing that Dragapult out of range. That could have been a very different game had it not been for the Hero's Cape.'"
+    }
+  ],
+  "key_moments": [
+    {
+      "game": 1,
+      "turn": "early",
+      "description": "Nicklas chose Tatsugiri Order Up → Petrel → Lillie's bank over T2 Itchy Pollen. Recognized item-lock window had no value vs Mateusz's no-pivot board (no switch, no Budew available next turn from Mateusz's POV).",
+      "engine_lesson": "scorePosition / aiArchetype.ts has no model for 'value of item-lock when opp lacks a pivot' vs 'value of supporter banking'. Order Up is Maman's archetype-defining engine and should be high-priority in a future grimmsnarl-froslass playbook."
+    },
+    {
+      "game": 1,
+      "turn": 5,
+      "description": "Mateusz played Crispin under Munkidori Clutch retreat-lock but did NOT switch to a Mind Bend (60 + Confusion attacker) to coin-flip-break the lock — chose to absorb another Clutch turn for setup tempo instead.",
+      "engine_lesson": "v2 ai.ts does not currently weight 'Mind Bend lock break' vs 'absorbing a turn' — typically the engine would force the lock-break for any % chance. Real human valued tempo over the 50/50. This is Phase-9 self-tuning territory: lower the priority on coin-flip lock breaks when a clean setup turn is available."
+    },
+    {
+      "game": 1,
+      "turn": "late",
+      "description": "Mateusz's Hero's Cape on Dragapult ex (320 + 100 = 420 effective HP) put Dragapult out of two-shot range from Maman's Grimmsnarl ex Shadow Bullet (180 × 2 = 360). Caster called this the swing card.",
+      "engine_lesson": "ACE SPEC choice ratification: the engine currently ranks Unfair Stamp as the dominant Dragapult ACE SPEC. Hero's Cape provides defensive HP-buff that wins prize trades against 180-damage attackers. Add 'opp-attacker-OHKO-range bypass' as a Hero's Cape evaluation factor in scorePosition (similar to threat-aware OHKO penalty)."
+    },
+    {
+      "game": 2,
+      "turn": 1,
+      "description": "Nicklas mulliganed THREE TIMES going first, giving Mateusz +3 cards. Mateusz's T2 Lillie's Determination then drew into a perfect 8-card hand and the game was effectively over by T3.",
+      "engine_lesson": "Mulligan-induced extra-card snowball is real but already correctly modeled in setupGame. No engine change needed."
+    },
+    {
+      "game": 2,
+      "turn": "mid",
+      "description": "Mateusz prioritized targeting Munkidori specifically with Phantom Dive spread + KO routing instead of attacking Maman's Grimmsnarl directly. Recognized that without Munkidori, Nicklas can't move damage off his big attackers and the spread becomes lethal.",
+      "engine_lesson": "bestGustTarget in ai.ts already boosts Munkidori (it's in the un-powered rule-box puncher list). Validates the existing weight. Do NOT regress this when adding new entries."
+    }
+  ],
+  "engine_notes": [
+    "Mateusz's T1 going-first opener (Poffin + Poké Pad + bench Dreepy + Munkidori, no supporter, Psychic to active Dreepy) is the canonical dragapult-dudunsparce going-first line — promote to opening-book.json. Distinct from the dragapult-blaziken playbook because there's no Torchic/Combusken line and no Budew lead.",
+    "Hero's Cape is a viable ACE SPEC for Dragapult ex and should be added as a candidate in aiArchetype.ts dragapult lists. Currently the engine treats Unfair Stamp as the only Dragapult ACE SPEC.",
+    "Maman's Grimmsnarl-Froslass is a NEW archetype not yet in aiArchetype.ts. Signature cards: Maman's Grimmsnarl ex (Punk Up energy-accel ability), Maman's Tatsugiri (Order Up tutor), Spike Muff Gym (search-Maman stadium, item-lock immune), Frostlass (Freezing Shroud passive ability damage), Munkidori. Suggested archetype string: `grimmsnarl-froslass` or `maman-grimmsnarl`. Playbook: T1 Tatsugiri Order Up → Petrel → bank Lillie's, T2 set up Frostlass + Morgrem, T3 evolve Grimmsnarl ex with pre-attached Dark + Punk Up acceleration."
+  ]
+}

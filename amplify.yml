@@ -1,0 +1,40 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        # Pin Node 20 LTS so the build environment matches what the app
+        # was developed against. Amplify's image ships multiple Node versions
+        # preinstalled via nvm.
+        - nvm use 20 || nvm install 20
+        - node -v
+        - npm -v
+        # npm install (not npm ci) so build-time lockfile reconciliation
+        # works around esbuild's optional platform-specific transitive deps
+        # that npm versions disagree about. For a static SPA the
+        # reproducibility trade-off is fine.
+        - npm install --no-audit --no-fund
+    build:
+      commands:
+        - npm run typecheck
+        - npm run build
+  artifacts:
+    # Vite outputs the production bundle here.
+    baseDirectory: dist
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
+      - .npm/**/*
+customHeaders:
+  # Long-cache immutable, fingerprinted Vite assets. index.html stays
+  # short-cached so new deploys are picked up on next load.
+  - pattern: '/assets/**'
+    headers:
+      - key: 'Cache-Control'
+        value: 'public, max-age=31536000, immutable'
+  - pattern: '/index.html'
+    headers:
+      - key: 'Cache-Control'
+        value: 'public, max-age=0, must-revalidate'

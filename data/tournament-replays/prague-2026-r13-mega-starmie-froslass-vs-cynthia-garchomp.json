@@ -1,0 +1,100 @@
+{
+  "source_url": "https://www.youtube.com/watch?v=5ewTXCpaGpA",
+  "channel": "Play! Pokémon (official)",
+  "title": "TCG Day 2 | 2026 Pokémon Prague Regional Championships",
+  "event": "Prague Regional Championships 2026",
+  "round": "Swiss Round 13 (final round of Swiss — win-and-in to asymmetrical Top Cut)",
+  "format": "Standard",
+  "regulation_marks": ["H", "I", "J"],
+  "recorded_at": "2026-04-29",
+  "transcript_source": "yt-dlp auto-subs (en) — segment ~00:54:00 to 01:46:00",
+  "broadcast_casters": ["Ross Gilbert", "Joe Bernard"],
+  "video_segment": { "start": "00:54:00", "end": "01:46:00" },
+  "players": {
+    "p1": {
+      "handle": "Lorenzo (full name not confirmed in standings)",
+      "deck_archetype": "mega-starmie-froslass",
+      "decklist_known": false,
+      "decklist_summary": "Mega Starmie ex (Jetting Blow — 120 + 50 spread bench) + Mega Frostlass (does 50 damage per opp hand card) + Munkidori. Risky Ruins stadium (2 dmg counters per turn to opp ability Pokémon — KEY damage source). Legacy Energy. Tutor lines: Buddy-Buddy Poffin, Ultra Ball. Trainers: Crispin, Boss's Orders, Lillie's Determination."
+    },
+    "p2": {
+      "handle": "Neddy Kosek (broadcast: 'Netti' / 'Nedi')",
+      "country": "Czech Republic",
+      "limitless_finish": "3rd",
+      "deck_archetype": "cynthia-garchomp",
+      "decklist_known": false,
+      "decklist_summary": "See prague-2026-top4-dragapult-dudunsparce-vs-cynthia-garchomp.json#players.p2. ACE SPEC: Unfair Stamp (this match — caster called this list 'Unfair Stamp variant rather than Neo Upper Energy')."
+    }
+  },
+  "match_outcome": {
+    "winner": "p2 (Netti)",
+    "set_score": "1-2",
+    "games_played": 3,
+    "advances_to": "Asymmetrical Top Cut (Top 16) — both players were on 29 points; winner guaranteed advancement"
+  },
+  "games": [
+    {
+      "game_number": 1,
+      "winner": "p1 (Lorenzo)",
+      "win_condition": "prizes — early Risky Ruins + Mega Starmie Jetting Blow snowball; finished with Mega Frostlass KO",
+      "key_recap": "Caster recap: 'In game one, Lorenzo was in a commanding position. That early Risky Ruins and a very fast Jetting Blow taking out crucially the Roselia, making it difficult to knock out this Staryu, especially with the early heals of Munkidori. Mega Frostlass coming down, taking that giant KO.' Netti mulliganed."
+    },
+    {
+      "game_number": 2,
+      "winner": "p2 (Netti)",
+      "win_condition": "concession (Lorenzo conceded ~5 minutes in to preserve time for Game 3)",
+      "key_recap": "Caster recap: 'Game two didn't take very long because it was a very different game. Netti had double Buddy-Buddy Poffin and double Fight Gong on turn one. Set up just a perfect plan and Lorenzo had nothing.'",
+      "key_play": {
+        "description": "Netti played Boss's Orders down to a 2-card hand with Boss's Orders being one of them — relying on Garchomp's Corkscrew Dive next turn to refill cards.",
+        "engine_lesson": "Validates aggressive trainer commitment when the active attacker can refill via attack-draw effect (Corkscrew Dive draws cards). Engine should evaluate 'attack-draw ability' as a hand-recovery tool when scoring trainer plays."
+      },
+      "key_concession_logic": "Lorenzo SCOOPED EARLY in Game 2 — caster: 'If I'm Lorenzo, I'm only playing a couple of turns of that game. I have to win to make top cut. Let it go badly in 5 minutes and give yourself 25 minutes to play out the game three.' Engine doesn't currently model 'time-management concession' decisions but this is a real human optimization."
+    },
+    {
+      "game_number": 3,
+      "winner": "p2 (Netti)",
+      "win_condition": "prizes — Cynthia's Garchomp finished after Unfair Stamp + Boss's Orders + switch combo on Meowth ex",
+      "duration_seconds_estimated": 1500,
+      "key_recap": "Caster recap: 'Lorenzo ended up in full top-deck mode after a KO. Unfair Stamp coming down, and then Netti was able to avoid absolutely everything and just take these KOs with Garchomp. By the end of the game it was pretty straightforward.'",
+      "turns": [
+        {
+          "turn": "winning",
+          "active": "p2",
+          "actions": [
+            { "kind": "playTrainer", "card": "Unfair Stamp", "notes": "ACE SPEC — both shuffle hand into deck and draw 5. Disrupted Lorenzo's top-deck mode" },
+            { "kind": "playTrainer", "card": "Switch", "notes": "topdeck — caster: 'he has top decked the switch'" },
+            { "kind": "switchActive", "to": "Cynthia's Garchomp" },
+            { "kind": "playTrainer", "card": "Boss's Orders", "notes": "gusted Meowth ex active" },
+            { "kind": "attack", "card": "Cynthia's Garchomp", "attack": "Dragon Slice or Corkscrew Dive", "damage": "OHKO Meowth ex (180 HP)", "target": "Meowth ex (gusted)", "notes": "final 2 prizes" }
+          ]
+        }
+      ]
+    }
+  ],
+  "key_moments": [
+    {
+      "game": 1,
+      "turn": 1,
+      "description": "Lorenzo's T1 Risky Ruins stadium accelerated his prize plan dramatically — Risky Ruins puts 2 counters per turn on opp ability Pokémon, knocking Roselia and Gible into Jetting Blow KO range (50 + 20 = 70).",
+      "engine_lesson": "Risky Ruins is in src/engine/effects.ts. Engine should weight stadium plays as multi-turn damage sources — currently Risky Ruins value evaluation may treat it as a flat 20 dmg but the cumulative compound effect over 3-4 turns is much higher. Add multi-turn damage projection to stadium evaluation in scorePosition."
+    },
+    {
+      "game": 2,
+      "turn": "concession",
+      "description": "Lorenzo CONCEDED Game 2 deliberately at ~5 minutes to bank time for Game 3. Caster called this the right play — preserves a 25-minute Game 3 instead of risking a tie.",
+      "engine_lesson": "Time management is OUTSIDE the current engine scope — but the engine should encode 'concession when behind 2-3 prizes with poor topdeck odds' as a valid AI choice. Currently AI never concedes. For Phase 8+ this could be an opening-book entry for 'when to scoop'."
+    },
+    {
+      "game": 2,
+      "turn": "key",
+      "description": "Netti played Boss's Orders down to a 2-card hand because Garchomp's Corkscrew Dive will refill cards next turn. Confidence in attack-draw refill enabled aggressive supporter use.",
+      "engine_lesson": "ai.ts trainer evaluation should look ahead to 'will my next attacker draw cards' — Corkscrew Dive is a self-fueling attacker. Add as a positive flag in archetype playbook for cynthia-garchomp."
+    }
+  ],
+  "engine_notes": [
+    "Mega Starmie + Mega Frostlass with Risky Ruins is a NEW archetype: `mega-starmie-froslass`. Distinct from `mega-starmie-dusknoir` (João's Top 4 deck) — Lorenzo's variant uses Mega Frostlass for 'damage per opp hand card' attack, not Dusknoir Cursed Blast. Add as a separate playbook.",
+    "Mega Frostlass attack ('does 50 dmg per opp hand card') interacts with Lillie's Determination/Iono — when opp has just played a draw-7 supporter, Mega Frostlass deals massive damage. Engine should model this attack's damage = `oppHandSize × 50`.",
+    "Cynthia's Garchomp Corkscrew Dive: confirmed attack-draw effect. Verify in src/engine/effects.ts — kind likely `attackThenDraw`.",
+    "Risky Ruins compound damage compounds every turn — engine's stadium evaluation should project N turns of self-damage as a one-time cost vs damage-output multiplier."
+  ]
+}

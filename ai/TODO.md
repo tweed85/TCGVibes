@@ -1,0 +1,54 @@
+# TODO
+
+Schema B (GH-flavor checklist). Format: `- [ ] [unowned|claimed:agent:ISO|agent:ISO] {title} — verify: {command}`. See `ai/agent_ownership.md` for the claim protocol.
+
+## AI build plan — active queue
+
+Decomposition lives in `docs/AI_CPU_BUILD_PLAN.md` "Phase 3/4/5 decomposition" tables.
+
+### Phase 3 — turn sequencing
+
+- [x] [codex:2026-05-11T01:43:56Z] Phase 3A immediate-win sequencing — verified: `npm run typecheck`; `npm run test -- src/engine/__tests__/aiDecisionQuality.test.ts`; `npm run test`; `AI_BENCH=quick npm run test -- src/engine/__tests__/aiBenchmark.test.ts` (Claude review @ 2026-05-11T01:56Z: tryImmediateWinningLine + 2 scenarios all clean; +2 tests in aiDecisionQuality)
+- [x] [codex:2026-05-11T02:54:04Z] Phase 3B search-before-attach hardening — verified: `npm run typecheck`; `npm run test` (905 passed / 3 skipped); `AI_BENCH=quick npm run test -- src/engine/__tests__/aiBenchmark.test.ts` (Claude review @ 2026-05-11T02:55Z: rework Nest Ball test deck so Riolu is the only eligible Basic; assertion now deterministic. searchWouldImproveAttachTarget scoring + isSearchableAttachBasic predicate intact.)
+- [x] [codex:2026-05-11T03:04:10Z] Phase 3C ability-before-Supporter ordering — verified: `npm run typecheck`; `npm run test -- src/engine/__tests__/aiDecisionQuality.test.ts` (18 passed); `npm run test` (907 passed / 3 skipped); `AI_BENCH=quick npm run test -- src/engine/__tests__/aiBenchmark.test.ts` (Claude review @ 2026-05-11T03:28Z: Bibarel/Iono + Teal Dance/Professor's Research scenarios clean; drawUntilSeven tuning is narrowly correct.)
+- [x] [codex:2026-05-11T03:30:55Z] Phase 3D ACE SPEC conservation gate — verified: `npm run typecheck`; `npm run test -- src/engine/__tests__/aiDecisionQuality.test.ts` (20 passed); `npm run test` (909 passed / 3 skipped); `AI_BENCH=quick npm run test -- src/engine/__tests__/aiBenchmark.test.ts` (Claude review @ 2026-05-11T03:49Z, delayed by claude-CLI auth issue on chain-fire path: isAceSpec predicate + 75/40 threshold via pickBestTrainer's new meetsThreshold callback. Minimal and reuses existing scoring lane.)
+- [x] [codex:2026-05-11T04:04:15Z] Phase 3E candidate-generator refactor — verified: `npm run typecheck`; `npm run test -- src/engine/__tests__/aiDecisionQuality.test.ts` (21 passed); `npm run test` (910 passed / 3 skipped); `AI_BENCH=quick npm run test -- src/engine/__tests__/aiBenchmark.test.ts` (Claude review @ 2026-05-11T04:17Z, delayed by claude-CLI auth transient: enumerateAiActionCandidates returns ranked candidates with CANDIDATE_BAND=10000 priority multiplier; tryImmediateWinningLine preserved at top; non-candidate fallbacks for tools/low-threshold Supporters/retreats kept.)
+
+### Phase 4 — archetype playbooks
+
+- [x] [codex:2026-05-11T04:24:55Z] Phase 4A Dragapult playbook profile — verified: `npm run typecheck`; `npm run test -- src/engine/__tests__/aiDecisionQuality.test.ts` (23 passed); `npm run test` (912 passed / 3 skipped); `AI_BENCH=quick npm run test -- src/engine/__tests__/aiBenchmark.test.ts` (2 passed / 1 skipped) (Claude review @ 2026-05-11T12:59Z, delayed by claude-CLI auth transient on overnight chain-fire: dragapult-blaziken / dragapult-dudunsparce playbook weights boosted for Dreepy / Drakloak / Dragapult ex / Rare Candy / Boss's Orders / Counter Catcher across T1-T3; v2 search-pick scoring now factors archetype bonuses + Rare Candy Stage 2 paths; Rare Candy candidate-loop integration added.)
+- [x] [codex:2026-05-11T13:04:14Z] Phase 4B Crustle playbook profile — verified: `npm run typecheck`; `npm run test -- src/engine/__tests__/aiDecisionQuality.test.ts` (25 passed); `npm run test` (914 passed / 3 skipped); `AI_BENCH=quick npm run test -- src/engine/__tests__/aiBenchmark.test.ts` (Claude review @ 2026-05-11T15:00Z: Dwebble/Crustle/Cornerstone Ogerpon ex playbook bonuses + Powerglass / Berry / Sparkling Crystal heal-tool priority; bench-Dwebble-before-ex + heal-before-attack scenarios green.)
+- [x] [codex:2026-05-11T15:00:18Z] Phase 4C remaining playbook profiles — verified: `npm run typecheck`; `npm run test -- src/engine/__tests__/aiDecisionQuality.test.ts` (34 passed); `npm run test` (923 passed / 3 skipped); `AI_BENCH=quick npm run test -- src/engine/__tests__/aiBenchmark.test.ts` (2 passed / 1 skipped) (Covered all 9 actual remaining non-generic archetypes in `aiArchetype.ts`; no 10th archetype exists beyond the 12 total slugs minus Phase 4A/4B.) (Claude review @ 2026-05-11T15:09Z, delayed by sandbox-blocked chain-fire: 34/34 in aiDecisionQuality + 923 full suite confirmed locally. Phase 4 complete.)
+
+### Phase 5 — tactical micro-search
+
+- [x] [codex:2026-05-11T15:09:00Z] Phase 5A gust target scorer rewrite (tighten `bestGustTarget`) — verified: `npm run typecheck`; `npm run test -- src/engine/__tests__/aiDecisionQuality.test.ts` (36 passed); `npm run test` (925 passed / 3 skipped); `AI_BENCH=quick npm run test -- src/engine/__tests__/aiBenchmark.test.ts` (2 passed / 1 skipped) (Claude review @ 2026-05-11T15:20Z, delayed by stuck chain-fired claude pid 75527 producing no output for 2+ minutes; manual review confirmed clean: bestGustTarget v1 prize-exchange preserved + v2 game-winning KO / ramp-engine / future-threat / protection-penalty components; Prime Catcher gust execution wired to bestGustTarget instead of internal fallback.)
+- [x] [codex:2026-05-11T15:29:48Z] Phase 5B Energy attach scorer rewrite (`scoreEnergyTarget` next-turn weighting) — verified: `npm run typecheck`; `npm run test -- src/engine/__tests__/aiDecisionQuality.test.ts` (38 passed); `npm run test` (927 passed / 3 skipped); `AI_BENCH=quick npm run test -- src/engine/__tests__/aiBenchmark.test.ts` (Claude review @ 2026-05-11T15:32Z, manual after chain-fired claude hang: v2 recognizes next-turn-reachable attacks + acceleration support + OHKO-range-waste penalty. Bench-attacker-next-turn + avoid-doomed-active scenarios green.)
+- [x] [codex:2026-05-11T15:38:27Z] Phase 5C search target scorer rewrite — verified: `npm run typecheck`; `npm run test -- src/engine/__tests__/aiDecisionQuality.test.ts` (40 passed); `npm run test` (929 passed / 3 skipped); `AI_BENCH=quick npm run test -- src/engine/__tests__/aiBenchmark.test.ts` (2 passed / 1 skipped) (Claude review @ 2026-05-11T15:47Z, manual: v2 boosts playable evolution completions + bench-ready Basics + energy-type-gap-closers; gated behind v2 so v1 untouched. Ivysaur-over-larger-Basic + Water-over-duplicate-Fire scenarios green.)
+- [x] [codex:2026-05-11T15:55:00Z] Phase 5D bench target scorer (integrates Phase 4 playbook fields) — verified: `npm run typecheck`; `npm run test -- src/engine/__tests__/aiDecisionQuality.test.ts` (43 passed); `npm run test` (932 passed / 3 skipped); `AI_BENCH=quick npm run test -- src/engine/__tests__/aiBenchmark.test.ts` (2 passed / 1 skipped)
+- [x] [claude:2026-05-11T16:09:00Z] Phase 5E evolution target scorer — verified: `npm run typecheck`; `npm run test -- src/engine/__tests__/aiDecisionQuality.test.ts` (45 passed); `npm run test` (937 passed); claude impl after user dropped chain-fire dance: pickBestEvolution v2 adds archetypeBenchBonus×2 + playbookCardBonusFromState + ability-unlock bonuses (drawOne/drawTwo/drawN/drawNActiveOnly/searchBasicEnergy/attachEnergyFromHand/attachEnergyFromDiscardToSelf/attachEnergyFromDiscardToBench). 2 new scenarios: ability-unlock preference + don't-feed-doomed-active.
+- [x] [claude:2026-05-11T16:09:00Z] Phase 5F attack-choice scorer with full lookahead context — verified: `npm run typecheck`; `npm run test -- src/engine/__tests__/aiDecisionQuality.test.ts` (47 passed); `npm run test` (937 passed). attackValue v2 OHKO path adds: mid-game 2+ prize swing bonus (+40 when oppPrize>=2 AND ourPrizes>=3), bench-attacker readiness bonus (+30 for ≥1 ready, +15 for ≥2). 2 new scenarios: higher-prize-OHKO preference + OHKO with ready-bench backup.
+- [x] [claude:2026-05-11T16:09:00Z] Phase 5G spread/counter placement scorer (Phantom Dive / Cursed Drop) — verified: `npm run typecheck`; `npm run test -- src/engine/__tests__/aiDecisionQuality.test.ts` (49 passed); `npm run test` (938 passed / 3 skipped); `AI_BENCH=quick npm run test -- src/engine/__tests__/aiBenchmark.test.ts` (2 passed / 1 skipped). effects.ts placeCountersOnOppBenchAny resolver: v2 sorts targets by (1) would-KO + prize value (+10000 + prize*1000), (2) rule-box close-to-KO range (+500), (3) engine-piece names (+200), (4) most-damaged fallback. v1 keeps legacy most-damaged behavior. 2 new scenarios: wounded-KO-before-fresh + prize-rich-ex over 1-prize-equal-HP.
+
+### Phase 6 — deferred until replay volume exists
+
+- [ ] [unowned] Phase 6 replay-informed tuning — verify: documented import format + tests (deferred; needs cloud-replay corpus)
+
+## Workflow / quality
+
+- [ ] [monitor-only] Stabilize Playwright mulligan-modal flake — verify: `npm run e2e` repeated cleanly (no preemptive fix; e2e/smoke.spec.ts:55-59 already has graceful `.catch(() => false)` fallbacks. If CI ever reports a failure here, bump `timeout: 2000` → `5000`. Monitor only.)
+- [ ] [unowned] Review `scripts/ai-coordinator/digest.mjs` after first week of use — verify: digest output is useful and not noisy
+- [x] [claude:2026-05-12T12:35:00Z] Add optional `AI_BENCH=quick` PR-boundary checklist item to `/ai/PROJECT_STATE.md` or `/docs/AI_CPU_BUILD_PLAN.md` — verified: documentation-only review (landed in commit a8e8e52 under non-negotiable constraints in docs/AI_CPU_BUILD_PLAN.md)
+- [x] [claude:2026-05-12T12:35:00Z] Compact `ai/inbox.md` into `ai/archive/2026-05.md` when it crosses ~300 lines — verified: archive created (2089 lines), inbox truncated to 58 lines (commit 3c0c829)
+
+## Refactor track (multi-stage plan: ~/.claude/plans/review-these-recommendations-from-ethereal-donut.md)
+
+- [x] [claude:2026-05-12T12:35:00Z] Stage 1 — Commit 2026-05-11 refactor batch + doc sync (README, AI_CONFIG, types split, JSDoc, REFACTOR_PLAN status, inbox archive, PROJECT_STATE) — verified: typecheck clean; 979 passed | 4 skipped baseline preserved
+- [ ] [unowned] Stage 2a — Discard-pile keyboard handler on both branches in DiscardStack — verify: RTL test
+- [ ] [unowned] Stage 2b — `LogEntry.seq` + AiActionBanner key stability — verify: RTL test for DOM identity across log appends
+- [ ] [unowned] Stage 4A — PR `pandabananastcg` → `main` + Amplify branch verification — verify: PR CI green, Amplify deploys main
+- [ ] [unowned] Stage 5 — `rules.ts` / `actions.ts` internal-module splits (2 PRs)
+- [ ] [unowned] Stage 6 — `effects.ts` / `trainerEffects.ts` / `ai.ts` mechanical extractions (3 substages)
+- [ ] [unowned] Stage 7 — JSDoc sweep completion on remaining exports
+- [ ] [unowned] Stage 8 — Cloud-replay tooling (offline downloader + aggregator)
+- [ ] [unowned] Stage 17 — `state.log` cap + export contract redesign (conditional)
