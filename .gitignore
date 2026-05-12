@@ -9,3 +9,13 @@ docs/META_SNAPSHOT_AGENT.md
 .env
 .env.local
 .env.*.local
+
+# Playwright e2e artifacts
+test-results/
+playwright-report/
+
+# macOS sync-conflict duplicates (iCloud / Dropbox / OneDrive create
+# these when they can't reconcile concurrent changes). Catches the
+# " 2" suffix pattern so they never enter git status again.
+* 2
+* 2.*
