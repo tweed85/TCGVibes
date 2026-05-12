@@ -385,10 +385,7 @@ describe("Froslass Freezing Shroud — source-side ability suppression", () => {
     // setting up a real suppression scenario is environment-dependent. Verify
     // the gate is wired by inspecting the rules.ts source for the call.
     const fs = await import("node:fs");
-    const src = fs.readFileSync(
-      "/Users/tweed/Documents/TCGVibes/src/engine/rules.ts",
-      "utf8",
-    );
+    const src = fs.readFileSync("src/engine/rules.ts", "utf8");
     // The Freezing Shroud loop must skip the source if its abilities are
     // suppressed at the instance level.
     expect(src).toMatch(/abilitiesActiveOnInstance\(state, a\)/);

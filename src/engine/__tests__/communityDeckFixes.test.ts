@@ -186,10 +186,7 @@ describe("Cynthia's Gabite Champion's Call — searches Cynthia's-prefix Pokémo
     // (Engine-level integration test would require booting a real Cynthia's
     // Gabite from the dataset and observing the picker pool.)
     const fs = await import("node:fs");
-    const src = fs.readFileSync(
-      "/Users/tweed/Documents/TCGVibes/src/engine/abilities.ts",
-      "utf8",
-    );
+    const src = fs.readFileSync("src/engine/abilities.ts", "utf8");
     // Sentinel: the post-fix registry block has the prefix.
     expect(src).toMatch(/"Champion's Call":\s*\{\s*kind:\s*"searchDeckPokemonNamePrefix",\s*namePrefix:\s*"Cynthia's "/);
   });
@@ -205,10 +202,7 @@ describe("Mega Kangaskhan ex AI damage estimator — flipUntilTailsPerHeads case
     // Doing a full estimateDamage integration test would require setting up
     // an attacker + defender pair which is heavier than this unit guarantee.
     const fs = await import("node:fs");
-    const src = fs.readFileSync(
-      "/Users/tweed/Documents/TCGVibes/src/engine/ai.ts",
-      "utf8",
-    );
+    const src = fs.readFileSync("src/engine/ai.ts", "utf8");
     expect(src).toMatch(/case "flipUntilTailsPerHeads":\s*[\s\S]*?damage \+= e\.perHeads/);
   });
 });
