@@ -120,14 +120,15 @@ function expectInventory(
 
 describe("effect audit coverage guard", () => {
   it("keeps AttackEffect / AbilityEffect / TrainerEffectId inventories intentional", () => {
-    const types = readFileSync("src/engine/types.ts", "utf8");
+    const effects = readFileSync("src/engine/types/effects.ts", "utf8");
+    const cards = readFileSync("src/engine/types/cards.ts", "utf8");
     const trainers = readFileSync("src/engine/trainerEffects.ts", "utf8");
 
     const attackKinds = topLevelKindUnion(
-      between(types, "export type AttackEffect =", "export type PokemonFilter"),
+      between(effects, "export type AttackEffect =", "export type PokemonFilter"),
     );
     const abilityKinds = topLevelKindUnion(
-      between(types, "export type AbilityEffect =", "export type AbilityCondition"),
+      between(cards, "export type AbilityEffect =", "export type AbilityCondition"),
     );
     const trainerKinds = trainerEffectIds(
       between(
@@ -166,17 +167,18 @@ describe("effect audit coverage guard", () => {
     // the audit tables equals the regex-extracted kind sets from source, which
     // catches drift if someone adds a top-level kind that the Record type
     // resolution somehow accepts (e.g. via `as Record<...>` casts).
-    const types = readFileSync("src/engine/types.ts", "utf8");
+    const effects = readFileSync("src/engine/types/effects.ts", "utf8");
+    const cards = readFileSync("src/engine/types/cards.ts", "utf8");
     const trainers = readFileSync("src/engine/trainerEffects.ts", "utf8");
 
     const attackKinds = new Set(
       topLevelKindUnion(
-        between(types, "export type AttackEffect =", "export type PokemonFilter"),
+        between(effects, "export type AttackEffect =", "export type PokemonFilter"),
       ),
     );
     const abilityKinds = new Set(
       topLevelKindUnion(
-        between(types, "export type AbilityEffect =", "export type AbilityCondition"),
+        between(cards, "export type AbilityEffect =", "export type AbilityCondition"),
       ),
     );
     const trainerIds = new Set(

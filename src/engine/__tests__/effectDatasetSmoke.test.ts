@@ -36,14 +36,15 @@ function knownEffectSets(): {
   ability: Set<string>;
   trainer: Set<string>;
 } {
-  const types = readFileSync("src/engine/types.ts", "utf8");
+  const effects = readFileSync("src/engine/types/effects.ts", "utf8");
+  const cards = readFileSync("src/engine/types/cards.ts", "utf8");
   const trainers = readFileSync("src/engine/trainerEffects.ts", "utf8");
   return {
     attack: topLevelKinds(
-      between(types, "export type AttackEffect =", "export type PokemonFilter"),
+      between(effects, "export type AttackEffect =", "export type PokemonFilter"),
     ),
     ability: topLevelKinds(
-      between(types, "export type AbilityEffect =", "export type AbilityCondition"),
+      between(cards, "export type AbilityEffect =", "export type AbilityCondition"),
     ),
     trainer: trainerIds(
       between(
