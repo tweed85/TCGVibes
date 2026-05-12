@@ -383,9 +383,11 @@ describe("Froslass Freezing Shroud — source-side ability suppression", () => {
     // Sentinel test — the live suppressors (Klefki Sticky Bind, Initialization,
     // Midnight Fluttering) are scoped to specific subtypes/positions, so
     // setting up a real suppression scenario is environment-dependent. Verify
-    // the gate is wired by inspecting the rules.ts source for the call.
+    // the gate is wired by inspecting the source for the call. The Freezing
+    // Shroud loop lives in src/engine/rules/status.ts after the Stage 5A
+    // internal-module split (pokemonCheckup moved out of rules.ts).
     const fs = await import("node:fs");
-    const src = fs.readFileSync("src/engine/rules.ts", "utf8");
+    const src = fs.readFileSync("src/engine/rules/status.ts", "utf8");
     // The Freezing Shroud loop must skip the source if its abilities are
     // suppressed at the instance level.
     expect(src).toMatch(/abilitiesActiveOnInstance\(state, a\)/);
