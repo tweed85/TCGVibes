@@ -97,6 +97,7 @@ is better action choice, better scoring, and better archetype rules.
   snapshot-free heuristic edits.
 - Keep v1 behavior stable unless the change is a bug fix. New strategy should
   be gated through existing v2 surfaces where possible.
+- **PR-boundary checklist:** run `AI_BENCH=quick npm run test -- src/engine/__tests__/aiBenchmark.test.ts` before any PR that touches AI scoring, candidate generation, target selectors, MCTS, archetype playbooks, or `AI_CONFIG` constants. The quick bench is the minimum non-regression gate; full bench runs nightly.
 
 ## Phase 0 — unblock hidden choice quality — ✅ COMPLETE
 
