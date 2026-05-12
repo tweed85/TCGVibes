@@ -38,6 +38,12 @@ import {
 } from "./ongoingEffects";
 import { canPayCost } from "./rules";
 import { precheckStadium, stadiumHasActivatedEffect, useStadium } from "./stadiumActivated";
+import {
+  MCTS_DEFAULT_BUDGET_MS,
+  MCTS_EXPLORATION_C,
+  MCTS_ROLLOUT_DEPTH_TURNS,
+  MCTS_TOP_K,
+} from "./aiConfig";
 import type {
   Card,
   EnergyCard,
@@ -277,10 +283,10 @@ export function runMcts(
     rolloutPolicy?: (state: GameState, player: PlayerId) => void;
   },
 ): McRunResult {
-  const budgetMs = options.budgetMs ?? 5000;
-  const c = options.explorationC ?? 350; // tuned for prize-scaled values
-  const rolloutDepth = options.rolloutDepthTurns ?? 2;
-  const topK = options.topK ?? 8;
+  const budgetMs = options.budgetMs ?? MCTS_DEFAULT_BUDGET_MS;
+  const c = options.explorationC ?? MCTS_EXPLORATION_C;
+  const rolloutDepth = options.rolloutDepthTurns ?? MCTS_ROLLOUT_DEPTH_TURNS;
+  const topK = options.topK ?? MCTS_TOP_K;
   const start = Date.now();
 
   const rootActions = enumerateActions(rootState, player, topK);

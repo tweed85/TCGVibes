@@ -63,6 +63,28 @@ import {
   v2Active,
 } from "./aiArchetype";
 import { runMcts, type McAction } from "./mcts";
+import {
+  GUST_MIN_SCORE,
+  GUST_KO_BASE,
+  GUST_KO_PRIZE_MULTIPLIER,
+  GUST_GAIN_KO_BONUS,
+  GUST_HIGHER_PRIZE_BONUS,
+  GUST_ACTIVE_KO_DISCOUNT,
+  GUST_GAME_WIN_BONUS,
+  GUST_FUTURE_THREAT_MIN_DAMAGE,
+  GUST_FUTURE_THREAT_MULTIPLIER,
+  GUST_PROTECTED_TARGET_PENALTY,
+  CANDIDATE_BAND,
+  ACTIVE_OHKO_BASE_PENALTY,
+  ACTIVE_OHKO_PRIZE_PENALTY,
+  OPP_ACTIVE_OHKO_BASE_BONUS,
+  OPP_ACTIVE_OHKO_PRIZE_BONUS,
+  ACTIVE_OHKO_GAME_LOSING_PENALTY,
+  ACTIVE_OHKO_BENCH_COUNTER_MITIGATION,
+  OPP_ACTIVE_GAME_WINNING_BONUS,
+  ACTIVE_CAN_ATTACK_NOW_BONUS,
+  EVOLUTION_IN_HAND_UNLOCK_BONUS,
+} from "./aiConfig";
 import type {
   Attack,
   Card,
@@ -941,17 +963,7 @@ function activeCantAttack(state: GameState, player: PlayerId): boolean {
 }
 
 // --- Gust target selection -------------------------------------------------
-
-const GUST_MIN_SCORE = 120;
-const GUST_KO_BASE = 150;
-const GUST_KO_PRIZE_MULTIPLIER = 60;
-const GUST_GAIN_KO_BONUS = 80;
-const GUST_HIGHER_PRIZE_BONUS = 50;
-const GUST_ACTIVE_KO_DISCOUNT = 100;
-const GUST_GAME_WIN_BONUS = 10000;
-const GUST_FUTURE_THREAT_MIN_DAMAGE = 120;
-const GUST_FUTURE_THREAT_MULTIPLIER = 1.25;
-const GUST_PROTECTED_TARGET_PENALTY = 10000;
+// Weights live in ./aiConfig (GUST_*).
 
 // "What's the best opponent bench Pokémon to pull into the Active spot?"
 // Returns the instance id, or null if no gust is worth playing.
@@ -2168,8 +2180,6 @@ type AiActionCandidate = {
   score: number;
   execute: () => boolean;
 };
-
-const CANDIDATE_BAND = 10_000;
 
 function actionScore(priority: number, localScore: number): number {
   return priority * CANDIDATE_BAND + localScore;
@@ -3420,33 +3430,13 @@ function drainPending(sim: GameState, maxSteps = 30): void {
 
 // Heuristic position evaluation from `player`'s perspective. Higher is
 // better. Game-over states get extreme scores so a winning line dominates;
-// otherwise we combine prizes (biggest factor), bench HP, energy on board,
-// and a small penalty for being out-of-actives.
-// --- Load-bearing scorePosition constants ---------------------------------
-// These weights drive the v2 threat-aware leaf eval that's responsible for
-// the measured +12.5pp v2+MCTS win-rate edge over v1 (see docs/AI.md).
-// Load-bearing MCTS leaf-eval weights; change only with benchmark evidence.
-const ACTIVE_OHKO_BASE_PENALTY = 60;
-const ACTIVE_OHKO_PRIZE_PENALTY = 80;
-const OPP_ACTIVE_OHKO_BASE_BONUS = 50;
-const OPP_ACTIVE_OHKO_PRIZE_BONUS = 60;
-
-// --- Phase 2B threat / readiness overlay constants ------------------------
-// Additive v2 overlays on top of the existing OHKO penalty/bonus. Smaller
-// magnitudes than the base weights — they tune how the AI weighs prize-
-// pressure context and immediate attack options on top of the raw threat
-// detection. Benchmark coverage at PR boundary, not per-commit.
-const ACTIVE_OHKO_GAME_LOSING_PENALTY = 150;
-const ACTIVE_OHKO_BENCH_COUNTER_MITIGATION = 30;
-const OPP_ACTIVE_GAME_WINNING_BONUS = 200;
-const ACTIVE_CAN_ATTACK_NOW_BONUS = 15;
-const EVOLUTION_IN_HAND_UNLOCK_BONUS = 10;
-
-// scorePosition: terminal short-circuit + sum of named sub-scores. Each
-// sub-score reads `state` for one slice of the position (prize race, threat,
-// readiness, board, resources). The Phase 2A extraction is intentionally
-// behavior-preserving — new AI strategy lands as additive overlays inside
-// these helpers (e.g. scoreBenchRisk for spread-pressure detection).
+// otherwise sum of named sub-scores (prize race, threat, readiness, board,
+// resources, bench risk, disruption). Load-bearing weights live in
+// ./aiConfig — drive the v2 threat-aware leaf eval responsible for the
+// measured +12.5pp v2+MCTS win-rate edge over v1 (see docs/AI.md). The
+// Phase 2A extraction is intentionally behavior-preserving — new AI
+// strategy lands as additive overlays inside these helpers (e.g.
+// scoreBenchRisk for spread-pressure detection).
 function scorePosition(state: GameState, player: PlayerId): number {
   if (state.winner === player) return 1_000_000;
   if (state.winner !== null) return -1_000_000;
