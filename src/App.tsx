@@ -303,6 +303,10 @@ export default function App() {
   // first-time visitors see both options instead of being dropped into the
   // deck picker.
   const [view, setView] = useState<"home" | "play">("home");
+  // Hand display layout — "fan" (default, Arcade prototype direction) or
+  // "grid". User toggles via a chip in the hand header. The current
+  // selected hand card lifts above its neighbors in fan mode.
+  const [handLayout, setHandLayout] = useState<"fan" | "grid">("fan");
   // Deck Doctor — null when closed. Optional `initial` pre-populates the
   // input pane (e.g. "open with this saved deck selected"). The doctor is
   // rendered as a modal at the App root so it can open from either view
@@ -2216,17 +2220,62 @@ export default function App() {
             onInPlayClick={(p) => onInPlayClick(p, "opp")}
             onViewDiscard={(pid) => setDiscardViewer(pid)}
           />
-          <div className="stadium-slot" aria-label="Stadium zone">
-            {state.stadium ? (
-              <div className="stadium-card-wrap" title={state.stadium.card.text ?? ""}>
-                <CardView card={state.stadium.card} />
-                <div className="stadium-caption">
-                  Stadium · {state.players[state.stadium.controller].name}
+          {/* ── Divider band — turn disc + slot counters on the left,
+              Stadium chip on the right. Replaces the old standalone
+              .stadium-slot. Mirrors the Claude Design prototype's
+              "divider band" between opponent and player sections. ── */}
+          <div className="divider-band" aria-label="Turn + stadium">
+            <div className="divider-band-left">
+              <div
+                className="turn-disc"
+                aria-label={`Turn ${state.turn}`}
+                title={`Turn ${state.turn}`}
+              >
+                T{state.turn}
+              </div>
+              <div className="divider-band-meta">
+                <div className="divider-band-label">
+                  {state.activePlayer === viewingPlayer ? "Your turn" : `${state.players[state.activePlayer].name}'s turn`}
+                </div>
+                <div className="divider-band-slots">
+                  <SlotChip
+                    label="E"
+                    used={me.energyAttachedThisTurn ? 1 : 0}
+                    max={1}
+                  />
+                  <SlotChip
+                    label="Sup"
+                    used={me.supporterPlayedThisTurn ? 1 : 0}
+                    max={1}
+                  />
+                  <SlotChip
+                    label="Retreat"
+                    used={me.retreatedThisTurn ? 1 : 0}
+                    max={1}
+                  />
                 </div>
               </div>
-            ) : (
-              <div className="stadium-empty">Stadium</div>
-            )}
+            </div>
+            <div className="divider-band-right">
+              {state.stadium ? (
+                <button
+                  type="button"
+                  className="stadium-chip"
+                  title={state.stadium.card.text ?? ""}
+                  onClick={() => setZoomCard(state.stadium!.card)}
+                  aria-label={`Stadium: ${state.stadium.card.name}`}
+                >
+                  <span className="stadium-chip-swatch" />
+                  <span className="stadium-chip-name">{state.stadium.card.name}</span>
+                  <span className="stadium-chip-by muted">· {state.players[state.stadium.controller].name}</span>
+                </button>
+              ) : (
+                <div className="stadium-chip stadium-chip-empty">
+                  <span className="stadium-chip-swatch empty" />
+                  <span>No Stadium</span>
+                </div>
+              )}
+            </div>
           </div>
           <PlayerSide
             state={state}
@@ -2250,12 +2299,32 @@ export default function App() {
       </div>
 
       {/* -------------------- My hand ----------------------------- */}
-      <div className="my-hand">
+      <div className="my-hand" data-layout={handLayout}>
         <div className="my-hand-header">
           <span className="title">Hand ({me.hand.length})</span>
           <span className="hint">
             Basic → bench · Evo/Energy + target · Trainer plays
           </span>
+          <div className="hand-layout-toggle" role="group" aria-label="Hand layout">
+            <button
+              type="button"
+              className={handLayout === "fan" ? "active" : ""}
+              onClick={() => setHandLayout("fan")}
+              aria-pressed={handLayout === "fan"}
+              title="Fanned layout"
+            >
+              Fan
+            </button>
+            <button
+              type="button"
+              className={handLayout === "grid" ? "active" : ""}
+              onClick={() => setHandLayout("grid")}
+              aria-pressed={handLayout === "grid"}
+              title="Grid layout"
+            >
+              Grid
+            </button>
+          </div>
         </div>
         <div className="my-hand-row">
           {me.hand.map((c: Card, i) => {
@@ -2267,18 +2336,41 @@ export default function App() {
               !entry.ok &&
               myTurn &&
               !preGameOpen;
+            // Per-card fan offset — slight rotation + lift the selected
+            // card. Computed inline so CSS doesn't need to know the
+            // hand length. Rotation centers on the middle card; outer
+            // cards tilt more.
+            const center = (me.hand.length - 1) / 2;
+            const offset = i - center;
+            const isSelected = selected?.kind === "hand" && selected.index === i;
+            const fanRot = offset * 3.5;
+            const fanLift = isSelected ? -18 : Math.abs(offset) * 1.5;
+            const fanStyle =
+              handLayout === "fan"
+                ? ({
+                    transform: `translateY(${fanLift}px) rotate(${fanRot}deg)`,
+                    transformOrigin: "bottom center",
+                    transition: "transform 160ms cubic-bezier(.2,.7,.3,1)",
+                    zIndex: isSelected ? 50 : i,
+                  } as React.CSSProperties)
+                : undefined;
             return (
-              <CardView
+              <div
                 key={`${c.id}-${i}`}
-                card={c}
-                selected={selected?.kind === "hand" && selected.index === i}
-                onClick={() => onHandClick(i)}
-                onDragStart={(ev) => onHandDragStart(i, ev)}
-                onDragMove={onHandDragMove}
-                onDragEnd={onHandDragEnd}
-                dragging={dragging?.handIndex === i}
-                illegalReason={showIllegal ? entry.reason : undefined}
-              />
+                className="my-hand-card"
+                style={fanStyle}
+              >
+                <CardView
+                  card={c}
+                  selected={isSelected}
+                  onClick={() => onHandClick(i)}
+                  onDragStart={(ev) => onHandDragStart(i, ev)}
+                  onDragMove={onHandDragMove}
+                  onDragEnd={onHandDragEnd}
+                  dragging={dragging?.handIndex === i}
+                  illegalReason={showIllegal ? entry.reason : undefined}
+                />
+              </div>
             );
           })}
           {me.hand.length === 0 && <span className="muted">—</span>}
@@ -2372,6 +2464,20 @@ export default function App() {
         onEndTurn={onEndTurn}
         onActivateAbility={onActivateAbility}
         onHoverAbilitySource={setHoveredAbilitySource}
+        selectedInPlay={(() => {
+          // Derive the ActionBar selection chip from the existing
+          // `selected` state. Mapped only for OWN-side selections so
+          // the chip reflects "what will my buttons act on" — clicking
+          // an opponent card for targeting is a different flow.
+          if (!selected || selected.kind !== "inPlay") return null;
+          if (me.active?.instanceId === selected.instanceId) {
+            return { location: "active" as const, name: me.active.card.name };
+          }
+          const benchHit = me.bench.find((p) => p.instanceId === selected.instanceId);
+          if (benchHit) return { location: "bench" as const, name: benchHit.card.name };
+          return null;
+        })()}
+        onClearInPlaySelection={() => setSelected(null)}
         pendingTargetActive={
           state.pendingInPlayTarget?.player === viewingPlayer ||
           state.pendingRareCandyChoice?.player === viewingPlayer
@@ -2655,11 +2761,31 @@ function PlayerSide({
       </div>
 
       {/* Bench row sits between the back row and the Active spot, matching a
-          real playmat where the bench is "directly in front of the player". */}
-      <div className="bench-slot">{benchRow}</div>
+          real playmat where the bench is "directly in front of the player".
+          Wrapped in a framed surface with a labelled pill ("Your bench · 3/5")
+          per the Claude Design prototype — visually separates the bench from
+          surrounding chrome. */}
+      <div className="bench-slot">
+        <div className="bench-frame">
+          <div className="bench-frame-label">
+            {isMe ? "Your bench" : "Opp bench"} · {player.bench.length} / 5
+          </div>
+          {benchRow}
+        </div>
+      </div>
 
-      {/* Active row sits adjacent to the shared Stadium in the center. */}
-      <div className="active-row">{activeSlot}</div>
+      {/* Active row sits adjacent to the shared Stadium in the center.
+          The "side label tab" is the prototype's Your Active / Opponent
+          Active pill overlay — a tiny chip pinned above the active card
+          so the orientation is unambiguous on mobile. */}
+      <div className="active-row">
+        <div className="active-frame" data-side={isMe ? "me" : "opp"}>
+          <div className="active-frame-label">
+            {isMe ? "Your Active" : "Opponent Active"}
+          </div>
+          {activeSlot}
+        </div>
+      </div>
     </div>
   );
 }
@@ -2779,6 +2905,13 @@ interface ActionBarProps {
   onHoverAbilitySource?: (instanceId: string | null) => void;
   pendingTargetActive?: boolean;
   onCancelTarget?: () => void;
+  /** The in-play Pokémon currently selected by the player (active or
+   * a bench card). Drives the "ACTIVE · X / BENCH · Y" header strip
+   * from the Claude Design prototype's context-aware ActionBar.
+   * undefined when nothing is selected → header collapses. */
+  selectedInPlay?: { location: "active" | "bench"; name: string } | null;
+  /** Clear the bench selection (called by the "back to Active" chip). */
+  onClearInPlaySelection?: () => void;
 }
 
 function ActionBarInner({
@@ -2801,9 +2934,27 @@ function ActionBarInner({
   onCancelTarget,
   retreatBlockedReason,
   endTurnBlockedReason,
+  selectedInPlay,
+  onClearInPlaySelection,
 }: ActionBarProps) {
   return (
     <div className="action-bar">
+      {selectedInPlay && (
+        <div className="action-bar-selection" data-location={selectedInPlay.location}>
+          <span className="selection-tag">{selectedInPlay.location === "active" ? "ACTIVE" : "BENCH"}</span>
+          <span className="selection-name">{selectedInPlay.name}</span>
+          {selectedInPlay.location === "bench" && onClearInPlaySelection && (
+            <button
+              type="button"
+              className="selection-clear"
+              onClick={onClearInPlaySelection}
+              title="Back to Active"
+            >
+              ← Active
+            </button>
+          )}
+        </div>
+      )}
       <div className="status-line">
         {promoteOpen ? (
           <span className="promote-msg">
@@ -2874,6 +3025,20 @@ function ActionBarInner({
               const tooltip = a.blockedReason
                 ? `${a.blockedReason}\n\nCost: ${a.cost.join(" / ") || "—"}\nBase: ${baseText}`
                 : `Cost: ${a.cost.join(" / ") || "—"}\nBase: ${baseText}\nExpected vs current defender: ${a.estimated}`;
+              // Cost glyphs — one colored pip per energy type in the
+              // attack's cost. Mirrors the Claude Design prototype's
+              // attack-button shape (name on top, damage chip + cost
+              // pips on the bottom row).
+              const costPips = a.cost.flatMap((c, ci) =>
+                Array.from({ length: 1 }).map((_, j) => (
+                  <span
+                    key={`${ci}-${j}`}
+                    className="atk-cost-pip"
+                    data-type={c}
+                    aria-label={c}
+                  />
+                )),
+              );
               return (
                 <button
                   key={a.index}
@@ -2881,9 +3046,17 @@ function ActionBarInner({
                   disabled={disabledForReason}
                   onClick={() => onAttack(a.index)}
                   title={tooltip}
+                  data-primary={a.payable && !disabledForReason ? "true" : undefined}
                 >
                   <span className="atk-name">{a.name}</span>
-                  <span className="atk-damage">{baseText}{preview}</span>
+                  <span className="atk-row">
+                    <span className="atk-damage-chip">{baseText}{preview}</span>
+                    {costPips.length > 0 && (
+                      <span className="atk-cost-pips" aria-label="Energy cost">
+                        {costPips}
+                      </span>
+                    )}
+                  </span>
                 </button>
               );
             })}
@@ -3529,6 +3702,35 @@ function MulliganNoticeModal({
 // ---------------------------------------------------------------------------
 //  DeckBuilderModal lives in ./ui/DeckBuilderModal.tsx — lazy-loaded above.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+//  SlotChip — per-turn resource counter used in the divider band
+// ---------------------------------------------------------------------------
+//
+// Renders "Energy 0/1" / "Sup 1/1" / "Retreat 0/1" as a small inline pill.
+// Greens-out when there's slot remaining; reds-out when exhausted. Mirrors
+// the Claude Design prototype's SlotChip primitive — the at-a-glance "did I
+// already attach energy this turn?" signal.
+
+function SlotChip({
+  label,
+  used,
+  max,
+}: {
+  label: string;
+  used: number;
+  max: number;
+}) {
+  const exhausted = used >= max;
+  return (
+    <span className="slot-chip" data-exhausted={exhausted}>
+      <span className="slot-chip-label">{label}</span>
+      <span className="slot-chip-count">
+        {used}/{max}
+      </span>
+    </span>
+  );
+}
 
 // ---------------------------------------------------------------------------
 //  Home view — landing screen with Play / Deck Doctor / Replays entry points

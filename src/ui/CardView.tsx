@@ -741,6 +741,12 @@ export function PokemonInPlayView({
   const effMax = maxHp ?? p.card.hp;
   const currentHp = Math.max(0, effMax - p.damage);
   const longPress = useCardLongPress(p.card);
+  // Ability gem — a small cyan diamond pinned to the card when it has an
+  // unused once-per-turn ability. From the Claude Design prototype: lets
+  // the player see at a glance which in-play cards have a tappable ability
+  // they haven't burned yet this turn.
+  const hasAbilities = (p.card.abilities?.length ?? 0) > 0;
+  const showAbilityGem = hasAbilities && !p.abilityUsedThisTurn;
   return (
     <div
       className={cls}
@@ -763,6 +769,13 @@ export function PokemonInPlayView({
         <div className="hp-badge" data-low={currentHp <= effMax * 0.3 ? "true" : undefined}>
           {currentHp}/{effMax}
         </div>
+        {showAbilityGem && (
+          <div
+            className="ability-gem"
+            aria-label="Has unused ability"
+            title="Has an unused ability — click to use"
+          />
+        )}
         {p.statuses.length > 0 && (
           <div className="statuses">
             {p.statuses.map((s) => (

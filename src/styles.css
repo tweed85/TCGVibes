@@ -3919,3 +3919,353 @@ button.primary:hover {
   50%      { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5),
                           0 0 0 8px rgba(255, 45, 142, 0); }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Claude Design Arcade — structural overrides (Stage 1+)
+   Layout patterns from handoff/README.md ported into the existing
+   PlayerSide markup. CSS-only where possible to keep blast radius low.
+   ──────────────────────────────────────────────────────────────────────── */
+
+/* Framed bench surface — wraps the bench-row with a panel + pill label
+   ("Your bench · 3 / 5") that visually separates it from the surrounding
+   chrome. The label is an absolute-positioned chip overlapping the top
+   border. */
+.bench-frame {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 12px 10px 10px;
+}
+.bench-frame-label {
+  position: absolute;
+  top: -9px;
+  left: 14px;
+  background: var(--info);
+  color: #0a1116;
+  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  z-index: 1;
+}
+/* Opponent bench label tints danger-red to match the side-distinction
+   convention from the prototype. */
+.side.opponent .bench-frame-label {
+  background: var(--danger);
+  color: #fff;
+}
+
+/* Active card "frame" — wraps active card with a side label tab pinned
+   above it. The active card itself is unchanged; the wrapper adds the
+   "Your Active" / "Opponent Active" chip. */
+.active-frame {
+  position: relative;
+  display: inline-block;
+}
+.active-frame-label {
+  position: absolute;
+  top: -9px;
+  left: 14px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  z-index: 1;
+}
+.active-frame[data-side="opp"] .active-frame-label {
+  background: var(--danger);
+}
+
+/* Divider band — sits between opponent and player sides. Collapses the
+   old standalone stadium-slot + turn banner into a single strip with:
+     left:  T-disc + "Your turn" label + slot chips (E/Sup/Retreat)
+     right: Stadium chip (button if a stadium is in play). */
+.divider-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: linear-gradient(180deg, var(--surface-sunken, #0e0530) 0%, var(--bg) 100%);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin: 4px 0;
+}
+.divider-band-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.divider-band-right {
+  flex: 0 0 auto;
+}
+.turn-disc {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #1f1408;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: -0.01em;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.15);
+  flex: 0 0 auto;
+}
+.divider-band-meta { min-width: 0; }
+.divider-band-label {
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.1;
+  letter-spacing: -0.005em;
+}
+.divider-band-slots {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.slot-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface-sunken, var(--panel-2));
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.slot-chip[data-exhausted="true"] { color: var(--muted); opacity: 0.7; }
+.slot-chip-label { color: var(--muted); letter-spacing: 0.04em; }
+.slot-chip-count { color: var(--ok); }
+.slot-chip[data-exhausted="true"] .slot-chip-count { color: var(--danger); }
+
+/* Stadium chip — compact pill button that shows the current stadium
+   name + controller. Click opens the card zoom. */
+.stadium-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-raised, var(--panel-2));
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 5px 12px 5px 6px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.stadium-chip:hover { background: var(--panel-3); }
+.stadium-chip-empty {
+  cursor: default;
+  opacity: 0.6;
+}
+.stadium-chip-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: repeating-linear-gradient(45deg, var(--accent) 0px, var(--accent) 3px, var(--purple) 3px, var(--purple) 6px);
+  flex: 0 0 auto;
+}
+.stadium-chip-swatch.empty {
+  background: var(--surface-sunken, var(--panel));
+  border: 1px dashed var(--border);
+}
+.stadium-chip-name { font-weight: 600; }
+.stadium-chip-by { font-size: 10px; }
+
+/* Ability gem — small cyan diamond pinned to the top-right of an in-play
+   card that has an unused once-per-turn ability. Prototype's
+   "at-a-glance: tappable ability available" cue. */
+.in-play-overlay .ability-gem {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 12px;
+  height: 12px;
+  background: var(--info, #00e0ff);
+  border-radius: 2px;
+  transform: rotate(45deg);
+  box-shadow:
+    0 0 0 1.5px rgba(0, 0, 0, 0.45),
+    0 0 8px rgba(0, 224, 255, 0.7);
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* Bigger primary attack button (Arcade prototype) — damage chip + cost
+   glyphs on the secondary row. Builds on the existing .attack-btn so the
+   markup change is minimal. */
+.action-bar .attack-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 52px;
+  min-width: 140px;
+  padding: 8px 12px;
+  text-align: left;
+}
+.action-bar .attack-btn[data-primary="true"] {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.15),
+    0 4px 14px rgba(255, 45, 142, 0.45);
+}
+.action-bar .attack-btn[data-primary="true"]:hover {
+  background: var(--accent-hi);
+}
+.action-bar .attack-btn .atk-name {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.action-bar .attack-btn .atk-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.atk-damage-chip {
+  display: inline-block;
+  background: rgba(0, 0, 0, 0.3);
+  color: #fff;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.action-bar .attack-btn[data-primary="true"] .atk-damage-chip {
+  background: rgba(0, 0, 0, 0.25);
+}
+.atk-cost-pips {
+  display: inline-flex;
+  gap: 3px;
+}
+.atk-cost-pip {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--energy-colorless);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+.atk-cost-pip[data-type="Fire"]      { background: var(--energy-fire); }
+.atk-cost-pip[data-type="Water"]     { background: var(--energy-water); }
+.atk-cost-pip[data-type="Grass"]     { background: var(--energy-grass); }
+.atk-cost-pip[data-type="Lightning"] { background: var(--energy-lightning); }
+.atk-cost-pip[data-type="Psychic"]   { background: var(--energy-psychic); }
+.atk-cost-pip[data-type="Fighting"]  { background: var(--energy-fighting); }
+.atk-cost-pip[data-type="Darkness"]  { background: var(--energy-darkness); }
+.atk-cost-pip[data-type="Metal"]     { background: var(--energy-metal); }
+.atk-cost-pip[data-type="Dragon"]    { background: var(--energy-dragon); }
+.atk-cost-pip[data-type="Fairy"]     { background: var(--energy-fairy); }
+.atk-cost-pip[data-type="Colorless"] { background: var(--energy-colorless); }
+
+/* Action bar selection header — appears when the player has selected
+   one of their in-play Pokémon. Tells them what the buttons below act
+   on, with a "back to Active" chip on bench selections. */
+.action-bar-selection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.action-bar-selection .selection-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.action-bar-selection[data-location="bench"] .selection-tag {
+  color: var(--info);
+}
+.action-bar-selection .selection-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.action-bar-selection .selection-clear {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.action-bar-selection .selection-clear:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+/* Hand layout toggle (Fan / Grid) — small pill group in the hand
+   header. The fan transform is applied per-card inline so CSS doesn't
+   need to know the hand length. */
+.hand-layout-toggle {
+  display: inline-flex;
+  margin-left: auto;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.hand-layout-toggle button {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  padding: 3px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+}
+.hand-layout-toggle button.active {
+  background: var(--accent);
+  color: #fff;
+}
+.hand-layout-toggle button:hover:not(.active) {
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+/* Fan layout — give the hand row vertical breathing room so rotated
+   cards don't clip. Grid layout keeps the existing flex behavior. */
+.my-hand[data-layout="fan"] .my-hand-row {
+  padding-top: 18px;
+  padding-bottom: 8px;
+  align-items: flex-end;
+}
+.my-hand[data-layout="fan"] .my-hand-card {
+  display: inline-block;
+}
+.my-hand-card { flex: 0 0 auto; }
