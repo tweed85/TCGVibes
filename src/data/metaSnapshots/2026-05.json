@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "id": "2026-05-online-standard",
+  "id": "2026-05-online-plus-offline-topcut",
   "format": "Standard",
   "region": "global",
   "quality": "research",
   "usableForGrades": true,
-  "generatedAt": "2026-05-09T22:07:12.419534Z",
-  "coversFrom": "2026-04-20T19:00:00.000Z",
+  "generatedAt": "2026-05-19T00:00:00.000Z",
+  "coversFrom": "2026-04-20T00:00:00.000Z",
   "coversThrough": "2026-05-17T23:59:59.000Z",
   "sources": [
     "https://docs.limitlesstcg.com/developer/games",
@@ -42,13 +42,13 @@
     "https://labs.limitlesstcg.com/0063/standings"
   ],
   "minPlayerCount": 32,
-  "methodology": "Pulled the 20 largest STANDARD-format Limitless tournaments held between 2026-04-20 and 2026-05-07 (≥32 players each). For each, fetched /details, /standings, and /pairings via the unauthenticated public API. Player archetype assignments came from Limitless's auto-categorizer (deck.id field on each standing); we mapped those ids onto the project's Archetype taxonomy (src/engine/aiArchetype.ts). 'Dragapult ex' lists with no Blaziken signature are mapped to dragapult-dudunsparce since the May-2026 field's bare 'dragapult-ex' is overwhelmingly the Mateusz Łaszkiewicz Prague-championship anti-Crustle build. Decks Limitless couldn't categorize, plus archetypes outside the project's taxonomy (zoroark, raging-bolt, slowking, ogerpon-box, magnezone, blissey, etc.) are aggregated under the synthetic 'unknown' bucket. Matchup matrix is compiled from /pairings — both directions of every non-bye match are counted, ties are split (0.5 win each), and Wilson 95% CIs use a continuity-corrected interval. Bo1 and Bo3 matches are counted independently; the matrix doesn't separate them. Stock lists exclude archetypes with <5 observed decklists. Decks contributed by online and offline events are summed; the field is online-heavy (Limitless's primary data feed is its own online play platform). Limitations: (1) no real Regional results landed in this 30-day window, so the field is 100% online events; (2) Limitless's auto-categorizer mislabels rare edge builds, inflating the unknown bucket; (3) Bo1 swiss results are noisier than Bo3 — interpret matchup CIs accordingly.",
-  "unknownArchetypeShare": 0.4344,
-  "matchupCoverageShare": 0.5656,
-  "onlineShare": 0.2182,
-  "offlineShare": 0.7818,
-  "bo1Share": 0.9917,
-  "bo3Share": 0.0083,
+  "methodology": "Aggregates 26 STANDARD-format tournaments held 2026-04-20 through 2026-05-17: 20 online Limitless events (≥150 players each, decklists + pairings open) plus 6 major offline events — Prague Regional (1,370p), Korean League S4 (397p), Champions League Aichi (8,000p), LA Regional (1,849p), Utrecht Regional (2,150p), Campinas Regional (1,725p). For ONLINE events: archetype assignments come from Limitless's auto-categorizer (deck.id per standing), mapped onto the project's Archetype taxonomy in src/engine/aiArchetype.ts; pairing data drives both matchupMatrix[] (Wilson-95 CIs, tie-aware win rate) and stockLists[] (inclusion / mode-count distributions). For OFFLINE events: pairings are not exposed by the Limitless tournament endpoint (decklist-visibility=open but pairings remain closed), so matchupMatrix[] and stockLists[] reflect ONLY online data. metaShare folds offline events in via a sqrt(playerCount)-weighted top-cut composition proxy: each offline event contributes sqrt(N)*20 to a synthetic sampleSize pool, distributed across its top-cut archetype breakdown. sqrt weighting was chosen to keep the 8,000-player Champions League Aichi from overwhelming the 397-player Korean League while still reflecting its higher absolute field weight (Aichi weight 1789 vs Korean 399). Unmapped offline archetypes — Dragapult variants without a Blaziken / Dudunsparce partner, N's Zoroark, Lopunny / Dudunsparce, Honchkrow / Porygon2, Hydrapple, Raging Bolt / Ogerpon, Ogerpon Box / Meganium / Wellspring variants, Greninja, Slowking, Zoroark, Dusknoir-partnered Starmie / Dragapult builds, Lucario-Mega / Hariyama, Clefairy / Ogerpon — all route to the 'unknown' bucket per the schema's Archetype | 'unknown' constraint. tournaments[].topFinishes carries the precise natural-language archetypeLabel for every offline top finish so the Field tab can surface the actual variant the pilot played. Limitations: (1) matchupMatrix cells are online-only; offline regional pairings are closed and cannot be folded in — see coverageNotes. (2) stockLists reflect only online auto-categorized decklists; offline top-cut decklists are linked per finish but not parsed into card-level inclusion stats. (3) The unknown bucket is ~57% of metaShare, largely because half-a-dozen high-share offline archetypes (Dragapult / Dusknoir, N's Zoroark, Raging Bolt / Ogerpon, Hydrapple, etc.) are not in the engine's Archetype union; Deck Doctor's grading will fall back to 'insufficient-data' when a user's hero matches one of these.",
+  "unknownArchetypeShare": 0.5726,
+  "matchupCoverageShare": 1.0,
+  "onlineShare": 0.4381,
+  "offlineShare": 0.5619,
+  "bo1Share": 0.7,
+  "bo3Share": 0.3,
   "tournaments": [
     {
       "id": "utrecht-regional-2026",
@@ -918,9 +918,9 @@
   "archetypes": [
     {
       "id": "dragapult-dudunsparce",
-      "metaShare": 0.1443,
+      "metaShare": 0.1234,
       "conversionRate": 0.0353,
-      "sampleSize": 624,
+      "sampleSize": 1218,
       "confidence": "high",
       "mainAttackerCards": [
         {
@@ -937,9 +937,9 @@
     },
     {
       "id": "dragapult-blaziken",
-      "metaShare": 0.0643,
+      "metaShare": 0.0634,
       "conversionRate": 0.054,
-      "sampleSize": 278,
+      "sampleSize": 626,
       "confidence": "high",
       "mainAttackerCards": [
         {
@@ -951,9 +951,9 @@
     },
     {
       "id": "festival-leads",
-      "metaShare": 0.0502,
+      "metaShare": 0.0272,
       "conversionRate": 0.0691,
-      "sampleSize": 217,
+      "sampleSize": 269,
       "confidence": "high",
       "mainAttackerCards": [
         {
@@ -970,9 +970,9 @@
     },
     {
       "id": "rocket-mewtwo",
-      "metaShare": 0.0458,
+      "metaShare": 0.0436,
       "conversionRate": 0.0354,
-      "sampleSize": 198,
+      "sampleSize": 430,
       "confidence": "high",
       "mainAttackerCards": [
         {
@@ -984,9 +984,9 @@
     },
     {
       "id": "cynthia-garchomp",
-      "metaShare": 0.044,
+      "metaShare": 0.0349,
       "conversionRate": 0.0684,
-      "sampleSize": 190,
+      "sampleSize": 344,
       "confidence": "high",
       "mainAttackerCards": [
         {
@@ -998,7 +998,7 @@
     },
     {
       "id": "lucario-ex",
-      "metaShare": 0.0437,
+      "metaShare": 0.0192,
       "conversionRate": 0.0317,
       "sampleSize": 189,
       "confidence": "high",
@@ -1012,9 +1012,9 @@
     },
     {
       "id": "alakazam",
-      "metaShare": 0.0423,
+      "metaShare": 0.0344,
       "conversionRate": 0.0437,
-      "sampleSize": 183,
+      "sampleSize": 339,
       "confidence": "high",
       "mainAttackerCards": [
         {
@@ -1026,9 +1026,9 @@
     },
     {
       "id": "mega-starmie-froslass",
-      "metaShare": 0.034,
+      "metaShare": 0.0202,
       "conversionRate": 0.0408,
-      "sampleSize": 147,
+      "sampleSize": 199,
       "confidence": "high",
       "mainAttackerCards": [
         {
@@ -1045,7 +1045,7 @@
     },
     {
       "id": "arboliva",
-      "metaShare": 0.0324,
+      "metaShare": 0.0142,
       "conversionRate": 0.0714,
       "sampleSize": 140,
       "confidence": "high",
@@ -1064,9 +1064,9 @@
     },
     {
       "id": "crustle",
-      "metaShare": 0.0289,
+      "metaShare": 0.0267,
       "conversionRate": 0.04,
-      "sampleSize": 125,
+      "sampleSize": 264,
       "confidence": "high",
       "mainAttackerCards": [
         {
@@ -1083,9 +1083,9 @@
     },
     {
       "id": "grimmsnarl-froslass",
-      "metaShare": 0.0236,
+      "metaShare": 0.015,
       "conversionRate": 0.0196,
-      "sampleSize": 102,
+      "sampleSize": 148,
       "confidence": "high",
       "mainAttackerCards": [
         {
@@ -1097,10 +1097,10 @@
     },
     {
       "id": "hops-trevenant",
-      "metaShare": 0.012,
+      "metaShare": 0.0053,
       "conversionRate": 0.0385,
       "sampleSize": 52,
-      "confidence": "high",
+      "confidence": "medium",
       "mainAttackerCards": [
         {
           "cardName": "Hop's Trevenant",
@@ -9256,18 +9256,23 @@
   "coverageNotes": [
     {
       "category": "unmappedArchetypes",
-      "count": 1878,
-      "detail": "n-zoroark=212, raging-bolt-ogerpon=164, other=153, rockets-honchkrow=120, okidogi-barbaracle=94, slowking-scr=83, lopunny-dudunsparce=74, starmie-dusknoir=62, greninja-ex=60, clefairy-ogerpon=58, ogerpon-box=57, stevens-metagross=52, diancie-dusknoir=44, ursaluna-lunatone=43, flareon-noctowl=41"
+      "count": 5651,
+      "detail": "Online auto-categorizer (1878 player-events): n-zoroark=212, raging-bolt-ogerpon=164, other=153, rockets-honchkrow=120, okidogi-barbaracle=94, slowking-scr=83, lopunny-dudunsparce=74, starmie-dusknoir=62, greninja-ex=60, clefairy-ogerpon=58, ogerpon-box=57, stevens-metagross=52, diancie-dusknoir=44, ursaluna-lunatone=43, flareon-noctowl=41. Offline top-cut (sqrt-weighted contribution): Dragapult (no partner), N's Zoroark, Dragapult/Dusknoir, Lopunny/Dudunsparce, Lopunny-Mega/Dudunsparce, Hydrapple, Honchkrow/Porygon2, Ogerpon variants (Meganium/Wellspring/Box), Raging Bolt/Ogerpon, Greninja, Slowking, Zoroark, Mewtwo/Spidops (when distinct from rocket-mewtwo signature), Lucario-Mega/Hariyama, Starmie/Dusknoir, Clefairy/Ogerpon, Starmie-Mega/Froslass (when not matching mega-starmie-froslass signature)."
     },
     {
       "category": "missingApiKey",
       "count": 1,
-      "detail": "LIMITLESS_API_KEY not set — used unauthenticated /tournaments, /standings, /pairings (decklist-categorization endpoint /games/PTCG/decks rejected without key, but decklists were available per-tournament)."
+      "detail": "LIMITLESS_API_KEY not set — used unauthenticated /tournaments, /standings, /pairings (decklist-categorization endpoint /games/PTCG/decks rejected without key, but per-tournament decklists were available)."
     },
     {
-      "category": "offlineNotInAggregate",
-      "count": 15491,
-      "detail": "Offline regional + Champions League top-cut data added to tournaments[].topFinishes for Field tab surfacing, but archetypes[].metaShare, matchupMatrix[], stockLists[], and techCoverage[] aggregates still reflect ONLY the 20 online Limitless events. Regenerate via the snapshot agent to fold offline pairings into aggregates."
+      "category": "closedDecklists",
+      "count": 6,
+      "detail": "Offline Regional + Champions League pairings are not exposed via Limitless's public endpoints — only the per-event decklist pages + top-cut standings are open. matchupMatrix[] therefore reflects pairings from the 20 online events only; offline events contribute to metaShare (via sqrt(playerCount)-weighted top-cut composition) and topFinishes only. Affected events: Prague Regional (1370p), Korean League S4 (397p), Aichi (8000p), LA Regional (1849p), Utrecht (2150p), Campinas (1725p)."
+    },
+    {
+      "category": "archetypeOnlyDecklists",
+      "count": 6,
+      "detail": "Offline top-cut decklists are linked per topFinishes entry (decklistUrl on Limitless) but stockLists[] does not yet parse offline decklist HTML. inclusionRate / modeCount / averageCount in stockLists[] reflect online auto-categorized decklists only. Future refresh can fetch each linked decklistUrl to extend stockLists with offline samples for the 12 mapped archetypes."
     }
   ]
 }
