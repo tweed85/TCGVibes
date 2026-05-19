@@ -455,7 +455,16 @@ function useCardGesture(
         const dy = ev.clientY - startPos.current.y;
         const dist2 = dx * dx + dy * dy;
         // Drag threshold (8px) — promote to drag if caller opted in.
-        if (dist2 > 64 && optsRef.current.onDragStart) {
+        // Touch input is excluded: dragging-from-hand on a phone is
+        // fiddly (the finger covers the card + drop targets are too
+        // small for accurate aim), so touch users fall through to the
+        // tap-then-pick-target click flow. 2-in-1 devices still get
+        // drag for the mouse — pointerType is per-event, not global.
+        if (
+          dist2 > 64 &&
+          optsRef.current.onDragStart &&
+          ev.pointerType !== "touch"
+        ) {
           dragMode.current = true;
           clearTimer();
           // Pointer capture keeps move/up firing on this element even when

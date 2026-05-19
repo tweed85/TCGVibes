@@ -214,7 +214,12 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
   `.drag-ghost` portal in `document.body` follows the pointer.
   `<img draggable={false}>` + `pointer-events: none` on the hand-card
   image prevents the browser's native HTML5 drag from swallowing
-  pointermove. Click flow stays as fallback for accessibility.
+  pointermove. Click flow stays as fallback for accessibility. **Touch
+  input is excluded from the drag path** (gated on `pointerType !==
+  "touch"` at the drag-promote check): on phones the finger covers the
+  card + drop targets, so touch users fall through to the click flow.
+  2-in-1 devices still get drag for the mouse — pointerType is
+  per-event, not global.
 - **Pause states.** Terminal promotes (attack/checkup KO) set
   `pendingPromote` + `phase = "promoteActive"` and queue
   `onPromoteResolved` (`endTurn` / `passTurn` / `secondAttack`).
