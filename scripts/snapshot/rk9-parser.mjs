@@ -105,14 +105,28 @@ export function extractInlineRound(staticHtml, pod, rnd) {
 // Standings parser. RK9 embeds standings inside the
 // `<div id="P{pod}-standings" role="tabpanel">` panel as a simple
 // `<br>`-delimited list: " 1. First Last [CC] <br> 2. ..."
-// Take everything from the panel-open marker to end-of-input — the row
-// regex (`N. NAME [CC]`) is specific enough that any trailing markup
-// gets harmlessly ignored.
+// Slice from the target panel's opener to the next standings panel's
+// opener (different pod, e.g. P2 -> P9 -> P0 for Masters / Senior /
+// Junior). The order of pods in the HTML is not predictable; iterate
+// to find the closest next `id="P{N}-standings"` to clip the panel.
 export function parseStandings(html, pod = 2) {
   const startRx = new RegExp(`id="P${pod}-standings"[^>]*>`);
   const m = html.match(startRx);
   if (!m || m.index === undefined) return [];
-  const panel = html.slice(m.index + m[0].length);
+  const startIdx = m.index + m[0].length;
+  // Find the nearest NEXT standings panel of a different pod.
+  let stopIdx = html.length;
+  const stopRx = /id="P\d+-standings"[^>]*>/g;
+  stopRx.lastIndex = startIdx;
+  for (const sm of html.matchAll(stopRx)) {
+    if (sm.index === undefined) continue;
+    if (sm.index <= startIdx) continue;
+    // Skip if it's our own panel (shouldn't happen, but defensive).
+    if (sm[0].includes(`P${pod}-standings`)) continue;
+    stopIdx = sm.index;
+    break;
+  }
+  const panel = html.slice(startIdx, stopIdx);
   const rowRx = /(\d+)\.\s*([^<\[]+?)\s*\[([A-Z]{2})\]/g;
   const out = [];
   for (const r of panel.matchAll(rowRx)) {

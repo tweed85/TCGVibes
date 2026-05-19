@@ -18,7 +18,8 @@
     "ai:session-start": "node scripts/ai-coordinator/session-start.mjs",
     "ai:dashboard": "node scripts/ai-coordinator/dashboard.mjs",
     "ai:dashboard:watch": "node scripts/ai-coordinator/dashboard.mjs --watch",
-    "snapshot:fetch-rk9": "node scripts/snapshot/fetch-rk9-pairings.mjs"
+    "snapshot:fetch-rk9": "node scripts/snapshot/fetch-rk9-pairings.mjs",
+    "snapshot:aggregate-rk9": "node scripts/snapshot/aggregate-rk9-matchups.mjs"
   },
   "dependencies": {
     "@capacitor/core": "^8.3.1",
