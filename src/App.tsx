@@ -300,7 +300,10 @@ export default function App() {
   // Deck Doctor — null when closed. Optional `initial` pre-populates the
   // input pane (e.g. "open with this saved deck selected").
   const [doctorOpen, setDoctorOpen] = useState<
-    null | { initial?: { source: "preset" | "saved"; id: string } }
+    null | {
+      initial?: { source: "preset" | "saved"; id: string };
+      layout?: "modal" | "workspace";
+    }
   >(null);
   // Replay history modal — open/close only.
   const [replayHistoryOpen, setReplayHistoryOpen] = useState(false);
@@ -704,6 +707,7 @@ export default function App() {
       if (discardViewer) { setDiscardViewer(null); ev.preventDefault(); return; }
       if (importOpen) { setImportOpen(false); ev.preventDefault(); return; }
       if (buildOpen) { setBuildOpen(false); ev.preventDefault(); return; }
+      if (doctorOpen) { setDoctorOpen(null); ev.preventDefault(); return; }
       return;
     }
     if (
@@ -714,6 +718,7 @@ export default function App() {
       discardViewer ||
       importOpen ||
       buildOpen ||
+      doctorOpen ||
       state.phase === "coinFlip" ||
       (state.phase === "setup" && !state.players[viewingPlayer].setupComplete) ||
       state.phase === "promoteActive" ||
@@ -737,6 +742,7 @@ export default function App() {
     if (discardViewer) { setDiscardViewer(null); return; }
     if (importOpen) { setImportOpen(false); return; }
     if (buildOpen) { setBuildOpen(false); return; }
+    if (doctorOpen) { setDoctorOpen(null); return; }
   };
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => keyHandlerRef.current(ev);
@@ -1720,6 +1726,14 @@ export default function App() {
               <option value="slow">Slow</option>
             </select>
           </label>
+          <button
+            className="primary deck-doctor-launch"
+            onClick={() => setDoctorOpen({ layout: "workspace" })}
+            aria-label="Open Deck Doctor"
+            title="Analyze lists and browse the current competitive field."
+          >
+            Deck Doctor
+          </button>
           <details className="game-menu">
             <summary>Game</summary>
             <div className="game-menu-panel">
@@ -1728,7 +1742,7 @@ export default function App() {
               <button className="secondary" onClick={() => setPreGameOpen(true)}>Change Decks</button>
               <button
                 className="secondary"
-                onClick={() => setDoctorOpen({})}
+                onClick={() => setDoctorOpen({ layout: "workspace" })}
                 aria-label="Deck Doctor"
                 title="Analyze a deck — does NOT have to be the deck you're playing."
               >
@@ -1804,7 +1818,7 @@ export default function App() {
           }}
           onOpenImport={() => setImportOpen(true)}
           onOpenBuild={() => setBuildOpen(true)}
-          onOpenDoctor={() => setDoctorOpen({})}
+          onOpenDoctor={() => setDoctorOpen({ layout: "workspace" })}
           onStart={() => {
             onReset();
             setPreGameOpen(false);
@@ -2052,6 +2066,7 @@ export default function App() {
           <DeckDoctorModal
             imports={imports}
             initial={doctorOpen.initial}
+            layout={doctorOpen.layout}
             onClose={() => setDoctorOpen(null)}
           />
         </Suspense>
@@ -3543,6 +3558,19 @@ function PreGameModal({
           or bring your own via <b>Import Deck</b>. You'll choose Active and
           Bench Pokémon in the next step.
         </p>
+        <button
+          type="button"
+          className="pregame-doctor-feature"
+          onClick={onOpenDoctor}
+          aria-label="Open competitive analysis workspace"
+        >
+          <span>
+            <strong>Deck Doctor</strong>
+            Tune a list, compare it to recent tournament stock lists, and check
+            the current competitive field without starting a game.
+          </span>
+          <b>Open</b>
+        </button>
         <div className="pregame-grid">
           <div className="pregame-slot">
             <div className="pregame-slot-label">{gameMode === "local" ? "Player 1" : "You"}</div>
@@ -3593,7 +3621,7 @@ function PreGameModal({
           )}
           <button onClick={onOpenBuild}>Build Deck…</button>
           <button onClick={onOpenImport}>Import Deck…</button>
-          <button onClick={onOpenDoctor} aria-label="Deck Doctor">
+          <button className="doctor-secondary" onClick={onOpenDoctor} aria-label="Deck Doctor">
             Deck Doctor…
           </button>
         </div>

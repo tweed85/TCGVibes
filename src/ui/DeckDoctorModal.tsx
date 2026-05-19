@@ -1,4 +1,4 @@
-// Deck Doctor — standalone modal.
+// Deck Doctor — standalone modal / workspace.
 //
 // Three input modes (preset / saved / paste). The analyzer + composeReport
 // produce a structured DoctorReport; the modal renders Game plan +
@@ -53,6 +53,7 @@ interface SavedDeck {
 export interface DeckDoctorModalProps {
   imports: SavedDeck[];
   initial?: { source: "preset" | "saved"; id: string };
+  layout?: "modal" | "workspace";
   onClose: () => void;
 }
 
@@ -64,7 +65,7 @@ const ctx: DoctorContext = {
 };
 
 type InputMode = "preset" | "saved" | "paste";
-type ReportTab = "structure" | "matchups" | "meta";
+type ReportTab = "structure" | "matchups" | "meta" | "field";
 
 const SEVERITY_META: Record<Severity, { label: string; icon: string }> = {
   error: { label: "Problems", icon: "⛔" },
@@ -87,6 +88,7 @@ function formatPct(n: number): string {
 export default function DeckDoctorModal({
   imports,
   initial,
+  layout = "modal",
   onClose,
 }: DeckDoctorModalProps) {
   const presets = useMemo(() => validatedDeckSpecs(), []);
@@ -243,13 +245,18 @@ export default function DeckDoctorModal({
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
-        className="modal deck-doctor-modal"
+        className={`modal deck-doctor-modal${layout === "workspace" ? " deck-doctor-workspace" : ""}`}
         role="dialog"
         aria-label="Deck Doctor"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
-          <h2>Deck Doctor</h2>
+          <div>
+            <h2>Deck Doctor</h2>
+            <div className="dd-title-subtitle">
+              Competitive list analysis, matchup checks, and recent Limitless-informed meta context.
+            </div>
+          </div>
           <button className="modal-close" onClick={onClose} aria-label="Close">
             ×
           </button>
@@ -369,12 +376,12 @@ export default function DeckDoctorModal({
             )}
           </div>
 
-          {/* ---- Report pane (3 tabs: Structure / Matchups / Meta) ---- */}
+          {/* ---- Report pane (Structure / Matchups / Meta / Field) ---- */}
           <div className="dd-report">
             {analysis ? (
               <>
                 <div className="dd-tabs" role="tablist" aria-label="Report sections">
-                  {(["structure", "matchups", "meta"] as ReportTab[]).map((t) => (
+                  {(["structure", "matchups", "meta", "field"] as ReportTab[]).map((t) => (
                     <button
                       key={t}
                       type="button"
@@ -384,7 +391,13 @@ export default function DeckDoctorModal({
                       className={tab === t ? "active" : ""}
                       onClick={() => setTab(t)}
                     >
-                      {t === "structure" ? "Structure" : t === "matchups" ? "Matchups" : "Meta"}
+                      {t === "structure"
+                        ? "Structure"
+                        : t === "matchups"
+                          ? "Matchups"
+                          : t === "meta"
+                            ? "Meta"
+                            : "Field"}
                     </button>
                   ))}
                 </div>
@@ -426,15 +439,60 @@ export default function DeckDoctorModal({
                     <MetaTab meta={meta} snapshot={snapshot} />
                   </div>
                 )}
+                {tab === "field" && (
+                  <div
+                    id="dd-tabpanel-field"
+                    role="tabpanel"
+                    aria-label="Field"
+                  >
+                    <FieldOverviewTab snapshot={snapshot} />
+                  </div>
+                )}
               </>
             ) : (
-              <div className="muted dd-empty">
-                Select a source and click Analyze to see feedback.
-              </div>
+              <DeckDoctorHome snapshot={snapshot} />
             )}
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function DeckDoctorHome({ snapshot }: { snapshot: MetaSnapshot | null }) {
+  return (
+    <>
+      <section className="dd-hero-panel" aria-label="Deck Doctor overview">
+        <div>
+          <h3>Build for the field, not just the goldfish.</h3>
+          <p>
+            Paste a PTCGL or Limitless decklist, compare against recent stock lists,
+            check matchup pressure, and see which archetypes and attackers are shaping
+            the current Standard field.
+          </p>
+        </div>
+        <div className="dd-hero-metrics" aria-label="Meta snapshot summary">
+          <MetricPill label="Snapshot" value={snapshot?.id ?? "None"} />
+          <MetricPill
+            label="Events"
+            value={snapshot ? String(snapshot.tournaments.length) : "0"}
+          />
+          <MetricPill
+            label="Known field"
+            value={snapshot ? formatPct(1 - snapshot.unknownArchetypeShare) : "—"}
+          />
+        </div>
+      </section>
+      <FieldOverviewTab snapshot={snapshot} />
+    </>
+  );
+}
+
+function MetricPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="dd-metric-pill">
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   );
 }
@@ -748,6 +806,126 @@ function MetaTab({ meta, snapshot }: MetaTabProps) {
           )}
         </>
       )}
+    </section>
+  );
+}
+
+function FieldOverviewTab({ snapshot }: { snapshot: MetaSnapshot | null }) {
+  if (!snapshot) {
+    return (
+      <section className="dd-section" aria-label="Field overview">
+        <div className="muted dd-empty">
+          No research-quality meta snapshot is available yet. Deck structure and
+          static matchup checks still work once you analyze a list.
+        </div>
+      </section>
+    );
+  }
+
+  const topArchetypes = [...snapshot.archetypes]
+    .filter((a) => a.id !== "unknown")
+    .sort((a, b) => b.metaShare - a.metaShare)
+    .slice(0, 8);
+  const recentTournaments = [...snapshot.tournaments]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 5);
+  const cardSignals = snapshot.stockLists
+    .flatMap((list) =>
+      list.cards
+        .filter((c) => c.role === "core" || c.role === "tech" || c.role === "spicy")
+        .map((c) => ({ ...c, archetype: list.archetype, decksObserved: list.decksObserved })),
+    )
+    .sort((a, b) => {
+      const roleScore = (role: string) => (role === "core" ? 3 : role === "tech" ? 2 : 1);
+      return roleScore(b.role) - roleScore(a.role) || b.inclusionRate - a.inclusionRate;
+    })
+    .slice(0, 10);
+
+  return (
+    <section className="dd-section dd-field-overview" aria-label="Field overview">
+      <header className="dd-game-plan-header">
+        <h3>Competitive field</h3>
+        <span className="dd-archetype">
+          {snapshot.id} · through {snapshot.coversThrough.slice(0, 10)}
+        </span>
+      </header>
+
+      <div className="dd-overview-grid">
+        <div className="dd-overview-card">
+          <h4>Most played archetypes</h4>
+          <div className="dd-bar-list">
+            {topArchetypes.map((a) => (
+              <div key={a.id} className="dd-bar-row">
+                <div className="dd-bar-label">
+                  <span>{a.id}</span>
+                  <strong>{formatPct(a.metaShare)}</strong>
+                </div>
+                <div className="dd-bar-track">
+                  <div
+                    className="dd-bar-fill"
+                    style={{ width: `${Math.max(4, a.metaShare * 100)}%` }}
+                  />
+                </div>
+                <div className="dd-mini-note">
+                  sample {a.sampleSize} · {a.confidence}
+                  {a.mainAttackerCards.length > 0
+                    ? ` · ${a.mainAttackerCards.map((c) => c.cardName).join(", ")}`
+                    : ""}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="dd-overview-card">
+          <h4>Recent tournament inputs</h4>
+          <div className="dd-tournament-list">
+            {recentTournaments.map((t) => (
+              <a
+                key={t.id}
+                href={t.sourceUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="dd-tournament-row"
+              >
+                <span>{t.name}</span>
+                <strong>{t.playerCount} players</strong>
+                <em>
+                  {new Date(t.date).toLocaleDateString()} · {t.online ? "online" : "offline"} ·{" "}
+                  {t.decklistVisibility}
+                </em>
+              </a>
+            ))}
+          </div>
+        </div>
+
+        <div className="dd-overview-card dd-overview-wide">
+          <h4>Stock and tech signals</h4>
+          <div className="dd-signal-grid">
+            {cardSignals.map((c, i) => (
+              <div key={`${c.archetype}-${c.cardName}-${i}`} className="dd-signal">
+                <span>{c.role}</span>
+                <strong>{c.cardName}</strong>
+                <em>
+                  {c.archetype} · {formatPct(c.inclusionRate)} inclusion · mode {c.modeCount}
+                  {c.modeCountDecks ? ` in ${c.modeCountDecks} lists` : ""}
+                </em>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <details className="dd-methodology">
+        <summary>Limitless coverage notes</summary>
+        <p>{snapshot.methodology}</p>
+        <ul>
+          <li>Online: {formatPct(snapshot.onlineShare)} · offline: {formatPct(snapshot.offlineShare)}</li>
+          <li>Bo1: {formatPct(snapshot.bo1Share)} · Bo3: {formatPct(snapshot.bo3Share)}</li>
+          <li>Known archetype share: {formatPct(1 - snapshot.unknownArchetypeShare)}</li>
+          <li>Matchup coverage: {formatPct(snapshot.matchupCoverageShare)}</li>
+        </ul>
+      </details>
     </section>
   );
 }
