@@ -63,7 +63,7 @@ import {
   importDecklist,
   type DeckListEntry,
 } from "./data/decklistParser";
-import { CardView, FaceDownCard, PokemonInPlayView, setCardZoomHandler } from "./ui/CardView";
+import { CardView, PokemonInPlayView, setCardZoomHandler } from "./ui/CardView";
 // Deck Builder lives in its own module so it can be code-split out of the
 // first-page bundle — ~400 KB gzipped savings since the builder isn't needed
 // until the user opens the pre-game modal's Build Deck button.
@@ -1674,6 +1674,12 @@ export default function App() {
           onPlay={() => setView("play")}
           onDoctor={() => setDoctorOpen({})}
           onOpenReplays={() => setReplayHistoryOpen(true)}
+          onOpenBuild={() => {
+            // Build modal lives inside the play viewport; switching first
+            // ensures the modal renders against the right backdrop.
+            setView("play");
+            setBuildOpen(true);
+          }}
           datasetFormat={datasetFormat}
           datasetAsOf={datasetAsOf}
         />
@@ -2178,19 +2184,42 @@ export default function App() {
         }
       />
 
+      {/* Opponent meta strip — compact Prizes/Deck/Discard chips +
+          name+hand chip on the right, per Claude Design spec. Replaces
+          the older opp-strip that surfaced the mini-hand prominently.
+          The mini-hand is still rendered (revealed via openHands) but
+          collapsed below the chip row so the chrome reads at a glance. */}
       <div className="opp-strip">
-        <span className="label">{opp.name}</span>
-        <span className="badge">Hand {opp.hand.length}</span>
-        <div className={`mini-hand${openHands ? " open" : ""}`}>
-          {opp.hand.length === 0 && <span className="muted">—</span>}
-          {opp.hand.map((c, i) =>
-            openHands ? (
-              <CardView key={`opp-${c.id}-${i}`} card={c} />
-            ) : (
-              <FaceDownCard key={`opp-${i}`} />
-            ),
-          )}
+        <div className="opp-meta-chips">
+          <MetaChip
+            label="Prizes"
+            count={opp.prizes.length}
+            color="danger"
+          />
+          <MetaChip label="Deck" count={opp.deck.length} />
+          <MetaChip
+            label="Discard"
+            count={opp.discard.length}
+            onClick={() => setDiscardViewer(opp.id)}
+          />
         </div>
+        <div className="opp-strip-right">
+          <span className="opp-name-chip">
+            <span className="opp-name-dot" />
+            <span className="opp-name-label">{opp.name}</span>
+            <span className="opp-name-hand muted">
+              {opp.hand.length} hand
+            </span>
+          </span>
+        </div>
+        {openHands && (
+          <div className="mini-hand open">
+            {opp.hand.length === 0 && <span className="muted">—</span>}
+            {opp.hand.map((c, i) => (
+              <CardView key={`opp-${c.id}-${i}`} card={c} />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ------------------------- Board -------------------------- */}
@@ -2300,6 +2329,7 @@ export default function App() {
 
       {/* -------------------- My hand ----------------------------- */}
       <div className="my-hand" data-layout={handLayout}>
+        <div className="my-hand-grip" aria-hidden="true" />
         <div className="my-hand-header">
           <span className="title">Hand ({me.hand.length})</span>
           <span className="hint">
@@ -2471,10 +2501,20 @@ export default function App() {
           // an opponent card for targeting is a different flow.
           if (!selected || selected.kind !== "inPlay") return null;
           if (me.active?.instanceId === selected.instanceId) {
-            return { location: "active" as const, name: me.active.card.name };
+            return {
+              location: "active" as const,
+              name: me.active.card.name,
+              instanceId: me.active.instanceId,
+            };
           }
           const benchHit = me.bench.find((p) => p.instanceId === selected.instanceId);
-          if (benchHit) return { location: "bench" as const, name: benchHit.card.name };
+          if (benchHit) {
+            return {
+              location: "bench" as const,
+              name: benchHit.card.name,
+              instanceId: benchHit.instanceId,
+            };
+          }
           return null;
         })()}
         onClearInPlaySelection={() => setSelected(null)}
@@ -2909,7 +2949,7 @@ interface ActionBarProps {
    * a bench card). Drives the "ACTIVE · X / BENCH · Y" header strip
    * from the Claude Design prototype's context-aware ActionBar.
    * undefined when nothing is selected → header collapses. */
-  selectedInPlay?: { location: "active" | "bench"; name: string } | null;
+  selectedInPlay?: { location: "active" | "bench"; name: string; instanceId: string } | null;
   /** Clear the bench selection (called by the "back to Active" chip). */
   onClearInPlaySelection?: () => void;
 }
@@ -2983,30 +3023,97 @@ function ActionBarInner({
       </div>
 
       <div className="action-groups">
-        {activatable.length > 0 && (
-          <div className="group abilities">
-            <div className="group-label">Abilities</div>
-            <div className="group-buttons">
-              {activatable.map(({ p, a, i, location }) => (
-                <button
-                  key={`${p.instanceId}-${i}`}
-                  className="ability"
-                  disabled={!myTurn || promoteOpen}
-                  onClick={() => onActivateAbility(p, i)}
-                  onMouseEnter={() => onHoverAbilitySource?.(p.instanceId)}
-                  onMouseLeave={() => onHoverAbilitySource?.(null)}
-                  onFocus={() => onHoverAbilitySource?.(p.instanceId)}
-                  onBlur={() => onHoverAbilitySource?.(null)}
-                  title={`${a.name} — ${p.card.name} (${location})\n\n${a.text}`}
-                >
-                  <span className="ability-name">{a.name}</span>
-                  <span className="ability-source">{p.card.name} · {location}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Context-aware filtering per Claude Design spec:
+            - Active selected (default): show ALL activatable abilities,
+              Attacks group, Retreat group.
+            - Bench selected: show ONLY abilities of that bench card,
+              hide Attacks + Retreat (the bench card can't attack as a
+              bench Pokémon), surface a single "Promote" button that
+              swaps the selected bench card with the active. */}
+        {(() => {
+          const benchSelected =
+            selectedInPlay?.location === "bench" ? selectedInPlay : null;
+          // Filter abilities when on bench-mode; pass through otherwise.
+          const visibleAbilities = benchSelected
+            ? activatable.filter((x) => x.p.instanceId === benchSelected.instanceId)
+            : activatable;
+          // Render ability group when there's something to show, OR when
+          // bench-mode + no ability → render the "No usable ability"
+          // placeholder per the spec.
+          const benchModeNoAbility =
+            !!benchSelected && visibleAbilities.length === 0;
+          return (
+            <>
+              {visibleAbilities.length > 0 && (
+                <div className={`group abilities${benchSelected ? " bench-primary" : ""}`}>
+                  <div className="group-label">{benchSelected ? "Bench ability" : "Abilities"}</div>
+                  <div className="group-buttons">
+                    {visibleAbilities.map(({ p, a, i, location }) => (
+                      <button
+                        key={`${p.instanceId}-${i}`}
+                        className={`ability${benchSelected ? " primary" : ""}`}
+                        disabled={!myTurn || promoteOpen}
+                        onClick={() => onActivateAbility(p, i)}
+                        onMouseEnter={() => onHoverAbilitySource?.(p.instanceId)}
+                        onMouseLeave={() => onHoverAbilitySource?.(null)}
+                        onFocus={() => onHoverAbilitySource?.(p.instanceId)}
+                        onBlur={() => onHoverAbilitySource?.(null)}
+                        title={`${a.name} — ${p.card.name} (${location})\n\n${a.text}`}
+                      >
+                        <span className="ability-name">{a.name}</span>
+                        <span className="ability-source">{p.card.name} · {location}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {benchModeNoAbility && (
+                <div className="group abilities">
+                  <div className="group-label">Bench ability</div>
+                  <div className="group-buttons">
+                    <div className="no-ability-placeholder">
+                      No usable ability on this bench Pokémon.
+                    </div>
+                  </div>
+                </div>
+              )}
+              {benchSelected && (
+                <div className="group">
+                  <div className="group-label">Promote</div>
+                  <div className="group-buttons">
+                    {(() => {
+                      const benchIdx = me.bench.findIndex(
+                        (p) => p.instanceId === benchSelected.instanceId,
+                      );
+                      if (benchIdx < 0) return null;
+                      const disabled =
+                        retreatBlockedReason !== undefined
+                          ? retreatBlockedReason !== null
+                          : !myTurn || promoteOpen || me.retreatedThisTurn;
+                      return (
+                        <button
+                          className="primary"
+                          disabled={disabled}
+                          onClick={() => onRetreat(benchIdx)}
+                          title={
+                            retreatBlockedReason ??
+                            `Promote ${benchSelected.name} — swaps with the active. Costs the retreat slot.`
+                          }
+                        >
+                          Promote {benchSelected.name}
+                        </button>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
 
+        {/* Attacks + Retreat groups — hidden when bench is selected
+            (the bench-mode placeholder + Promote button take their place). */}
+        {selectedInPlay?.location !== "bench" && (
         <div className="group">
           <div className="group-label">Attacks</div>
           <div className="group-buttons">
@@ -3062,7 +3169,9 @@ function ActionBarInner({
             })}
           </div>
         </div>
+        )}
 
+        {selectedInPlay?.location !== "bench" && (
         <div className="group">
           <div className="group-label">Retreat to</div>
           <div className="group-buttons">
@@ -3090,6 +3199,7 @@ function ActionBarInner({
             })}
           </div>
         </div>
+        )}
 
         {stadiumButton}
 
@@ -3733,19 +3843,108 @@ function SlotChip({
 }
 
 // ---------------------------------------------------------------------------
+//  MetaChip — compact Prizes/Deck/Discard chip used in the opponent meta row
+// ---------------------------------------------------------------------------
+//
+// A pair of stacked rectangles (illusion of a card stack) + count + label.
+// Matches the Claude Design prototype's `<Stack>` primitive used in both the
+// opponent meta row at the top and the player meta row above the hand. The
+// optional `color` token tints the swatch — danger for prizes, accent for
+// deck, neutral for discard.
+
+function MetaChip({
+  label,
+  count,
+  color,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  color?: "danger" | "accent" | "info";
+  onClick?: () => void;
+}) {
+  const interactive = !!onClick;
+  return (
+    <button
+      type="button"
+      className="meta-chip"
+      data-color={color}
+      onClick={onClick}
+      disabled={!interactive}
+      aria-label={`${label}: ${count}`}
+    >
+      <span className="meta-chip-swatch">
+        <span className="meta-chip-swatch-back" />
+        <span className="meta-chip-swatch-front" />
+      </span>
+      <span className="meta-chip-body">
+        <span className="meta-chip-count">{count}</span>
+        <span className="meta-chip-label">{label}</span>
+      </span>
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
 //  Home view — landing screen with Play / Deck Doctor / Replays entry points
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+//  BottomNav — persistent 5-tab nav on the home + play screens
+// ---------------------------------------------------------------------------
+//
+// Mobile-first navigation strip per the Claude Design spec. Each tab is a
+// flex-column (icon + label). Tapping a tab either switches the top-level
+// view (home / play) OR opens the relevant modal (build / doctor / match).
+// Renders fixed to the bottom on mobile; floats inline on desktop.
+
+interface BottomNavProps {
+  active: "home" | "play" | "build" | "doctor" | "match";
+  onHome: () => void;
+  onPlay: () => void;
+  onBuild: () => void;
+  onDoctor: () => void;
+  onMatch: () => void;
+}
+
+function BottomNav({ active, onHome, onPlay, onBuild, onDoctor, onMatch }: BottomNavProps) {
+  const tabs: Array<{ id: BottomNavProps["active"]; label: string; icon: string; onClick: () => void }> = [
+    { id: "home", label: "Home", icon: "⌂", onClick: onHome },
+    { id: "play", label: "Play", icon: "▶", onClick: onPlay },
+    { id: "build", label: "Build", icon: "+", onClick: onBuild },
+    { id: "doctor", label: "Doctor", icon: "🩺", onClick: onDoctor },
+    { id: "match", label: "Match", icon: "⌛", onClick: onMatch },
+  ];
+  return (
+    <nav className="bottom-nav" aria-label="Primary navigation">
+      {tabs.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          className={`bottom-nav-tab${active === t.id ? " active" : ""}`}
+          onClick={t.onClick}
+          aria-current={active === t.id ? "page" : undefined}
+        >
+          <span className="bottom-nav-icon" aria-hidden="true">{t.icon}</span>
+          <span className="bottom-nav-label">{t.label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
 
 function HomeView({
   onPlay,
   onDoctor,
   onOpenReplays,
+  onOpenBuild,
   datasetFormat,
   datasetAsOf,
 }: {
   onPlay: () => void;
   onDoctor: () => void;
   onOpenReplays: () => void;
+  onOpenBuild: () => void;
   datasetFormat: string;
   datasetAsOf: string;
 }) {
@@ -3786,6 +3985,14 @@ function HomeView({
           Past replays
         </button>
       </div>
+      <BottomNav
+        active="home"
+        onHome={() => {}}
+        onPlay={onPlay}
+        onBuild={onOpenBuild}
+        onDoctor={onDoctor}
+        onMatch={onOpenReplays}
+      />
     </div>
   );
 }

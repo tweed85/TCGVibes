@@ -4269,3 +4269,217 @@ button.primary:hover {
   display: inline-block;
 }
 .my-hand-card { flex: 0 0 auto; }
+
+/* Hand drawer grip indicator — small pill at the top of the drawer that
+   tells the user this surface is interactive (per spec). Decorative only;
+   the drawer doesn't actually swipe to expand yet but the affordance is
+   in place. */
+.my-hand-grip {
+  width: 40px;
+  height: 4px;
+  background: var(--border-strong);
+  border-radius: 999px;
+  margin: 4px auto 6px;
+  opacity: 0.6;
+}
+
+/* Bottom nav — persistent 5-tab nav per Claude Design spec. Fixed
+   to the bottom of the viewport on mobile, inline at the bottom of
+   the home view on desktop. */
+.bottom-nav {
+  display: flex;
+  gap: 4px;
+  padding: 8px calc(12px + env(safe-area-inset-right, 0px))
+          calc(12px + env(safe-area-inset-bottom, 0px))
+          calc(12px + env(safe-area-inset-left, 0px));
+  background: rgba(28, 13, 68, 0.92);
+  border-top: 1px solid var(--border-strong);
+  backdrop-filter: blur(10px);
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+}
+.home-view .bottom-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+}
+.bottom-nav-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 54px;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  padding: 6px 4px;
+}
+.bottom-nav-tab:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+}
+.bottom-nav-tab.active {
+  color: var(--accent);
+  background: rgba(255, 45, 142, 0.12);
+}
+.bottom-nav-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+.bottom-nav-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* Bench-mode ability button — when the user has a bench card selected,
+   that card's ability is promoted to a single primary button (cyan glow
+   per Claude Design spec). When no ability exists, the placeholder
+   text takes its place. */
+.action-bar .group.abilities.bench-primary .group-label { color: var(--info); }
+.action-bar .ability.primary {
+  background: var(--info);
+  color: #0a1116;
+  border: none;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.15),
+    0 4px 14px rgba(0, 224, 255, 0.45);
+  min-height: 52px;
+  min-width: 200px;
+  padding: 8px 14px;
+}
+.action-bar .ability.primary:hover { filter: brightness(1.1); }
+.action-bar .ability.primary .ability-name {
+  font-weight: 700;
+  font-size: 13px;
+  color: #0a1116;
+}
+.action-bar .ability.primary .ability-source {
+  font-size: 10px;
+  color: rgba(10, 17, 22, 0.7);
+}
+.no-ability-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-sunken, var(--panel));
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 10px 18px;
+  font-size: 11.5px;
+  color: var(--muted);
+  min-height: 52px;
+}
+
+/* Opponent meta-row chip layout — replaces the old text-only opp-strip. */
+.opp-strip .opp-meta-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.opp-strip .opp-strip-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+}
+.opp-name-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-sunken, var(--panel-2));
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+.opp-name-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--danger);
+  display: inline-block;
+}
+.opp-name-hand { font-size: 10px; }
+
+/* MetaChip — stacked-cards swatch + count + label. Used for the
+   opponent meta row (top of board). Pure visual primitive, no engine
+   coupling. */
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px 4px 6px;
+  background: var(--surface-sunken, var(--panel-2));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text);
+  font: inherit;
+}
+.meta-chip:disabled {
+  cursor: default;
+  opacity: 1; /* not actually disabled-disabled; just non-clickable */
+}
+.meta-chip:not(:disabled):hover {
+  background: var(--panel-3);
+}
+.meta-chip-swatch {
+  position: relative;
+  width: 14px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+.meta-chip-swatch-back,
+.meta-chip-swatch-front {
+  position: absolute;
+  inset: 0;
+  border-radius: 2px;
+  background: var(--purple);
+}
+.meta-chip-swatch-back {
+  opacity: 0.45;
+  transform: translate(2px, 2px);
+}
+.meta-chip[data-color="danger"] .meta-chip-swatch-back,
+.meta-chip[data-color="danger"] .meta-chip-swatch-front {
+  background: var(--danger);
+}
+.meta-chip[data-color="accent"] .meta-chip-swatch-back,
+.meta-chip[data-color="accent"] .meta-chip-swatch-front {
+  background: var(--accent);
+}
+.meta-chip[data-color="info"] .meta-chip-swatch-back,
+.meta-chip[data-color="info"] .meta-chip-swatch-front {
+  background: var(--info);
+}
+.meta-chip-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1;
+}
+.meta-chip-count {
+  font-weight: 700;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.meta-chip-label {
+  font-size: 9px;
+  color: var(--muted);
+  margin-top: 1px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
