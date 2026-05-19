@@ -1,30 +1,24 @@
-// Smoke test for the Deck Doctor entry path. Verifies a user can:
-//   • open the app cold,
-//   • click "Deck Doctor" inside the pre-game dialog,
-//   • analyze a curated preset,
-//   • see the Game plan section render,
-//   • close the doctor — and the pre-game dialog stays visible (no game
-//     started).
+// Smoke test for the Deck Doctor entry paths. Verifies a user can reach
+// the doctor from BOTH:
+//   • the new home-view "Deck Doctor" tile (promoted to a peer entry
+//     point alongside Play),
+//   • the legacy pre-game-modal "Deck Doctor" button (kept for users
+//     mid-play-flow who realize they want to analyze first).
 //
 // Selectors are role-based so they don't break when CSS / class names
-// change. The Deck Doctor button click is scoped to the pre-game dialog
-// because (per the wiring) a second "Deck Doctor" button also lives in
-// the in-game Game menu — we want the standalone path here.
+// change.
 
 import { test, expect } from "@playwright/test";
 
 const APP_URL = "http://localhost:5173/";
 
 test.describe("Deck Doctor — standalone entry path", () => {
-  test("open cold, analyze a preset, close, pre-game still visible", async ({ page }) => {
+  test("home tile → analyze preset → close back to home", async ({ page }) => {
     await page.goto(APP_URL);
 
-    // The pre-game modal renders on cold start with aria-label="Choose decks".
-    const preGame = page.getByRole("dialog", { name: /choose decks/i });
-    await expect(preGame).toBeVisible();
-
-    // Open the doctor from the pre-game options row.
-    await preGame.getByRole("button", { name: /deck doctor/i }).click();
+    // Home view is the first thing rendered.
+    await expect(page.getByRole("heading", { name: /PandaBananasTCG/i })).toBeVisible();
+    await page.getByRole("button", { name: /open deck doctor/i }).click();
 
     const doctor = page.getByRole("dialog", { name: /deck doctor/i });
     await expect(doctor).toBeVisible();
@@ -36,17 +30,52 @@ test.describe("Deck Doctor — standalone entry path", () => {
     // default; aria-label on the <section> identifies it.
     await expect(doctor.getByRole("region", { name: /game plan/i })).toBeVisible();
 
-    // Close the doctor; pre-game dialog must still be visible (no game
-    // was started — Deck Doctor is purely standalone).
+    // Close the doctor; home view must still be visible (no game was
+    // started — Deck Doctor is purely standalone).
+    await doctor.getByRole("button", { name: /^close$/i }).click();
+    await expect(page.getByRole("heading", { name: /PandaBananasTCG/i })).toBeVisible();
+  });
+
+  test("pre-game modal → Doctor button (legacy entry) still works", async ({ page }) => {
+    await page.goto(APP_URL);
+    // Navigate home → play so we land on the pre-game modal.
+    await page.getByRole("button", { name: /play a game/i }).click();
+    const preGame = page.getByRole("dialog", { name: /choose decks/i });
+    await expect(preGame).toBeVisible();
+    await preGame.getByRole("button", { name: /deck doctor/i }).click();
+    const doctor = page.getByRole("dialog", { name: /deck doctor/i });
+    await expect(doctor).toBeVisible();
     await doctor.getByRole("button", { name: /^close$/i }).click();
     await expect(preGame).toBeVisible();
+  });
+
+  test("Browse matchups tab opens without analyzing a deck", async ({ page }) => {
+    // Verifies the user can hop straight into matchup-matrix browsing
+    // without going through the deck-analysis path first (the original
+    // discoverability gap that promoted Matchups to a top-level tab).
+    await page.goto(APP_URL);
+    await page.getByRole("button", { name: /open deck doctor/i }).click();
+    const doctor = page.getByRole("dialog", { name: /deck doctor/i });
+    await expect(doctor).toBeVisible();
+
+    // The two top-level tabs should be present BEFORE any analysis runs.
+    const analyzeTab = doctor.getByRole("tab", { name: /analyze a deck/i });
+    const browseTab = doctor.getByRole("tab", { name: /browse matchups/i });
+    await expect(analyzeTab).toBeVisible();
+    await expect(browseTab).toBeVisible();
+
+    // Switch to Browse — hero/villain pickers + the field data section
+    // should render without requiring an Analyze click first.
+    await browseTab.click();
+    await expect(doctor.getByRole("heading", { name: /matchup browser/i })).toBeVisible();
+    await expect(doctor.getByRole("combobox", { name: /hero archetype/i })).toBeVisible();
+    await expect(doctor.getByRole("combobox", { name: /villain archetype/i })).toBeVisible();
   });
 
   test("Meta tab renders the snapshot grade banner without leaking fixtures", async ({ page }) => {
     await page.goto(APP_URL);
 
-    const preGame = page.getByRole("dialog", { name: /choose decks/i });
-    await preGame.getByRole("button", { name: /deck doctor/i }).click();
+    await page.getByRole("button", { name: /open deck doctor/i }).click();
     const doctor = page.getByRole("dialog", { name: /deck doctor/i });
 
     await doctor.getByRole("button", { name: /^analyze$/i }).click();

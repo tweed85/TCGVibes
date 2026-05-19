@@ -87,6 +87,108 @@ button, select, input, [role="button"] {
 /*  App shell                                                                 */
 /* -------------------------------------------------------------------------- */
 
+/* ---- Home view (landing screen — no game state required) ---------------- */
+
+.home-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 24px;
+  gap: 32px;
+  background: linear-gradient(180deg, #0c1424 0%, #050810 100%);
+}
+.home-header {
+  text-align: center;
+}
+.home-header h1 {
+  font-size: 42px;
+  margin: 0 0 8px 0;
+  color: #f4ecd6;
+  letter-spacing: -0.5px;
+}
+.home-dataset {
+  font-size: 11px;
+}
+.home-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 360px));
+  gap: 20px;
+  max-width: 760px;
+  width: 100%;
+}
+.home-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 24px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.home-tile:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+.home-tile:active {
+  transform: translateY(1px);
+}
+.home-tile-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+.home-tile-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #f4ecd6;
+}
+.home-tile-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0.75;
+}
+.home-secondary {
+  display: flex;
+  gap: 16px;
+}
+.link-button {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 4px 8px;
+}
+.link-button:hover {
+  color: rgba(255, 255, 255, 0.9);
+}
+.home-link {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f4ecd6;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 8px;
+  margin-right: 8px;
+  border-radius: 4px;
+  line-height: 1;
+}
+.home-link:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.header .brand {
+  flex-direction: row !important;
+  align-items: center;
+}
+
 .app {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto auto;
@@ -2613,6 +2715,252 @@ button.secondary:hover:not(:disabled) {
   .deck-doctor-body {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---- Deck Doctor: top-level tabs (Analyze / Browse) -------------------- */
+.dd-toptabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid var(--panel-3);
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+.dd-toptabs button {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.dd-toptabs button.active {
+  background: var(--panel-2);
+  color: var(--accent);
+  border-color: var(--panel-3);
+  border-bottom: 2px solid var(--accent);
+  margin-bottom: -2px;
+}
+.dd-toptabs button:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dd-browse {
+  padding: 0 4px;
+}
+.dd-browse-header h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.dd-browse-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 12px;
+  background: var(--panel-2);
+  border-radius: 6px;
+}
+
+/* ---- Deck Doctor: Field data / drill-down ------------------------------- */
+.dd-field-data {
+  margin-top: 12px;
+  border-top: 1px solid var(--panel-3);
+  padding-top: 12px;
+}
+.dd-field-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.dd-field-header h4 {
+  margin: 0;
+  font-size: 13px;
+}
+.dd-field-stats {
+  font-size: 12px;
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+.dd-field-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.dd-pairing-list {
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid var(--panel-3);
+  border-radius: 4px;
+  background: var(--panel);
+}
+.dd-pairing-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.dd-pairing-table thead {
+  position: sticky;
+  top: 0;
+  background: var(--panel-2);
+  z-index: 1;
+}
+.dd-pairing-table th {
+  text-align: left;
+  padding: 4px 6px;
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 1px solid var(--panel-3);
+  white-space: nowrap;
+}
+.dd-pairing-table td {
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--panel-3);
+  vertical-align: top;
+}
+.dd-pairing-table tr.dd-pairing-upset {
+  background: rgba(245, 158, 11, 0.06);
+}
+.dd-pairing-event {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.dd-pairing-vs {
+  color: var(--muted);
+  text-align: center;
+  font-size: 10px;
+}
+.dd-pairing-player {
+  white-space: nowrap;
+}
+.dd-pairing-result {
+  text-align: center;
+  font-weight: 600;
+}
+.dd-result-win { color: #7cd180; }
+.dd-result-loss { color: #e57373; }
+.dd-result-tie { color: var(--muted); }
+.dd-pairing-upset-flag {
+  color: #f59e0b;
+  margin-left: 2px;
+}
+.dd-pairing-decks {
+  font-size: 10px;
+  white-space: nowrap;
+}
+.dd-pairing-decks a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.dd-pairing-decks a:hover { text-decoration: underline; }
+
+/* ---- Inline decklist expansion (per-pairing-row) ----------------------- */
+.dd-pairing-toggle {
+  text-align: center;
+  width: 24px;
+}
+.dd-pairing-toggle button {
+  font-size: 10px;
+  padding: 0 4px;
+  color: var(--muted);
+}
+.dd-pairing-toggle button:hover { color: var(--accent); }
+.dd-pairing-decklists-row td {
+  background: rgba(255, 255, 255, 0.02);
+  padding: 12px;
+  border-bottom: 1px solid var(--panel-3);
+}
+.dd-pairing-decklists {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 768px) {
+  .dd-pairing-decklists {
+    grid-template-columns: 1fr;
+  }
+}
+.dd-deck-column {
+  background: var(--panel);
+  border: 1px solid var(--panel-3);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+.dd-deck-header {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--panel-3);
+  padding-bottom: 4px;
+}
+.dd-deck-link {
+  margin-left: auto;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 12px;
+}
+.dd-deck-link:hover { text-decoration: underline; }
+.dd-deck-empty {
+  font-size: 11px;
+  padding: 4px 0;
+}
+.dd-deck-empty code {
+  background: var(--panel-2);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 10px;
+}
+.dd-deck-list {
+  font-size: 11px;
+  line-height: 1.4;
+}
+.dd-deck-section {
+  margin-bottom: 6px;
+}
+.dd-deck-section-title {
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+.dd-deck-entries {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.dd-deck-entries li {
+  display: flex;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.dd-deck-count {
+  display: inline-block;
+  width: 16px;
+  text-align: right;
+  font-weight: 600;
+  color: var(--accent);
+}
+.dd-deck-name { flex: 1; }
+.dd-deck-set {
+  font-size: 9px;
+  white-space: nowrap;
+}
+.dd-deck-total {
+  margin-top: 4px;
+  font-size: 10px;
+  text-align: right;
 }
 
 /* ---- Deck Doctor: tabs + Matchups + Meta -------------------------------- */

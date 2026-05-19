@@ -27,7 +27,7 @@
 //     uniqueLabeledPlayers, cells: MatchupCell[], unmatched: [...]
 //   }
 
-import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -159,6 +159,36 @@ function mergeLabelsFile(labels, path) {
   return labels;
 }
 
+// Merge a Limitless labs labels file (labs-<id>.json). Labs rows
+// already carry a pre-computed engine archetype slug — the variants
+// we haven't wired route to "unknown" at fetch time. Labs labels do
+// NOT override manually-curated labels.json entries (which are
+// authoritative for top-cut decks).
+function mergeLabsFile(labels, path) {
+  const json = JSON.parse(readFileSync(path, "utf8"));
+  const labsId = json.labsId ?? basename(path, ".json").replace(/^labs-/, "");
+  let added = 0;
+  let skipped = 0;
+  for (const entry of json.players ?? []) {
+    const key = lookupKey(entry.name, entry.country);
+    if (labels.has(key)) {
+      skipped++;
+      continue; // labels.json / snapshot wins
+    }
+    labels.set(key, {
+      archetype: entry.archetype ?? "unknown",
+      archetypeLabel: entry.archetypeLabel ?? entry.archetypeSlug ?? null,
+      archetypeSlug: entry.archetypeSlug ?? null,
+      country: entry.country,
+      player: entry.name,
+      decklistUrl: entry.decklistUrl ?? null,
+      sourceEvent: `labs-${labsId}`,
+    });
+    added++;
+  }
+  return { added, skipped };
+}
+
 // ---- Cell aggregation -----------------------------------------------
 
 function emptyTally() {
@@ -250,10 +280,16 @@ function main() {
     console.error(`[agg] ${RK9_DIR} does not exist; run snapshot:fetch-rk9 first`);
     process.exit(1);
   }
-  const files = readdirSync(RK9_DIR)
-    .filter((f) => f.endsWith(".json"))
-    .filter((f) => !f.startsWith("aggregates") && !f.startsWith("labels"))
+  const allJson = readdirSync(RK9_DIR).filter((f) => f.endsWith(".json"));
+  const files = allJson
+    .filter(
+      (f) =>
+        !f.startsWith("aggregates") &&
+        !f.startsWith("labels") &&
+        !f.startsWith("labs-"),
+    )
     .map((f) => join(RK9_DIR, f));
+  const labsFiles = allJson.filter((f) => f.startsWith("labs-")).map((f) => join(RK9_DIR, f));
   if (files.length === 0) {
     console.error(`[agg] no RK9 pairing files in ${RK9_DIR}`);
     process.exit(1);
@@ -275,7 +311,45 @@ function main() {
     labels = mergeLabelsFile(labels, opts.labels);
     console.error(`[agg] +${labels.size - before} labels from ${opts.labels}`);
   }
+  if (labsFiles.length > 0) {
+    let labsAdded = 0;
+    let labsSkipped = 0;
+    for (const labsPath of labsFiles) {
+      const { added, skipped } = mergeLabsFile(labels, labsPath);
+      console.error(`[agg]  ${basename(labsPath)}: +${added} (skipped ${skipped} dup)`);
+      labsAdded += added;
+      labsSkipped += skipped;
+    }
+    console.error(`[agg] +${labsAdded} labels from ${labsFiles.length} labs file(s) (${labsSkipped} dups skipped)`);
+  }
   console.error(`[agg] total labels: ${labels.size}`);
+
+  // Build the rk9TournamentId → friendly event name map from labs files.
+  // Labs pages embed the RK9 pairings URL in their header; the labs
+  // fetcher extracts that and writes both `rk9TournamentId` (joinable
+  // back to the RK9 cache files) and `cleanEventName` (the labs
+  // tournament name with " – Limitless Labs" stripped). Without this
+  // override, pairing records carry the generic "Tournament Pairings -
+  // RK9" page title from the rk9 page.
+  const eventNameOverrides = new Map();
+  for (const labsPath of labsFiles) {
+    try {
+      const labs = JSON.parse(readFileSync(labsPath, "utf8"));
+      if (labs.rk9TournamentId && labs.cleanEventName) {
+        eventNameOverrides.set(labs.rk9TournamentId, labs.cleanEventName);
+      }
+    } catch {
+      // Older labs files without rk9TournamentId — skip silently;
+      // events without the override fall back to whatever the rk9 file
+      // shipped.
+    }
+  }
+  if (eventNameOverrides.size > 0) {
+    console.error(`[agg] event-name overrides from labs: ${eventNameOverrides.size}`);
+    for (const [rk9Id, name] of eventNameOverrides) {
+      console.error(`[agg]   ${rk9Id} → ${name}`);
+    }
+  }
 
   // 3. Walk each event's pairings
   const tallies = new Map();
@@ -284,9 +358,26 @@ function main() {
   let labeledOneSide = 0;
   const perEvent = [];
   const labeledPlayersSeen = new Set();
+  // Per-pairing records (the side-car the UI loads for drill-down).
+  // Each entry carries enough context for "did the underdog win?" + a
+  // direct decklist link. Only labeled-both-sides pairings are kept —
+  // unlabeled rows can't be displayed against a matchup cell.
+  const pairingRecords = [];
 
   for (const file of files) {
     const data = JSON.parse(readFileSync(file, "utf8"));
+    // Pre-index standings so we can attach final rank/record to each pairing
+    // entry without a per-row scan.
+    const standingsByKey = new Map();
+    for (const s of data.standings ?? []) {
+      standingsByKey.set(lookupKey(s.name, s.country), s);
+    }
+    // Pick the cleanest event name available — labs-derived override
+    // wins over the rk9 page's generic title. Fallback uses the rk9
+    // file's tournamentName so events without a labs link still display
+    // SOMETHING legible.
+    const friendlyEventName =
+      eventNameOverrides.get(data.tournamentId) ?? data.tournamentName ?? data.tournamentId;
     let eventTotal = 0;
     let eventLabeled = 0;
     let eventOneSide = 0;
@@ -305,6 +396,32 @@ function main() {
           tallyPairing(pairing, l1, l2, tallies);
           eventLabeled++;
           labeledPairings++;
+          const s1 = standingsByKey.get(k1);
+          const s2 = standingsByKey.get(k2);
+          pairingRecords.push({
+            eventId: data.tournamentId,
+            eventName: friendlyEventName,
+            round: round.round,
+            result: pairing.result, // p1's perspective
+            p1: {
+              name: pairing.player1.name,
+              country: pairing.player1.country,
+              archetype: l1.archetype,
+              archetypeLabel: l1.archetypeLabel ?? null,
+              decklistUrl: l1.decklistUrl ?? null,
+              finalRank: s1?.rank ?? null,
+              finalRecord: s1?.record ?? null,
+            },
+            p2: {
+              name: pairing.player2.name,
+              country: pairing.player2.country,
+              archetype: l2.archetype,
+              archetypeLabel: l2.archetypeLabel ?? null,
+              decklistUrl: l2.decklistUrl ?? null,
+              finalRank: s2?.rank ?? null,
+              finalRecord: s2?.record ?? null,
+            },
+          });
         } else if (l1 || l2) {
           eventOneSide++;
           labeledOneSide++;
@@ -313,7 +430,7 @@ function main() {
     }
     perEvent.push({
       tournamentId: data.tournamentId,
-      tournamentName: data.tournamentName,
+      tournamentName: friendlyEventName,
       totalPairings: eventTotal,
       labeledBothSides: eventLabeled,
       labeledOneSide: eventOneSide,
@@ -326,7 +443,7 @@ function main() {
   // 4. Cells
   const cells = cellsFromTallies(tallies);
 
-  // 5. Output
+  // 5. Output — primary (full) JSON in the gitignored cache
   const out = {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
@@ -340,6 +457,77 @@ function main() {
   };
   writeFileSync(opts.out, JSON.stringify(out, null, 2) + "\n");
   console.error(`[agg] wrote ${opts.out}`);
+
+  // 6. Committed side-cars for the UI. Two files in src/data/aggregates/:
+  //   - cells.json    — same matchup matrix as the primary output, slimmer
+  //                     metadata (no perEvent block, just cells + meta).
+  //                     Loaded synchronously inside DeckDoctor.
+  //   - pairings.json — per-pairing records for the drill-down panel +
+  //                     client-side round filter. Lazy-loaded on demand.
+  //                     ~200KB per Regional; total scales with events.
+  // These are committed (vs. gitignored data/rk9-pairings/) because they
+  // power runtime UI; the operator refreshes them as part of the weekend
+  // skill run.
+  const COMMITTED_DIR = join(REPO_ROOT, "src", "data", "aggregates");
+  if (!existsSync(COMMITTED_DIR)) mkdirSync(COMMITTED_DIR, { recursive: true });
+  const cellsOut = {
+    schemaVersion: 1,
+    generatedAt: out.generatedAt,
+    sourceEvents: out.sourceEvents,
+    totalPairings,
+    labeledPairings,
+    uniqueLabeledPlayers: labeledPlayersSeen.size,
+    cells,
+  };
+  const cellsPath = join(COMMITTED_DIR, "cells.json");
+  writeFileSync(cellsPath, JSON.stringify(cellsOut, null, 2) + "\n");
+  console.error(`[agg] wrote ${cellsPath} (${cells.length} cells)`);
+
+  // Slimmed pairings emission: dedupe repeated event names into a
+  // top-level events[] table and reference by index. Minified JSON
+  // (no pretty-print) — this file is data, not human-edited. Drops
+  // pretty-printed 4.9MB → ~1.4MB.
+  const eventIndex = new Map();
+  const eventsTable = [];
+  for (const p of pairingRecords) {
+    if (!eventIndex.has(p.eventId)) {
+      eventIndex.set(p.eventId, eventsTable.length);
+      eventsTable.push({ id: p.eventId, name: p.eventName });
+    }
+  }
+  const slimPairings = pairingRecords.map((p) => ({
+    e: eventIndex.get(p.eventId),
+    r: p.round,
+    o: p.result, // outcome from p1's perspective
+    p1: {
+      n: p.p1.name,
+      c: p.p1.country,
+      a: p.p1.archetype,
+      al: p.p1.archetypeLabel,
+      d: p.p1.decklistUrl,
+      fr: p.p1.finalRank,
+      fc: p.p1.finalRecord,
+    },
+    p2: {
+      n: p.p2.name,
+      c: p.p2.country,
+      a: p.p2.archetype,
+      al: p.p2.archetypeLabel,
+      d: p.p2.decklistUrl,
+      fr: p.p2.finalRank,
+      fc: p.p2.finalRecord,
+    },
+  }));
+  const pairingsOut = {
+    schemaVersion: 1,
+    generatedAt: out.generatedAt,
+    events: eventsTable,
+    pairings: slimPairings,
+  };
+  const pairingsPath = join(COMMITTED_DIR, "pairings.json");
+  // Minified — readers expand into typed records via src/data/aggregates.ts.
+  writeFileSync(pairingsPath, JSON.stringify(pairingsOut) + "\n");
+  console.error(`[agg] wrote ${pairingsPath} (${pairingRecords.length} pairings, ${eventsTable.length} events)`);
 
   // Summary
   console.log(

@@ -19,6 +19,8 @@
     "ai:dashboard": "node scripts/ai-coordinator/dashboard.mjs",
     "ai:dashboard:watch": "node scripts/ai-coordinator/dashboard.mjs --watch",
     "snapshot:fetch-rk9": "node scripts/snapshot/fetch-rk9-pairings.mjs",
+    "snapshot:fetch-limitless-labels": "node scripts/snapshot/fetch-limitless-labels.mjs",
+    "snapshot:fetch-limitless-decklists": "node scripts/snapshot/fetch-limitless-decklists.mjs",
     "snapshot:aggregate-rk9": "node scripts/snapshot/aggregate-rk9-matchups.mjs"
   },
   "dependencies": {

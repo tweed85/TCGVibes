@@ -1,0 +1,61 @@
+<!--
+  Minimal synthetic fixture of a Limitless labs standings page. Captures
+  the row structure parseStandingsRows reads against: rank, player link
+  (with internal labs PID), country flag (title="CC"), record string
+  (W-L-T), deck-archetype link with slug, and per-player decklist link.
+
+  Cases covered:
+    Row 1 — fully populated (rank, name, country, record, deck slug,
+            decklist URL) — happy path
+    Row 2 — same shape, different country + multi-segment slug
+    Row 3 — row without a deck slug (early drop with no decklist
+            submitted) — exercises the null-archetypeSlug branch
+    Row 4 — non-ASCII name (Łukasz with stroked L) + 3-segment slug
+            (raging-bolt-ogerpon) — exercises slug normalization
+    Row 5 — header row (no rank cell with a number) — should be skipped
+-->
+<html>
+<body>
+<table>
+  <thead>
+    <tr><th>Rank</th><th>Player</th><th>Country</th><th>Points</th><th>Record</th><th>Deck</th></tr>
+  </thead>
+  <tbody>
+    <tr class="day2 topcut">
+      <td>1</td>
+      <td><a href="/0063/player/0546">Andrew Hedrick</a></td>
+      <td><img src="flag.png" title="US" /></td>
+      <td>45</td>
+      <td>14 - 0 - 3</td>
+      <td><a href="/0063/decks/dragapult-ex"><img alt="dragapult" /></a></td>
+      <td><a href="/0063/player/0546/decklist">List</a></td>
+    </tr>
+    <tr class="day2">
+      <td>2</td>
+      <td><a href="/0063/player/0504">Jack Pitcher</a></td>
+      <td><img src="flag.png" title="CA" /></td>
+      <td>44</td>
+      <td>14 - 1 - 2</td>
+      <td><a href="/0063/decks/dragapult-dudunsparce"><img alt="dragapult" /></a></td>
+      <td><a href="/0063/player/0504/decklist">List</a></td>
+    </tr>
+    <tr class="day2">
+      <td>3</td>
+      <td><a href="/0063/player/0777">Pat Drop</a></td>
+      <td><img src="flag.png" title="US" /></td>
+      <td>20</td>
+      <td>6 - 8 - 1</td>
+    </tr>
+    <tr class="day2">
+      <td>4</td>
+      <td><a href="/0063/player/0888">Łukasz Polish</a></td>
+      <td><img src="flag.png" title="PL" /></td>
+      <td>30</td>
+      <td>10 - 5 - 0</td>
+      <td><a href="/0063/decks/raging-bolt-ogerpon"><img alt="raging-bolt" /></a></td>
+      <td><a href="/0063/player/0888/decklist">List</a></td>
+    </tr>
+  </tbody>
+</table>
+</body>
+</html>

@@ -297,8 +297,16 @@ export default function App() {
   const [cloudConsentOpen, setCloudConsentOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [buildOpen, setBuildOpen] = useState(false);
+  // Top-level view router. Doctor was previously nested under the pre-game
+  // modal (you had to "intend to play" to reach it); promoting it to a peer
+  // view lets it be a first-class entry point. `view` defaults to "home" so
+  // first-time visitors see both options instead of being dropped into the
+  // deck picker.
+  const [view, setView] = useState<"home" | "play">("home");
   // Deck Doctor — null when closed. Optional `initial` pre-populates the
-  // input pane (e.g. "open with this saved deck selected").
+  // input pane (e.g. "open with this saved deck selected"). The doctor is
+  // rendered as a modal at the App root so it can open from either view
+  // (home OR play).
   const [doctorOpen, setDoctorOpen] = useState<
     null | { initial?: { source: "preset" | "saved"; id: string } }
   >(null);
@@ -1652,11 +1660,74 @@ export default function App() {
     viewingPlayer,
   ]);
 
+  // Home view — minimal landing tree, rendered outside the play viewport.
+  // We still mount the doctor modal at the App root below so it can open
+  // from here too.
+  if (view === "home") {
+    return (
+      <div className={`app${dragging ? " drag-active" : ""}`}>
+        <HomeView
+          onPlay={() => setView("play")}
+          onDoctor={() => setDoctorOpen({})}
+          onOpenReplays={() => setReplayHistoryOpen(true)}
+          datasetFormat={datasetFormat}
+          datasetAsOf={datasetAsOf}
+        />
+        {doctorOpen && (
+          <Suspense fallback={
+            <div className="modal-backdrop">
+              <div className="modal" style={{ maxWidth: 360, textAlign: "center" }}>
+                <div className="muted" style={{ padding: 16 }}>Loading Deck Doctor…</div>
+              </div>
+            </div>
+          }>
+            <DeckDoctorModal
+              imports={imports}
+              initial={doctorOpen.initial}
+              onClose={() => setDoctorOpen(null)}
+            />
+          </Suspense>
+        )}
+        {replayHistoryOpen && (
+          <Suspense fallback={
+            <div className="modal-backdrop">
+              <div className="modal" style={{ maxWidth: 360, textAlign: "center" }}>
+                <div className="muted" style={{ padding: 16 }}>Loading replays…</div>
+              </div>
+            </div>
+          }>
+            <ReplayHistoryModal
+              onClose={() => setReplayHistoryOpen(false)}
+              cloudUploadEnabled={cloudUpload}
+              onUpload={async (row) => {
+                const clientId = getOrCreateClientId();
+                const r = await uploadReplay(row, clientId);
+                if (r.ok) {
+                  await markReplayUploaded(row.localId, r.remoteId);
+                } else {
+                  await markReplayUploadError(row.localId, r.reason);
+                }
+              }}
+            />
+          </Suspense>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className={`app${dragging ? " drag-active" : ""}`}>
       {/* ------------------------- Header ------------------------- */}
       <div className="header">
         <div className="brand">
+          <button
+            className="home-link"
+            onClick={() => setView("home")}
+            title="Back to home"
+            aria-label="Home"
+          >
+            ←
+          </button>
           <h1>PandaBananasTCG</h1>
           <div className="meta">
             T{state.turn} · {state.players[state.activePlayer].name} · {state.phase}
@@ -3458,6 +3529,64 @@ function MulliganNoticeModal({
 // ---------------------------------------------------------------------------
 //  DeckBuilderModal lives in ./ui/DeckBuilderModal.tsx — lazy-loaded above.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+//  Home view — landing screen with Play / Deck Doctor / Replays entry points
+// ---------------------------------------------------------------------------
+
+function HomeView({
+  onPlay,
+  onDoctor,
+  onOpenReplays,
+  datasetFormat,
+  datasetAsOf,
+}: {
+  onPlay: () => void;
+  onDoctor: () => void;
+  onOpenReplays: () => void;
+  datasetFormat: string;
+  datasetAsOf: string;
+}) {
+  return (
+    <div className="home-view">
+      <header className="home-header">
+        <h1>PandaBananasTCG</h1>
+        <div className="home-dataset muted">{datasetFormat} · dataset {datasetAsOf}</div>
+      </header>
+      <div className="home-tiles">
+        <button
+          className="home-tile home-tile-play"
+          onClick={onPlay}
+          aria-label="Play a game"
+        >
+          <div className="home-tile-icon">▶</div>
+          <div className="home-tile-title">Play</div>
+          <div className="home-tile-desc">
+            Start a game against the CPU or hotseat a friend. Pick from preset
+            decks, build your own, or import a PTCGL list.
+          </div>
+        </button>
+        <button
+          className="home-tile home-tile-doctor"
+          onClick={onDoctor}
+          aria-label="Open Deck Doctor"
+        >
+          <div className="home-tile-icon">🩺</div>
+          <div className="home-tile-title">Deck Doctor</div>
+          <div className="home-tile-desc">
+            Analyze a deck against the current meta — game plan, problems,
+            matchups, and tournament drill-down. No game required.
+          </div>
+        </button>
+      </div>
+      <div className="home-secondary">
+        <button className="link-button" onClick={onOpenReplays}>
+          Past replays
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 //  PreGame modal — pick decks before the game starts

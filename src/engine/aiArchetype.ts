@@ -29,6 +29,35 @@ export type Archetype =
   | "grimmsnarl-froslass"
   | "mega-starmie-froslass"
   | "hops-trevenant"
+  // ---- Stage 1-5 expansion (May 2026 meta) — wired from labs/snapshot
+  // unknown-archetype detail. Coverage notes flagged each of these as a
+  // meaningful share of the Standard field; wiring them moves detection
+  // off `generic` and unlocks archetype-aware AI bonuses.
+  | "starmie-dusknoir"
+  | "n-zoroark"
+  | "raging-bolt-ogerpon"
+  | "rockets-honchkrow"
+  | "okidogi-barbaracle"
+  | "slowking-scr"
+  | "lopunny-dudunsparce"
+  | "greninja-ex"
+  | "clefairy-ogerpon"
+  | "ogerpon-box"
+  | "stevens-metagross"
+  | "diancie-dusknoir"
+  | "ursaluna-lunatone"
+  | "flareon-noctowl"
+  // ---- Stage 6 expansion — the 2 Dragapult variants + 4 box decks the
+  // labs data flagged as the remaining big unknown buckets. Wire ordering:
+  // dragapult-ex / dragapult-dusknoir are placed AFTER the existing
+  // dragapult-blaziken / dragapult-dudunsparce so partner decks win on
+  // tie-broken Dragapult ex + Drakloak overlaps.
+  | "dragapult-ex"
+  | "dragapult-dusknoir"
+  | "hydrapple-ogerpon"
+  | "ogerpon-meganium"
+  | "mega-absol-box"
+  | "tera-box"
   | "generic";
 
 // Distinctive cards that flag a deck as an archetype. The first match wins;
@@ -131,6 +160,153 @@ const SIGNATURES: Record<Exclude<Archetype, "generic">, string[]> = {
     "Hop's Phantump",
     "Postwick",
     "Hop's Choice Band",
+  ],
+  // Pires's Mega Starmie ex / Dusknoir variant — Prague Top 8. Dusknoir's
+  // Cursed Blast is the EX-immunity bypass that distinguishes this from
+  // Zanchi's Mega Starmie / Mega Froslass build. Dusknoir line as signature[0]
+  // ensures detection prefers this when both Mega Starmie ex + Dusknoir
+  // are present (otherwise mega-starmie-froslass would steal the match).
+  "starmie-dusknoir": ["Dusknoir", "Dusclops", "Duskull", "Mega Starmie ex"],
+  // N's-prefix engine + Zoroark ex Trade ability. The N's-prefix
+  // family (N's Zorua / Zoroark ex / Reshiram / Zekrom / PP Up) gates
+  // detection unambiguously — no other archetype runs these.
+  "n-zoroark": ["N's Zoroark ex", "N's Zorua", "N's Reshiram", "N's PP Up"],
+  // Raging Bolt ex + Teal Mask Ogerpon ex Wellspring-style energy ramp.
+  // Raging Bolt ex is the unique attacker; Teal Mask Ogerpon ex is shared
+  // with Arboliva so it's signature[2] not signature[0]. Sparkling Crystal
+  // tool layer + Squawkabilly ex draw fills the rest.
+  "raging-bolt-ogerpon": [
+    "Raging Bolt ex",
+    "Sparkling Crystal",
+    "Teal Mask Ogerpon ex",
+    "Professor Sada's Vitality",
+  ],
+  // Team Rocket's-prefix engine pivoting on Honchkrow's bench snipe.
+  // Distinct from rocket-mewtwo which runs the Spidops ramp + Mewtwo ex
+  // finisher — Honchkrow is the alternative TR-Psychic build.
+  "rockets-honchkrow": [
+    "Team Rocket's Honchkrow",
+    "Team Rocket's Murkrow",
+    "Team Rocket's Energy",
+    "Team Rocket's Proton",
+  ],
+  // Okidogi Settle the Score + Barbaracle Reef Bypass / Surfing Beatdown.
+  // Okidogi is the toxic-status setup; Barbaracle is the Stage 1 attacker.
+  // Both are 1-prize attackers under Hero's Cape tool stacking.
+  "okidogi-barbaracle": ["Okidogi", "Barbaracle", "Binacle", "Hero's Cape"],
+  // Slowking-SCR Calming Aroma engine — single-prize control deck. No ex
+  // Pokémon; wins via Iono'd-hand-shaped status disruption. Slowking is
+  // signature[0] (unique attacker) since plain Slowking is rare outside
+  // this archetype.
+  "slowking-scr": ["Slowking", "Slowpoke", "Iono", "Pokémon Center Lady"],
+  // Mega Lopunny ex's Mega Punch + Dudunsparce ex Destructive Drill EX
+  // bypass. Lopunny + Mega Lopunny ex evolve line + 1-prize Dudunsparce ex
+  // give a 2-attacker plan that mirrors dragapult-dudunsparce in playstyle
+  // but uses the Lopunny mega base instead of Dragapult ex.
+  "lopunny-dudunsparce": [
+    "Mega Lopunny ex",
+    "Lopunny",
+    "Buneary",
+    "Dudunsparce ex",
+  ],
+  // Mega Greninja ex's Ninja Spinner / Mortal Shuriken setup. Frogadier
+  // and Froakie are the bench seed; Greninja ex is the Stage 1 backup.
+  // Distinct from any other deck — only this archetype runs the Froakie
+  // family.
+  "greninja-ex": ["Mega Greninja ex", "Greninja ex", "Frogadier", "Froakie"],
+  // Lillie's Clefairy ex + Teal Mask Ogerpon ex Wellspring energy ramp.
+  // The Clefairy-line ex is signature[0] — Teal Mask Ogerpon ex is shared
+  // with Arboliva and Raging Bolt, so it's signature[2] for tie-breaking.
+  "clefairy-ogerpon": [
+    "Lillie's Clefairy ex",
+    "Clefairy",
+    "Teal Mask Ogerpon ex",
+    "Buddy-Buddy Poffin",
+  ],
+  // All-Ogerpon multi-mask toolbox. Distinct from Arboliva (which is
+  // Teal-Mask-only) and Raging Bolt / Clefairy variants (which have a
+  // partner ex). The tell is multiple mask Ogerpons in one deck.
+  "ogerpon-box": [
+    "Hearthflame Mask Ogerpon ex",
+    "Wellspring Mask Ogerpon ex",
+    "Teal Mask Ogerpon ex",
+    "Cornerstone Mask Ogerpon ex",
+  ],
+  // Steven's-prefix Metagross ex line. Steven's Beldum → Steven's Metang
+  // → Steven's Metagross ex with Steven's Carbink / Skarmory utility.
+  // No other archetype runs the Steven's-prefix engine.
+  "stevens-metagross": [
+    "Steven's Metagross ex",
+    "Steven's Metang",
+    "Steven's Beldum",
+    "Steven's Carbink",
+  ],
+  // Mega Diancie ex + Dusknoir Cursed Blast. Diancie is signature[0]
+  // (unique attacker) so detection differentiates from starmie-dusknoir.
+  // Both share the Dusknoir line; Diancie's Mega line is the
+  // distinguishing card.
+  "diancie-dusknoir": ["Mega Diancie ex", "Diancie", "Dusknoir", "Dusclops"],
+  // Bloodmoon Ursaluna ex Blood Moon + Lunatone draw ability. Solrock
+  // and Lunatone are paired bench utilities; Bloodmoon Ursaluna ex is the
+  // unique attacker (no other archetype builds around it).
+  "ursaluna-lunatone": [
+    "Bloodmoon Ursaluna ex",
+    "Lunatone",
+    "Solrock",
+    "Maximum Belt",
+  ],
+  // Flareon ex Bright Flame + Noctowl draw engine. Eevee branches into
+  // Flareon ex; Hoothoot evolves into Noctowl for the in-play draw
+  // ability. Flareon ex is signature[0].
+  "flareon-noctowl": ["Flareon ex", "Noctowl", "Eevee", "Hoothoot"],
+  // ---- Stage 6 expansion -------------------------------------------------
+  // Solo Dragapult ex — no partner attacker. Munkidori is the bench-draw
+  // workhorse most solo lists run. Comes AFTER dragapult-blaziken /
+  // dragapult-dudunsparce so partner-attacker decks win on tied
+  // Dragapult ex + Drakloak overlaps.
+  "dragapult-ex": ["Dragapult ex", "Drakloak", "Dreepy", "Munkidori"],
+  // Dragapult ex + Dusknoir line — Cursed Blast partner for the EX
+  // bypass plan. Signature[0] is Dragapult ex (not Dusknoir) so this
+  // wins against starmie-dusknoir when Mega Starmie is absent and beats
+  // dragapult-ex when Dusknoir is present.
+  "dragapult-dusknoir": ["Dragapult ex", "Dusknoir", "Drakloak", "Dusclops"],
+  // Hydrapple ex Stage 2 + Teal Mask Ogerpon ex ramp. Hydrapple ex is
+  // unique; Applin is shared with festival-leads but only as a non-sig
+  // card there. Signature[0] is Hydrapple ex.
+  "hydrapple-ogerpon": [
+    "Hydrapple ex",
+    "Hydrapple",
+    "Applin",
+    "Teal Mask Ogerpon ex",
+  ],
+  // Mega Meganium ex Stage 2 + Teal Mask Ogerpon ex. Distinct from
+  // arboliva (which runs Arboliva ex as signature[0]); the tell here is
+  // Mega Meganium ex as the unique attacker.
+  "ogerpon-meganium": [
+    "Mega Meganium ex",
+    "Meganium",
+    "Bayleef",
+    "Chikorita",
+  ],
+  // Mega Absol ex single-attacker box. Sparkling Crystal is shared with
+  // raging-bolt-ogerpon (which has Raging Bolt ex as signature[0]) so no
+  // collision there.
+  "mega-absol-box": [
+    "Mega Absol ex",
+    "Absol",
+    "Sparkling Crystal",
+    "Maximum Belt",
+  ],
+  // Tera Pokémon toolbox — multiple Mega-prefix Tera attackers piloted
+  // off Tera Orb. Detection is best-effort: Tera Orb is broadly used by
+  // many decks, so this archetype is more reliable when paired with
+  // multiple Mega-ex bodies in the same list. Placed LAST so more
+  // specific Mega box archetypes (mega-absol-box, ogerpon-box) win ties.
+  "tera-box": [
+    "Tera Orb",
+    "Mega Charizard X ex",
+    "Mega Charizard Y ex",
+    "Mega Absol ex",
   ],
 };
 
@@ -336,6 +512,310 @@ export const ARCHETYPE_PROFILES: Record<Exclude<Archetype, "generic">, Archetype
     },
     notes: [
       "Single-prize attackers; Telepathic Psychic Energy is Buddy-Buddy-Poffin-on-an-energy.",
+    ],
+  },
+  // ---- Stage 1-5 expansion ------------------------------------------------
+  // Profiles are intentionally lean per CLAUDE.md guidance — core / support /
+  // tech / optional left empty until the dataset settles. The load-bearing
+  // fields are `mainAttackers` + `energyPlan.requiredTypes`, which the deck
+  // doctor uses to suppress false-positive energy / attacker warnings.
+  "starmie-dusknoir": {
+    id: "starmie-dusknoir",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Mega Starmie ex", "Dusknoir"],
+    energyPlan: {
+      attackers: ["Mega Starmie ex", "Dusknoir"],
+      requiredTypes: ["Water", "Psychic"],
+      acceleration: [],
+    },
+    notes: [
+      "Dusknoir Cursed Blast bypasses EX-immunity (Crustle); Mega Starmie ex Jetting Blow is primary.",
+    ],
+    expectedExceptions: [
+      {
+        id: "energy.attacker-cant-be-paid",
+        reason:
+          "Dusknoir's Psychic cost is paid via Ignition / Legacy Energy (any-type providers), which the energy-supply check doesn't model. The Pires Top-8 build runs no basic Psychic and relies on this workaround.",
+      },
+    ],
+  },
+  "n-zoroark": {
+    id: "n-zoroark",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["N's Zoroark ex", "N's Reshiram", "N's Zekrom"],
+    energyPlan: {
+      attackers: ["N's Reshiram", "N's Zekrom", "N's Zoroark ex"],
+      requiredTypes: ["Fire", "Lightning"],
+      acceleration: ["N's PP Up"],
+    },
+    notes: [
+      "N's Zoroark ex Trade ability + N's-prefix attackers; N's PP Up is the energy ramp.",
+    ],
+  },
+  "raging-bolt-ogerpon": {
+    id: "raging-bolt-ogerpon",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Raging Bolt ex"],
+    energyPlan: {
+      attackers: ["Raging Bolt ex"],
+      requiredTypes: ["Lightning", "Grass"],
+      acceleration: ["Teal Mask Ogerpon ex", "Professor Sada's Vitality"],
+    },
+    notes: [
+      "Sada's Vitality + Teal Mask Ogerpon ex acceleration into Raging Bolt ex's Bellowing Thunder.",
+    ],
+  },
+  "rockets-honchkrow": {
+    id: "rockets-honchkrow",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Team Rocket's Honchkrow"],
+    energyPlan: {
+      attackers: ["Team Rocket's Honchkrow"],
+      requiredTypes: ["Darkness"],
+      acceleration: [],
+    },
+    notes: [
+      "TR engine + Honchkrow bench snipe. Proton is the T1 enabler (T1-supporter exception).",
+    ],
+  },
+  "okidogi-barbaracle": {
+    id: "okidogi-barbaracle",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Okidogi", "Barbaracle"],
+    energyPlan: {
+      attackers: ["Okidogi", "Barbaracle"],
+      requiredTypes: ["Darkness", "Fighting"],
+      acceleration: [],
+    },
+    notes: [
+      "1-prize attacker pair; Hero's Cape ACE SPEC stacks HP on Barbaracle for 2-attack-KO denial.",
+    ],
+  },
+  "slowking-scr": {
+    id: "slowking-scr",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Slowking"],
+    energyPlan: {
+      attackers: ["Slowking"],
+      requiredTypes: ["Psychic"],
+      acceleration: [],
+      manualEnergyIsThinOk: true,
+    },
+    notes: [
+      "Single-prize control plan; Calming Aroma ability heals each turn. Wins on prize math, not raw damage.",
+    ],
+    expectedExceptions: [
+      {
+        id: "energy.attacker-cant-be-paid",
+        reason:
+          "Slowking control is a stall plan — attack costs are paid via setup turns, not via energy curve.",
+      },
+    ],
+  },
+  "lopunny-dudunsparce": {
+    id: "lopunny-dudunsparce",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Mega Lopunny ex", "Dudunsparce ex"],
+    energyPlan: {
+      attackers: ["Mega Lopunny ex", "Dudunsparce ex"],
+      requiredTypes: ["Colorless"],
+      acceleration: [],
+    },
+    notes: [
+      "Lopunny ex evolve line + 1-prize Dudunsparce ex Destructive Drill EX bypass.",
+    ],
+  },
+  "greninja-ex": {
+    id: "greninja-ex",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Mega Greninja ex", "Greninja ex"],
+    energyPlan: {
+      attackers: ["Mega Greninja ex", "Greninja ex"],
+      requiredTypes: ["Water"],
+      acceleration: [],
+    },
+    notes: [
+      "Mega Greninja ex Mortal Shuriken; Greninja ex Stage 1 backup. Frogadier/Froakie seed.",
+    ],
+  },
+  "clefairy-ogerpon": {
+    id: "clefairy-ogerpon",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Lillie's Clefairy ex", "Teal Mask Ogerpon ex"],
+    energyPlan: {
+      attackers: ["Lillie's Clefairy ex", "Teal Mask Ogerpon ex"],
+      requiredTypes: ["Psychic", "Grass"],
+      acceleration: ["Teal Mask Ogerpon ex"],
+    },
+    notes: [
+      "Lillie's Clefairy ex + Teal Mask Ogerpon ex ramp. Two-type attacker spread.",
+    ],
+  },
+  "ogerpon-box": {
+    id: "ogerpon-box",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: [
+      "Hearthflame Mask Ogerpon ex",
+      "Wellspring Mask Ogerpon ex",
+      "Teal Mask Ogerpon ex",
+      "Cornerstone Mask Ogerpon ex",
+    ],
+    energyPlan: {
+      attackers: [
+        "Hearthflame Mask Ogerpon ex",
+        "Wellspring Mask Ogerpon ex",
+        "Teal Mask Ogerpon ex",
+        "Cornerstone Mask Ogerpon ex",
+      ],
+      requiredTypes: ["Fire", "Water", "Grass", "Fighting"],
+      acceleration: ["Teal Mask Ogerpon ex"],
+    },
+    notes: [
+      "Multi-mask toolbox — pick the right Ogerpon for the matchup.",
+    ],
+  },
+  "stevens-metagross": {
+    id: "stevens-metagross",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Steven's Metagross ex"],
+    energyPlan: {
+      attackers: ["Steven's Metagross ex"],
+      requiredTypes: ["Metal"],
+      acceleration: [],
+    },
+    notes: [
+      "Steven's-prefix Stage 2 evolution engine. Beldum → Metang → Metagross ex.",
+    ],
+  },
+  "diancie-dusknoir": {
+    id: "diancie-dusknoir",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Mega Diancie ex", "Dusknoir"],
+    energyPlan: {
+      attackers: ["Mega Diancie ex", "Dusknoir"],
+      requiredTypes: ["Psychic"],
+      acceleration: [],
+    },
+    notes: [
+      "Mega Diancie ex + Dusknoir Cursed Blast EX-immunity bypass.",
+    ],
+  },
+  "ursaluna-lunatone": {
+    id: "ursaluna-lunatone",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Bloodmoon Ursaluna ex"],
+    energyPlan: {
+      attackers: ["Bloodmoon Ursaluna ex"],
+      requiredTypes: ["Fighting"],
+      acceleration: [],
+    },
+    notes: [
+      "Bloodmoon Ursaluna ex Blood Moon; Lunatone/Solrock draw + setup engine.",
+    ],
+  },
+  "flareon-noctowl": {
+    id: "flareon-noctowl",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Flareon ex"],
+    energyPlan: {
+      attackers: ["Flareon ex"],
+      requiredTypes: ["Fire"],
+      acceleration: [],
+    },
+    notes: [
+      "Flareon ex Bright Flame; Noctowl in-play draw engine.",
+    ],
+  },
+  // ---- Stage 6 expansion --------------------------------------------------
+  "dragapult-ex": {
+    id: "dragapult-ex",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Dragapult ex"],
+    energyPlan: {
+      attackers: ["Dragapult ex"],
+      requiredTypes: ["Fire", "Psychic"],
+      acceleration: [],
+    },
+    notes: [
+      "Solo Dragapult ex variant — no partner attacker; relies on Munkidori bench draw.",
+    ],
+  },
+  "dragapult-dusknoir": {
+    id: "dragapult-dusknoir",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Dragapult ex", "Dusknoir"],
+    energyPlan: {
+      attackers: ["Dragapult ex", "Dusknoir"],
+      requiredTypes: ["Fire", "Psychic"],
+      acceleration: [],
+    },
+    notes: [
+      "Dragapult ex Phantom Dive + Dusknoir Cursed Blast EX-immunity bypass.",
+    ],
+    expectedExceptions: [
+      {
+        id: "energy.attacker-cant-be-paid",
+        reason:
+          "Dusknoir's Psychic cost is paid via Ignition / Legacy Energy (any-type providers), which the energy-supply check doesn't model.",
+      },
+    ],
+  },
+  "hydrapple-ogerpon": {
+    id: "hydrapple-ogerpon",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Hydrapple ex"],
+    energyPlan: {
+      attackers: ["Hydrapple ex"],
+      requiredTypes: ["Grass"],
+      acceleration: ["Teal Mask Ogerpon ex"],
+    },
+    notes: [
+      "Hydrapple ex Stage 2 attacker + Teal Mask Ogerpon ex energy ramp.",
+    ],
+  },
+  "ogerpon-meganium": {
+    id: "ogerpon-meganium",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Mega Meganium ex"],
+    energyPlan: {
+      attackers: ["Mega Meganium ex", "Teal Mask Ogerpon ex"],
+      requiredTypes: ["Grass"],
+      acceleration: ["Teal Mask Ogerpon ex"],
+    },
+    notes: [
+      "Mega Meganium ex Stage 2 attacker + Teal Mask Ogerpon ex acceleration.",
+    ],
+  },
+  "mega-absol-box": {
+    id: "mega-absol-box",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Mega Absol ex"],
+    energyPlan: {
+      attackers: ["Mega Absol ex"],
+      requiredTypes: ["Darkness"],
+      acceleration: [],
+    },
+    notes: [
+      "Mega Absol ex single-attacker box with Sparkling Crystal cost reduction.",
+    ],
+  },
+  "tera-box": {
+    id: "tera-box",
+    core: NO_CARDS, support: NO_CARDS, tech: NO_CARDS, optional: NO_CARDS,
+    mainAttackers: ["Mega Charizard X ex", "Mega Charizard Y ex", "Mega Absol ex"],
+    energyPlan: {
+      // Tera box is multi-type by design; the deck doctor's
+      // requiredTypes check is meant to flag "you don't have energy for
+      // your attacker" — a box deck genuinely runs all the types its
+      // attackers need, so leaving this empty plus manualEnergyIsThinOk
+      // suppresses the false positive.
+      attackers: ["Mega Charizard X ex", "Mega Charizard Y ex", "Mega Absol ex"],
+      requiredTypes: [],
+      acceleration: [],
+      manualEnergyIsThinOk: true,
+    },
+    notes: [
+      "Tera Pokémon toolbox — Tera Orb tutors any of multiple Mega-ex attackers.",
     ],
   },
 };
@@ -592,6 +1072,151 @@ export function archetypeTrainerBonus(
       // Secret Box ACE SPEC — search any 2 items.
       if (card.name === "Secret Box") return 18;
       return 0;
+    case "starmie-dusknoir":
+      // Risky Ruins — signature stadium, same role as in mega-starmie-froslass.
+      if (card.name === "Risky Ruins") return 28;
+      if (card.name === "Lillie's Determination") return 20;
+      if (card.name === "Buddy-Buddy Poffin") return 18;
+      if (card.name === "Boss's Orders") return 16;
+      // Hero's Cape ACE SPEC — preferred over Unfair Stamp on Dusknoir.
+      if (card.name === "Hero's Cape") return 18;
+      return 0;
+    case "n-zoroark":
+      // N's PP Up — signature trainer / tool (energy ramp on N's Pokémon).
+      if (card.name === "N's PP Up") return 28;
+      if (card.name === "Lillie's Determination") return 20;
+      if (card.name === "Buddy-Buddy Poffin") return 18;
+      if (card.name === "Boss's Orders") return 14;
+      return 0;
+    case "raging-bolt-ogerpon":
+      // Sada's Vitality — the signature accelerator (attach 2 Basic energy
+      // to Ancient Pokémon, then your turn ends). Routine T2 play.
+      if (card.name === "Professor Sada's Vitality") return 28;
+      if (card.name === "Sparkling Crystal") return 22;
+      if (card.name === "Lillie's Determination") return 18;
+      if (card.name === "Buddy-Buddy Poffin") return 16;
+      if (card.name === "Boss's Orders") return 14;
+      return 0;
+    case "rockets-honchkrow":
+      // TR engine bonuses mirror rocket-mewtwo (same family) — Proton is the
+      // T1 enabler, Ariana draws, Transceiver tutors a TR supporter.
+      if (card.name === "Team Rocket's Proton") return 28;
+      if (card.name === "Team Rocket's Ariana") return 24;
+      if (card.name === "Team Rocket's Transceiver") return 18;
+      if (card.name === "Team Rocket's Giovanni") return 16;
+      if (card.name === "Boss's Orders") return 12;
+      return 0;
+    case "okidogi-barbaracle":
+      // Hero's Cape stacks HP on the 1-prize Barbaracle — primary ACE SPEC.
+      if (card.name === "Hero's Cape") return 26;
+      if (card.name === "Lillie's Determination") return 20;
+      if (card.name === "Buddy-Buddy Poffin") return 18;
+      if (card.name === "Boss's Orders") return 14;
+      return 0;
+    case "slowking-scr":
+      // Iono is the deck's primary disruptor (hand-shape control).
+      if (card.name === "Iono") return 28;
+      // Pokémon Center Lady stacks with Calming Aroma for double-heal.
+      if (card.name === "Pokémon Center Lady") return 22;
+      if (card.name === "Lillie's Determination") return 18;
+      if (card.name === "Pokégear 3.0") return 14;
+      return 0;
+    case "lopunny-dudunsparce":
+      // Mirror dragapult-dudunsparce — Hero's Cape on the 1-prize Dudunsparce
+      // ex forces opp into 2-attack KOs.
+      if (card.name === "Hero's Cape") return 24;
+      if (card.name === "Lillie's Determination") return 20;
+      if (card.name === "Buddy-Buddy Poffin") return 18;
+      if (card.name === "Rare Candy") return 16;
+      if (card.name === "Boss's Orders") return 14;
+      return 0;
+    case "greninja-ex":
+      if (card.name === "Lillie's Determination") return 20;
+      if (card.name === "Buddy-Buddy Poffin") return 18;
+      if (card.name === "Rare Candy") return 18;
+      if (card.name === "Boss's Orders") return 14;
+      return 0;
+    case "clefairy-ogerpon":
+      if (card.name === "Lillie's Determination") return 20;
+      if (card.name === "Buddy-Buddy Poffin") return 22;
+      if (card.name === "Boss's Orders") return 14;
+      return 0;
+    case "ogerpon-box":
+      if (card.name === "Lillie's Determination") return 20;
+      if (card.name === "Buddy-Buddy Poffin") return 22;
+      if (card.name === "Boss's Orders") return 14;
+      // Energy Switch is critical for the multi-type Ogerpon toolbox plan.
+      if (card.name === "Energy Switch") return 18;
+      return 0;
+    case "stevens-metagross":
+      // Steven's Resolve = Stage 2 tutor for the Beldum→Metang→Metagross line.
+      if (card.name === "Steven's Resolve") return 28;
+      if (card.name === "Lillie's Determination") return 20;
+      if (card.name === "Buddy-Buddy Poffin") return 18;
+      if (card.name === "Rare Candy") return 22;
+      return 0;
+    case "diancie-dusknoir":
+      if (card.name === "Lillie's Determination") return 20;
+      if (card.name === "Buddy-Buddy Poffin") return 18;
+      if (card.name === "Boss's Orders") return 14;
+      if (card.name === "Hero's Cape") return 16;
+      return 0;
+    case "ursaluna-lunatone":
+      // Maximum Belt ACE SPEC — pushes Bloodmoon Ursaluna ex's damage into
+      // OHKO range on weakness-hit Active.
+      if (card.name === "Maximum Belt") return 24;
+      if (card.name === "Lillie's Determination") return 20;
+      if (card.name === "Buddy-Buddy Poffin") return 16;
+      if (card.name === "Boss's Orders") return 14;
+      return 0;
+    case "flareon-noctowl":
+      if (card.name === "Lillie's Determination") return 20;
+      if (card.name === "Buddy-Buddy Poffin") return 18;
+      if (card.name === "Boss's Orders") return 14;
+      return 0;
+    case "dragapult-ex":
+      // Same trainer suite as dragapult-blaziken minus the Blaziken-specific
+      // Crispin bonus (solo doesn't run the Fire acceleration line).
+      if (card.name === "Lillie's Determination") return 22;
+      if (card.name === "Buddy-Buddy Poffin") return 20;
+      if (card.name === "Rare Candy") return 18;
+      if (card.name === "Boss's Orders") return 16;
+      if (card.name === "Counter Catcher") return 12;
+      return 0;
+    case "dragapult-dusknoir":
+      if (card.name === "Lillie's Determination") return 22;
+      if (card.name === "Buddy-Buddy Poffin") return 20;
+      if (card.name === "Rare Candy") return 22;
+      if (card.name === "Boss's Orders") return 18;
+      if (card.name === "Hero's Cape") return 16;
+      return 0;
+    case "hydrapple-ogerpon":
+      if (card.name === "Lillie's Determination") return 20;
+      if (card.name === "Buddy-Buddy Poffin") return 22;
+      if (card.name === "Rare Candy") return 18;
+      if (card.name === "Boss's Orders") return 14;
+      return 0;
+    case "ogerpon-meganium":
+      if (card.name === "Lillie's Determination") return 20;
+      if (card.name === "Buddy-Buddy Poffin") return 22;
+      if (card.name === "Rare Candy") return 18;
+      if (card.name === "Boss's Orders") return 14;
+      return 0;
+    case "mega-absol-box":
+      // Sparkling Crystal is the deck's signature attack-cost reducer.
+      if (card.name === "Sparkling Crystal") return 26;
+      if (card.name === "Maximum Belt") return 20;
+      if (card.name === "Lillie's Determination") return 18;
+      if (card.name === "Buddy-Buddy Poffin") return 16;
+      if (card.name === "Boss's Orders") return 14;
+      return 0;
+    case "tera-box":
+      // Tera Orb is the deck's primary tutor — any Tera Pokémon to hand.
+      if (card.name === "Tera Orb") return 26;
+      if (card.name === "Lillie's Determination") return 18;
+      if (card.name === "Buddy-Buddy Poffin") return 14;
+      if (card.name === "Boss's Orders") return 14;
+      return 0;
     default:
       return 0;
   }
@@ -701,6 +1326,118 @@ export function archetypeAttachBonus(
       // Hop's Phantump — 1-energy Splashing Dodge stall while building.
       if (name === "Hop's Phantump") return 8;
       return 0;
+    case "starmie-dusknoir":
+      if (name === "Mega Starmie ex") return 25;
+      if (name === "Dusknoir") return 22;
+      if (name === "Dusclops") return 12;
+      if (name === "Staryu") return 8;
+      return 0;
+    case "n-zoroark":
+      if (name === "N's Zoroark ex") return 22;
+      if (name === "N's Reshiram") return 20;
+      if (name === "N's Zekrom") return 18;
+      return 0;
+    case "raging-bolt-ogerpon":
+      if (name === "Raging Bolt ex") return 28;
+      if (name === "Teal Mask Ogerpon ex") return 18;
+      return 0;
+    case "rockets-honchkrow":
+      if (name === "Team Rocket's Honchkrow") return 25;
+      if (name === "Team Rocket's Murkrow") return 12;
+      return 0;
+    case "okidogi-barbaracle":
+      if (name === "Barbaracle") return 22;
+      if (name === "Okidogi") return 20;
+      if (name === "Binacle") return 10;
+      return 0;
+    case "slowking-scr":
+      if (name === "Slowking") return 20;
+      if (name === "Slowpoke") return 12;
+      return 0;
+    case "lopunny-dudunsparce":
+      if (name === "Mega Lopunny ex") return 25;
+      if (name === "Dudunsparce ex") return 22;
+      if (name === "Lopunny") return 12;
+      if (name === "Buneary") return 8;
+      return 0;
+    case "greninja-ex":
+      if (name === "Mega Greninja ex") return 25;
+      if (name === "Greninja ex") return 20;
+      if (name === "Frogadier") return 10;
+      if (name === "Froakie") return 8;
+      return 0;
+    case "clefairy-ogerpon":
+      if (name === "Lillie's Clefairy ex") return 22;
+      if (name === "Teal Mask Ogerpon ex") return 18;
+      return 0;
+    case "ogerpon-box":
+      // Each mask gets equal weight — the right one depends on matchup.
+      if (
+        name === "Hearthflame Mask Ogerpon ex" ||
+        name === "Wellspring Mask Ogerpon ex" ||
+        name === "Teal Mask Ogerpon ex" ||
+        name === "Cornerstone Mask Ogerpon ex"
+      ) {
+        return 22;
+      }
+      return 0;
+    case "stevens-metagross":
+      if (name === "Steven's Metagross ex") return 25;
+      if (name === "Steven's Metang") return 14;
+      if (name === "Steven's Beldum") return 8;
+      return 0;
+    case "diancie-dusknoir":
+      if (name === "Mega Diancie ex") return 25;
+      if (name === "Dusknoir") return 22;
+      if (name === "Dusclops") return 12;
+      if (name === "Diancie") return 14;
+      return 0;
+    case "ursaluna-lunatone":
+      if (name === "Bloodmoon Ursaluna ex") return 28;
+      if (name === "Lunatone" || name === "Solrock") return 10;
+      return 0;
+    case "flareon-noctowl":
+      if (name === "Flareon ex") return 25;
+      if (name === "Eevee") return 10;
+      if (name === "Noctowl") return 14;
+      return 0;
+    case "dragapult-ex":
+      if (name === "Dragapult ex") return 28;
+      if (name === "Drakloak") return 12;
+      if (name === "Dreepy") return 8;
+      return 0;
+    case "dragapult-dusknoir":
+      if (name === "Dragapult ex") return 25;
+      if (name === "Dusknoir") return 22;
+      if (name === "Drakloak") return 12;
+      if (name === "Dusclops") return 10;
+      return 0;
+    case "hydrapple-ogerpon":
+      if (name === "Hydrapple ex") return 28;
+      if (name === "Hydrapple") return 15;
+      if (name === "Teal Mask Ogerpon ex") return 18;
+      if (name === "Applin") return 8;
+      return 0;
+    case "ogerpon-meganium":
+      if (name === "Mega Meganium ex") return 28;
+      if (name === "Meganium") return 18;
+      if (name === "Teal Mask Ogerpon ex") return 16;
+      if (name === "Bayleef") return 10;
+      return 0;
+    case "mega-absol-box":
+      if (name === "Mega Absol ex") return 28;
+      if (name === "Absol") return 12;
+      return 0;
+    case "tera-box":
+      // Spread attach across the deck's possible Mega bodies.
+      if (
+        name === "Mega Charizard X ex" ||
+        name === "Mega Charizard Y ex" ||
+        name === "Mega Absol ex"
+      ) {
+        return 22;
+      }
+      return 0;
     default:
       return 0;
   }
@@ -803,6 +1540,92 @@ export function archetypeBenchBonus(
       // Fezandipiti ex — draw engine basic.
       if (name === "Fezandipiti ex") return 8;
       return 0;
+    case "starmie-dusknoir":
+      if (name === "Staryu") return 18;
+      if (name === "Duskull") return 16;
+      return 0;
+    case "n-zoroark":
+      if (name === "N's Zorua") return 18;
+      if (name === "N's Reshiram") return 14;
+      if (name === "N's Zekrom") return 12;
+      return 0;
+    case "raging-bolt-ogerpon":
+      if (name === "Raging Bolt ex") return 18;
+      if (name === "Teal Mask Ogerpon ex") return 14;
+      return 0;
+    case "rockets-honchkrow":
+      if (name === "Team Rocket's Murkrow") return 18;
+      if (name === "Team Rocket's Honchkrow") return 12;
+      return 0;
+    case "okidogi-barbaracle":
+      if (name === "Binacle") return 18;
+      if (name === "Okidogi") return 14;
+      return 0;
+    case "slowking-scr":
+      if (name === "Slowpoke") return 18;
+      return 0;
+    case "lopunny-dudunsparce":
+      if (name === "Buneary") return 18;
+      if (name === "Dudunsparce ex") return 14;
+      return 0;
+    case "greninja-ex":
+      if (name === "Froakie") return 18;
+      if (name === "Greninja ex") return 12;
+      return 0;
+    case "clefairy-ogerpon":
+      if (name === "Clefairy") return 18;
+      if (name === "Lillie's Clefairy ex") return 16;
+      if (name === "Teal Mask Ogerpon ex") return 12;
+      return 0;
+    case "ogerpon-box":
+      if (
+        name === "Hearthflame Mask Ogerpon ex" ||
+        name === "Wellspring Mask Ogerpon ex" ||
+        name === "Teal Mask Ogerpon ex" ||
+        name === "Cornerstone Mask Ogerpon ex"
+      ) {
+        return 16;
+      }
+      return 0;
+    case "stevens-metagross":
+      if (name === "Steven's Beldum") return 18;
+      if (name === "Steven's Carbink") return 12;
+      return 0;
+    case "diancie-dusknoir":
+      if (name === "Diancie") return 18;
+      if (name === "Duskull") return 14;
+      return 0;
+    case "ursaluna-lunatone":
+      if (name === "Bloodmoon Ursaluna ex") return 18;
+      if (name === "Lunatone" || name === "Solrock") return 14;
+      return 0;
+    case "flareon-noctowl":
+      if (name === "Eevee") return 18;
+      if (name === "Hoothoot") return 12;
+      return 0;
+    case "dragapult-ex":
+      if (name === "Dreepy") return 18;
+      if (name === "Munkidori") return 12;
+      return 0;
+    case "dragapult-dusknoir":
+      if (name === "Dreepy") return 18;
+      if (name === "Duskull") return 16;
+      return 0;
+    case "hydrapple-ogerpon":
+      if (name === "Applin") return 18;
+      if (name === "Teal Mask Ogerpon ex") return 14;
+      return 0;
+    case "ogerpon-meganium":
+      if (name === "Chikorita") return 18;
+      if (name === "Teal Mask Ogerpon ex") return 14;
+      return 0;
+    case "mega-absol-box":
+      if (name === "Absol") return 18;
+      return 0;
+    case "tera-box":
+      // Each Mega-line Basic is bench-worthy in a multi-mask plan.
+      if (name === "Charmander" || name === "Absol") return 14;
+      return 0;
     default:
       return 0;
   }
@@ -879,6 +1702,69 @@ export function archetypeAbilityBonus(
       // Extra Helpings (Hop's Snorlax) — passive +30 to ALL your Hop's
       // attacks while Snorlax is in play. Highest-value ability in the deck.
       if (abilityName === "Extra Helpings") return 22;
+      return 0;
+    case "starmie-dusknoir":
+      // Adrena-Brain (Munkidori) — damage redistribution for Cursed Blast KO math.
+      if (abilityName === "Adrena-Brain") return 18;
+      return 0;
+    case "n-zoroark":
+      // Trade (Zoroark line) — typical deck-thin draw engine; high priority.
+      if (abilityName === "Trade") return 20;
+      return 0;
+    case "raging-bolt-ogerpon":
+      return 0;
+    case "rockets-honchkrow":
+      // Charging Up (TR Spidops) — if included as a backup ramp engine.
+      if (abilityName === "Charging Up") return 16;
+      return 0;
+    case "okidogi-barbaracle":
+      return 0;
+    case "slowking-scr":
+      // Calming Aroma (Slowking) — passive heal each turn between Pokémon
+      // Center Lady plays. Core to the control plan.
+      if (abilityName === "Calming Aroma") return 22;
+      return 0;
+    case "lopunny-dudunsparce":
+      // Run Away Draw (Dudunsparce non-ex) — 1-card draw + retreat utility.
+      if (abilityName === "Run Away Draw") return 14;
+      return 0;
+    case "greninja-ex":
+      return 0;
+    case "clefairy-ogerpon":
+      return 0;
+    case "ogerpon-box":
+      return 0;
+    case "stevens-metagross":
+      return 0;
+    case "diancie-dusknoir":
+      return 0;
+    case "ursaluna-lunatone":
+      // Lunatone/Solrock typically have draw-related abilities — flag them.
+      if (abilityName === "Moonlight Reverse" || abilityName === "Sun Selecting") {
+        return 18;
+      }
+      return 0;
+    case "flareon-noctowl":
+      // Noctowl's draw ability is the engine of this deck — Pidgeot equivalent.
+      if (abilityName === "Wisdom of Suspicion") return 22;
+      return 0;
+    case "dragapult-ex":
+      // Recon Directive (Drakloak) — top-2 filter for Phantom Dive pieces.
+      if (abilityName === "Recon Directive") return 20;
+      // Adrena-Brain (Munkidori) — damage redistribution.
+      if (abilityName === "Adrena-Brain") return 16;
+      return 0;
+    case "dragapult-dusknoir":
+      if (abilityName === "Recon Directive") return 20;
+      if (abilityName === "Adrena-Brain") return 16;
+      return 0;
+    case "hydrapple-ogerpon":
+      return 0;
+    case "ogerpon-meganium":
+      return 0;
+    case "mega-absol-box":
+      return 0;
+    case "tera-box":
       return 0;
     default:
       return 0;
@@ -1331,6 +2217,461 @@ const PLAYBOOKS: Partial<Record<Archetype, PlaybookEntry>> = {
       2: { "Extra Helpings": 18 },
       3: { "Extra Helpings": 22 },
     },
+  },
+  // ---- Stage 1-5 expansion playbooks --------------------------------------
+  // Minimal T1/T2/T3 entries — focused on signature lines + standard support
+  // cards. The base scorer already prefers Buddy-Buddy Poffin / Lillie's /
+  // Ultra Ball / Boss's Orders, so playbook bonuses are reserved for the
+  // archetype-specific cards (signature stadium, ACE SPEC, evolve line).
+  "starmie-dusknoir": {
+    cardBonus: {
+      1: {
+        "Staryu": 40,
+        "Duskull": 35,
+        "Munkidori": 22,
+        "Risky Ruins": 50,
+        "Buddy-Buddy Poffin": 30,
+      },
+      2: {
+        "Dusclops": 35,
+        "Mega Starmie ex": 40,
+        "Lillie's Determination": 45,
+        "Rare Candy": 35,
+        "Buddy-Buddy Poffin": 22,
+      },
+      3: {
+        "Dusknoir": 45,
+        "Mega Starmie ex": 35,
+        "Boss's Orders": 30,
+        "Hero's Cape": 22,
+      },
+    },
+    abilityBonus: { 1: {}, 2: { "Adrena-Brain": 18 }, 3: { "Adrena-Brain": 22 } },
+  },
+  "n-zoroark": {
+    cardBonus: {
+      1: {
+        "N's Zorua": 40,
+        "N's Reshiram": 30,
+        "N's Zekrom": 25,
+        "Buddy-Buddy Poffin": 35,
+        "N's PP Up": 40,
+      },
+      2: {
+        "N's Zoroark ex": 45,
+        "N's Reshiram": 30,
+        "Lillie's Determination": 40,
+        "Rare Candy": 30,
+      },
+      3: {
+        "N's Zoroark ex": 35,
+        "N's Reshiram": 35,
+        "Boss's Orders": 30,
+        "N's PP Up": 30,
+      },
+    },
+    abilityBonus: { 1: {}, 2: { "Trade": 25 }, 3: { "Trade": 22 } },
+  },
+  "raging-bolt-ogerpon": {
+    cardBonus: {
+      1: {
+        "Raging Bolt ex": 45,
+        "Teal Mask Ogerpon ex": 30,
+        "Buddy-Buddy Poffin": 30,
+        "Sparkling Crystal": 35,
+      },
+      2: {
+        "Raging Bolt ex": 40,
+        "Teal Mask Ogerpon ex": 25,
+        "Professor Sada's Vitality": 50,
+        "Lillie's Determination": 35,
+      },
+      3: {
+        "Raging Bolt ex": 35,
+        "Professor Sada's Vitality": 40,
+        "Boss's Orders": 30,
+      },
+    },
+    abilityBonus: { 1: {}, 2: {}, 3: {} },
+  },
+  "rockets-honchkrow": {
+    cardBonus: {
+      1: {
+        "Team Rocket's Murkrow": 40,
+        "Team Rocket's Honchkrow": 22,
+        "Team Rocket's Energy": 24,
+        "Team Rocket's Proton": 55,
+      },
+      2: {
+        "Team Rocket's Honchkrow": 45,
+        "Team Rocket's Energy": 25,
+        "Team Rocket's Ariana": 50,
+        "Team Rocket's Transceiver": 22,
+      },
+      3: {
+        "Team Rocket's Honchkrow": 40,
+        "Team Rocket's Energy": 22,
+        "Team Rocket's Giovanni": 40,
+        "Boss's Orders": 25,
+      },
+    },
+    abilityBonus: { 1: {}, 2: {}, 3: {} },
+  },
+  "okidogi-barbaracle": {
+    cardBonus: {
+      1: {
+        "Binacle": 40,
+        "Okidogi": 35,
+        "Buddy-Buddy Poffin": 35,
+      },
+      2: {
+        "Barbaracle": 45,
+        "Okidogi": 25,
+        "Lillie's Determination": 40,
+        "Hero's Cape": 40,
+      },
+      3: {
+        "Barbaracle": 40,
+        "Okidogi": 30,
+        "Boss's Orders": 30,
+        "Hero's Cape": 28,
+      },
+    },
+    abilityBonus: { 1: {}, 2: {}, 3: {} },
+  },
+  "slowking-scr": {
+    cardBonus: {
+      1: {
+        "Slowpoke": 45,
+        "Buddy-Buddy Poffin": 30,
+        "Lillie's Determination": 28,
+      },
+      2: {
+        "Slowking": 50,
+        "Iono": 35,
+        "Pokémon Center Lady": 30,
+        "Rare Candy": 25,
+      },
+      3: {
+        "Slowking": 40,
+        "Iono": 40,
+        "Pokémon Center Lady": 35,
+      },
+    },
+    abilityBonus: {
+      1: {},
+      2: { "Calming Aroma": 25 },
+      3: { "Calming Aroma": 25 },
+    },
+  },
+  "lopunny-dudunsparce": {
+    cardBonus: {
+      1: {
+        "Buneary": 40,
+        "Dunsparce": 30,
+        "Buddy-Buddy Poffin": 35,
+        "Lillie's Determination": 28,
+      },
+      2: {
+        "Lopunny": 35,
+        "Mega Lopunny ex": 45,
+        "Dudunsparce ex": 35,
+        "Rare Candy": 35,
+        "Hero's Cape": 35,
+      },
+      3: {
+        "Mega Lopunny ex": 40,
+        "Dudunsparce ex": 35,
+        "Boss's Orders": 30,
+      },
+    },
+    abilityBonus: { 1: {}, 2: {}, 3: { "Run Away Draw": 14 } },
+  },
+  "greninja-ex": {
+    cardBonus: {
+      1: {
+        "Froakie": 40,
+        "Buddy-Buddy Poffin": 35,
+        "Lillie's Determination": 28,
+      },
+      2: {
+        "Frogadier": 35,
+        "Greninja ex": 35,
+        "Mega Greninja ex": 45,
+        "Rare Candy": 40,
+        "Lillie's Determination": 40,
+      },
+      3: {
+        "Mega Greninja ex": 40,
+        "Greninja ex": 30,
+        "Boss's Orders": 30,
+      },
+    },
+    abilityBonus: { 1: {}, 2: {}, 3: {} },
+  },
+  "clefairy-ogerpon": {
+    cardBonus: {
+      1: {
+        "Clefairy": 40,
+        "Teal Mask Ogerpon ex": 30,
+        "Buddy-Buddy Poffin": 40,
+        "Lillie's Determination": 28,
+      },
+      2: {
+        "Lillie's Clefairy ex": 45,
+        "Teal Mask Ogerpon ex": 25,
+        "Lillie's Determination": 40,
+      },
+      3: {
+        "Lillie's Clefairy ex": 40,
+        "Teal Mask Ogerpon ex": 25,
+        "Boss's Orders": 30,
+      },
+    },
+    abilityBonus: { 1: {}, 2: {}, 3: {} },
+  },
+  "ogerpon-box": {
+    cardBonus: {
+      1: {
+        "Teal Mask Ogerpon ex": 35,
+        "Hearthflame Mask Ogerpon ex": 25,
+        "Wellspring Mask Ogerpon ex": 25,
+        "Cornerstone Mask Ogerpon ex": 25,
+        "Buddy-Buddy Poffin": 30,
+        "Energy Switch": 30,
+      },
+      2: {
+        "Hearthflame Mask Ogerpon ex": 35,
+        "Wellspring Mask Ogerpon ex": 35,
+        "Teal Mask Ogerpon ex": 30,
+        "Cornerstone Mask Ogerpon ex": 30,
+        "Lillie's Determination": 35,
+      },
+      3: {
+        "Hearthflame Mask Ogerpon ex": 30,
+        "Wellspring Mask Ogerpon ex": 30,
+        "Teal Mask Ogerpon ex": 25,
+        "Cornerstone Mask Ogerpon ex": 25,
+        "Boss's Orders": 25,
+      },
+    },
+    abilityBonus: { 1: {}, 2: {}, 3: {} },
+  },
+  "stevens-metagross": {
+    cardBonus: {
+      1: {
+        "Steven's Beldum": 40,
+        "Buddy-Buddy Poffin": 35,
+        "Lillie's Determination": 28,
+      },
+      2: {
+        "Steven's Metang": 30,
+        "Steven's Metagross ex": 45,
+        "Steven's Resolve": 35,
+        "Rare Candy": 40,
+      },
+      3: {
+        "Steven's Metagross ex": 40,
+        "Steven's Resolve": 30,
+        "Boss's Orders": 25,
+      },
+    },
+    abilityBonus: { 1: {}, 2: {}, 3: {} },
+  },
+  "diancie-dusknoir": {
+    cardBonus: {
+      1: {
+        "Duskull": 40,
+        "Diancie": 30,
+        "Buddy-Buddy Poffin": 30,
+      },
+      2: {
+        "Dusclops": 35,
+        "Mega Diancie ex": 45,
+        "Lillie's Determination": 40,
+        "Rare Candy": 35,
+      },
+      3: {
+        "Dusknoir": 45,
+        "Mega Diancie ex": 35,
+        "Boss's Orders": 30,
+      },
+    },
+    abilityBonus: { 1: {}, 2: {}, 3: {} },
+  },
+  "ursaluna-lunatone": {
+    cardBonus: {
+      1: {
+        "Bloodmoon Ursaluna ex": 35,
+        "Lunatone": 25,
+        "Solrock": 25,
+        "Buddy-Buddy Poffin": 30,
+      },
+      2: {
+        "Bloodmoon Ursaluna ex": 40,
+        "Lillie's Determination": 35,
+        "Maximum Belt": 30,
+      },
+      3: {
+        "Bloodmoon Ursaluna ex": 40,
+        "Maximum Belt": 25,
+        "Boss's Orders": 30,
+      },
+    },
+    abilityBonus: { 1: {}, 2: {}, 3: {} },
+  },
+  "flareon-noctowl": {
+    cardBonus: {
+      1: {
+        "Eevee": 40,
+        "Hoothoot": 28,
+        "Buddy-Buddy Poffin": 30,
+      },
+      2: {
+        "Flareon ex": 45,
+        "Noctowl": 30,
+        "Lillie's Determination": 35,
+      },
+      3: {
+        "Flareon ex": 40,
+        "Noctowl": 25,
+        "Boss's Orders": 30,
+      },
+    },
+    abilityBonus: {
+      1: {},
+      2: { "Wisdom of Suspicion": 20 },
+      3: { "Wisdom of Suspicion": 22 },
+    },
+  },
+  // ---- Stage 6 expansion playbooks ----------------------------------------
+  "dragapult-ex": {
+    cardBonus: {
+      1: {
+        "Dreepy": 35,
+        "Drakloak": 20,
+        "Buddy-Buddy Poffin": 35,
+        "Lillie's Determination": 30,
+      },
+      2: {
+        "Drakloak": 35,
+        "Dragapult ex": 35,
+        "Rare Candy": 45,
+        "Lillie's Determination": 40,
+      },
+      3: {
+        "Dragapult ex": 35,
+        "Boss's Orders": 30,
+        "Rare Candy": 35,
+      },
+    },
+    abilityBonus: { 1: {}, 2: { "Recon Directive": 22 }, 3: { "Recon Directive": 20 } },
+  },
+  "dragapult-dusknoir": {
+    cardBonus: {
+      1: {
+        "Dreepy": 35,
+        "Duskull": 30,
+        "Buddy-Buddy Poffin": 35,
+        "Lillie's Determination": 30,
+      },
+      2: {
+        "Drakloak": 30,
+        "Dusclops": 30,
+        "Dragapult ex": 35,
+        "Rare Candy": 45,
+        "Lillie's Determination": 40,
+      },
+      3: {
+        "Dragapult ex": 35,
+        "Dusknoir": 40,
+        "Boss's Orders": 30,
+      },
+    },
+    abilityBonus: { 1: {}, 2: { "Recon Directive": 22 }, 3: { "Recon Directive": 20 } },
+  },
+  "hydrapple-ogerpon": {
+    cardBonus: {
+      1: {
+        "Applin": 35,
+        "Teal Mask Ogerpon ex": 30,
+        "Buddy-Buddy Poffin": 35,
+      },
+      2: {
+        "Hydrapple": 25,
+        "Hydrapple ex": 45,
+        "Rare Candy": 40,
+        "Lillie's Determination": 35,
+      },
+      3: {
+        "Hydrapple ex": 40,
+        "Boss's Orders": 30,
+      },
+    },
+    abilityBonus: { 1: {}, 2: {}, 3: {} },
+  },
+  "ogerpon-meganium": {
+    cardBonus: {
+      1: {
+        "Chikorita": 35,
+        "Teal Mask Ogerpon ex": 30,
+        "Buddy-Buddy Poffin": 35,
+      },
+      2: {
+        "Bayleef": 25,
+        "Meganium": 30,
+        "Mega Meganium ex": 45,
+        "Rare Candy": 40,
+        "Lillie's Determination": 35,
+      },
+      3: {
+        "Mega Meganium ex": 40,
+        "Boss's Orders": 30,
+      },
+    },
+    abilityBonus: { 1: {}, 2: {}, 3: {} },
+  },
+  "mega-absol-box": {
+    cardBonus: {
+      1: {
+        "Absol": 35,
+        "Sparkling Crystal": 40,
+        "Buddy-Buddy Poffin": 30,
+      },
+      2: {
+        "Mega Absol ex": 50,
+        "Sparkling Crystal": 30,
+        "Lillie's Determination": 35,
+      },
+      3: {
+        "Mega Absol ex": 40,
+        "Boss's Orders": 30,
+        "Maximum Belt": 25,
+      },
+    },
+    abilityBonus: { 1: {}, 2: {}, 3: {} },
+  },
+  "tera-box": {
+    cardBonus: {
+      1: {
+        "Tera Orb": 45,
+        "Buddy-Buddy Poffin": 25,
+        "Lillie's Determination": 25,
+      },
+      2: {
+        "Tera Orb": 35,
+        "Mega Charizard X ex": 35,
+        "Mega Charizard Y ex": 35,
+        "Mega Absol ex": 35,
+      },
+      3: {
+        "Mega Charizard X ex": 30,
+        "Mega Charizard Y ex": 30,
+        "Mega Absol ex": 30,
+        "Boss's Orders": 25,
+      },
+    },
+    abilityBonus: { 1: {}, 2: {}, 3: {} },
   },
 };
 

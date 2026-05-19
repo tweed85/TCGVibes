@@ -18,6 +18,11 @@ test.describe("App boots and the action bar wires up correctly", () => {
 
     await page.goto(APP_URL);
 
+    // Home view renders first (since the Doctor was promoted to a peer
+    // entry point). Click the "Play" tile to reach the pre-game modal.
+    await expect(page.getByRole("heading", { name: /PandaBananasTCG/i })).toBeVisible();
+    await page.getByRole("button", { name: /play a game/i }).click();
+
     // Pre-game modal should render with a Start Game primary button.
     await expect(page.getByRole("heading", { name: /Start a game/i })).toBeVisible();
     await page.getByRole("button", { name: "Start Game" }).click();
@@ -84,6 +89,8 @@ test.describe("App boots and the action bar wires up correctly", () => {
     page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
 
     await page.goto(APP_URL);
+    // Home → Play.
+    await page.getByRole("button", { name: /play a game/i }).click();
     await page.getByRole("button", { name: "Start Game" }).click();
     await page.getByRole("button", { name: "Heads" }).click();
     const goFirst = page.getByRole("button", { name: "Go first" });
@@ -166,6 +173,9 @@ test.describe("App boots and the action bar wires up correctly", () => {
 
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto(APP_URL);
+    // Cold-start lands on the home view; navigate to Play so the
+    // "Start a game" pre-game heading is reachable.
+    await page.getByRole("button", { name: /play a game/i }).click();
     await expect(page.getByRole("heading", { name: /Start a game/i })).toBeVisible();
 
     // Body must not overflow the viewport — `body { overflow-x: hidden }`
