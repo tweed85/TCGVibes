@@ -80,6 +80,31 @@ export interface MetaTournament {
   online: boolean;
   sourceUrl: string;
   decklistVisibility: "open" | "archetype-only" | "closed" | "unknown";
+  // Top finishes when Limitless exposes them. Used by the Field tab's
+  // "Recent top finishes" surface so users can see WHICH pilots took
+  // a given archetype deep + click through to the actual decklist.
+  // Capped at 8 by convention (top-cut), but the schema doesn't enforce —
+  // the agent decides. Omitted entirely when no top-cut data is available.
+  topFinishes?: TopFinish[];
+}
+
+export interface TopFinish {
+  finish: number;                   // 1 = winner, 2 = finalist, 3-4 = top4, etc.
+  player: string;
+  archetype: Archetype | "unknown";
+  // Natural-language archetype name as reported by the tournament source
+  // (e.g. "Dragapult / Dudunsparce", "N's Zoroark", "Lopunny-Mega /
+  // Dudunsparce"). Preferred for display when present — the engine
+  // `archetype` slug is intentionally coarser (and often "unknown" for
+  // variants not yet wired into the Archetype union) so this label
+  // carries the precise deck-archetype identity the source used.
+  archetypeLabel?: string;
+  // Optional direct link to the player's decklist on Limitless. If absent,
+  // callers fall back to `MetaTournament.sourceUrl` for the tournament page.
+  decklistUrl?: string;
+  // Player country (ISO 3166-1 alpha-2) when known. Helps disambiguate
+  // common first names + indicates regional meta context.
+  country?: string;
 }
 
 export interface ArchetypeMetaStats {

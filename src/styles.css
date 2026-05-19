@@ -166,6 +166,11 @@ button, select, input, [role="button"] {
   font-size: 12px;
   flex: 0 0 auto;
 }
+.deck-doctor-launch {
+  min-height: 32px;
+  white-space: nowrap;
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.24);
+}
 
 /* Clustered "deck & log utility" buttons — Import / Change Decks / Export Log.
    Group them visually so the eye reads "a row of three setup actions," then
@@ -2420,6 +2425,17 @@ button.secondary:hover:not(:disabled) {
   display: flex;
   flex-direction: column;
 }
+.deck-doctor-workspace {
+  width: min(1380px, 100%);
+  max-width: calc(100vw - 20px);
+  min-height: min(860px, calc(100dvh - 20px));
+}
+.dd-title-subtitle {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 2px;
+  line-height: 1.35;
+}
 .deck-doctor-body {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) 2fr;
@@ -2502,6 +2518,53 @@ button.secondary:hover:not(:disabled) {
   background: var(--panel-2);
   color: var(--muted);
   font-size: 12px;
+}
+.dd-hero-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 6px;
+  background:
+    linear-gradient(135deg, rgba(245, 158, 11, 0.16), rgba(34, 211, 238, 0.08)),
+    var(--panel-2);
+  border: 1px solid rgba(245, 158, 11, 0.22);
+}
+.dd-hero-panel h3 {
+  margin: 0 0 5px;
+  font-size: 16px;
+}
+.dd-hero-panel p {
+  margin: 0;
+  max-width: 720px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.dd-hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(84px, auto));
+  gap: 8px;
+}
+.dd-metric-pill {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+.dd-metric-pill span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.dd-metric-pill strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .dd-report {
@@ -2705,6 +2768,238 @@ button.secondary:hover:not(:disabled) {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--muted);
+}
+.dd-field-overview {
+  background: var(--panel);
+}
+.dd-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.9fr);
+  gap: 10px;
+}
+.dd-overview-card {
+  background: var(--panel-2);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 6px;
+  padding: 10px;
+}
+.dd-overview-wide {
+  grid-column: 1 / -1;
+}
+.dd-overview-card h4 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.dd-bar-list,
+.dd-tournament-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dd-bar-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+.dd-bar-label strong {
+  color: var(--accent-hi);
+}
+.dd-bar-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.55);
+  overflow: hidden;
+  margin-top: 3px;
+}
+.dd-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--info));
+}
+.dd-mini-note {
+  color: var(--muted);
+  font-size: 10px;
+  margin-top: 2px;
+  line-height: 1.3;
+}
+.dd-tournament-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  color: var(--text);
+  text-decoration: none;
+  padding: 7px 8px;
+  border-radius: 5px;
+  background: rgba(15, 23, 42, 0.35);
+}
+.dd-tournament-row:hover {
+  background: rgba(15, 23, 42, 0.55);
+}
+.dd-tournament-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.dd-tournament-row strong {
+  color: var(--accent-hi);
+  font-size: 11px;
+}
+.dd-tournament-row em {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+}
+.dd-top-finishes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dd-top-finish-tournament {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.35);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+.dd-top-finish-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dd-top-finish-header a {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--accent, #60a5fa);
+  text-decoration: none;
+}
+.dd-top-finish-header a:hover {
+  text-decoration: underline;
+}
+.dd-top-finish-header em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+}
+.dd-top-finish-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dd-top-finish-row {
+  display: grid;
+  grid-template-columns: 56px 1fr auto auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.45);
+  font-size: 12px;
+}
+.dd-finish-place {
+  font-weight: 600;
+  color: var(--accent, #60a5fa);
+}
+.dd-finish-player {
+  color: var(--fg, #e2e8f0);
+}
+.dd-finish-country {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 10px;
+}
+.dd-finish-archetype {
+  color: var(--muted);
+  font-size: 11px;
+}
+.dd-finish-decklist {
+  color: var(--accent, #60a5fa);
+  text-decoration: none;
+  font-size: 11px;
+}
+.dd-finish-decklist:hover {
+  text-decoration: underline;
+}
+@media (max-width: 720px) {
+  .dd-top-finish-row {
+    grid-template-columns: 48px 1fr;
+    grid-template-rows: auto auto;
+  }
+  .dd-finish-archetype,
+  .dd-finish-decklist {
+    grid-column: 2;
+  }
+}
+
+.dd-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+}
+.dd-signal {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 5px;
+  background: rgba(15, 23, 42, 0.35);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+.dd-signal span {
+  width: fit-content;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(34, 211, 238, 0.12);
+  color: var(--info);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.dd-signal strong {
+  font-size: 12px;
+}
+.dd-signal em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+@media (max-width: 900px) {
+  .dd-hero-panel,
+  .dd-overview-grid {
+    grid-template-columns: 1fr;
+  }
+  .dd-hero-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .deck-doctor-workspace {
+    min-height: calc(100dvh - 12px);
+    max-width: calc(100vw - 12px);
+  }
+  .dd-hero-metrics {
+    grid-template-columns: 1fr;
+  }
+  .dd-tabs {
+    overflow-x: auto;
+  }
+  .pregame-doctor-feature {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Compact "skipped stage" notice modal (Dawn intermediates). */
@@ -3295,6 +3590,36 @@ button.secondary:hover:not(:disabled) {
   background: rgba(245, 158, 11, 0.12);
 }
 .pregame-mode .mode-option input { display: none; }
+.pregame-doctor-feature {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  text-align: left;
+  padding: 10px 12px;
+  border-color: rgba(245, 158, 11, 0.45);
+  background:
+    linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(34, 211, 238, 0.06)),
+    var(--panel-2);
+}
+.pregame-doctor-feature span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.pregame-doctor-feature strong {
+  color: var(--text);
+  font-size: 13px;
+}
+.pregame-doctor-feature > b {
+  color: var(--accent-hi);
+  font-size: 12px;
+}
 
 /* Hotseat pass-the-device interstitial. Fully opaque so neither player can
    glimpse the other's hand during handoff. */
@@ -3413,6 +3738,7 @@ button.secondary:hover:not(:disabled) {
    right edge without a yawning gap on short labels. */
 .pregame-options > :first-child { flex: 1 1 auto; min-width: 0; }
 .pregame-options > button { margin-left: auto; }
+.pregame-options > button.doctor-secondary { margin-left: 0; }
 /* Pre-game's Start Game button gets its own row of modal-actions; center it
    so single-button rows don't leave asymmetric whitespace on the right. */
 .pregame-modal .modal-actions { justify-content: flex-end; }
