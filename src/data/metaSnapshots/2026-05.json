@@ -7,7 +7,7 @@
   "usableForGrades": true,
   "generatedAt": "2026-05-09T22:07:12.419534Z",
   "coversFrom": "2026-04-20T19:00:00.000Z",
-  "coversThrough": "2026-05-07T16:10:00.000Z",
+  "coversThrough": "2026-05-17T23:59:59.000Z",
   "sources": [
     "https://docs.limitlesstcg.com/developer/games",
     "https://docs.limitlesstcg.com/developer/tournaments",
@@ -31,17 +31,473 @@
     "https://play.limitlesstcg.com/tournament/69e4f52248d465883f718019",
     "https://play.limitlesstcg.com/tournament/69f0de9fe23aab068aad4449",
     "https://play.limitlesstcg.com/tournament/69c94f8bd478313a15a36404",
-    "https://play.limitlesstcg.com/tournament/69e69c2048d465883f719400"
+    "https://play.limitlesstcg.com/tournament/69e69c2048d465883f719400",
+    "https://limitlesstcg.com/tournaments/535",
+    "https://limitlesstcg.com/tournaments/544",
+    "https://limitlesstcg.com/tournaments/549",
+    "https://limitlesstcg.com/tournaments/558",
+    "https://limitlesstcg.com/tournaments/565",
+    "https://limitlesstcg.com/tournaments/539",
+    "https://labs.limitlesstcg.com/0061/standings",
+    "https://labs.limitlesstcg.com/0063/standings"
   ],
   "minPlayerCount": 32,
   "methodology": "Pulled the 20 largest STANDARD-format Limitless tournaments held between 2026-04-20 and 2026-05-07 (≥32 players each). For each, fetched /details, /standings, and /pairings via the unauthenticated public API. Player archetype assignments came from Limitless's auto-categorizer (deck.id field on each standing); we mapped those ids onto the project's Archetype taxonomy (src/engine/aiArchetype.ts). 'Dragapult ex' lists with no Blaziken signature are mapped to dragapult-dudunsparce since the May-2026 field's bare 'dragapult-ex' is overwhelmingly the Mateusz Łaszkiewicz Prague-championship anti-Crustle build. Decks Limitless couldn't categorize, plus archetypes outside the project's taxonomy (zoroark, raging-bolt, slowking, ogerpon-box, magnezone, blissey, etc.) are aggregated under the synthetic 'unknown' bucket. Matchup matrix is compiled from /pairings — both directions of every non-bye match are counted, ties are split (0.5 win each), and Wilson 95% CIs use a continuity-corrected interval. Bo1 and Bo3 matches are counted independently; the matrix doesn't separate them. Stock lists exclude archetypes with <5 observed decklists. Decks contributed by online and offline events are summed; the field is online-heavy (Limitless's primary data feed is its own online play platform). Limitations: (1) no real Regional results landed in this 30-day window, so the field is 100% online events; (2) Limitless's auto-categorizer mislabels rare edge builds, inflating the unknown bucket; (3) Bo1 swiss results are noisier than Bo3 — interpret matchup CIs accordingly.",
   "unknownArchetypeShare": 0.4344,
   "matchupCoverageShare": 0.5656,
-  "onlineShare": 1,
-  "offlineShare": 0,
+  "onlineShare": 0.2182,
+  "offlineShare": 0.7818,
   "bo1Share": 0.9917,
   "bo3Share": 0.0083,
   "tournaments": [
+    {
+      "id": "utrecht-regional-2026",
+      "name": "Utrecht Regional Championships 2026",
+      "date": "2026-05-16",
+      "region": "EU",
+      "playerCount": 2150,
+      "online": false,
+      "sourceUrl": "https://limitlesstcg.com/tournaments/535",
+      "decklistVisibility": "open",
+      "topFinishes": [
+        {
+          "finish": 1,
+          "player": "Miloslav Posledni",
+          "archetype": "unknown",
+          "archetypeLabel": "Lopunny / Dudunsparce",
+          "country": "CZ",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/26823"
+        },
+        {
+          "finish": 2,
+          "player": "Hasan Kunukcu",
+          "archetype": "unknown",
+          "archetypeLabel": "Dragapult",
+          "country": "US",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/26507"
+        },
+        {
+          "finish": 3,
+          "player": "Kim Pobega",
+          "archetype": "unknown",
+          "archetypeLabel": "Dragapult",
+          "country": "IT",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/26827"
+        },
+        {
+          "finish": 4,
+          "player": "Joshua Vanoverschelde",
+          "archetype": "unknown",
+          "archetypeLabel": "Honchkrow / Porygon2",
+          "country": "BE",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/26267"
+        },
+        {
+          "finish": 5,
+          "player": "Edwyn Mesman",
+          "archetype": "unknown",
+          "archetypeLabel": "Dragapult",
+          "country": "NL",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/26825"
+        },
+        {
+          "finish": 6,
+          "player": "Jari Bonsee",
+          "archetype": "unknown",
+          "archetypeLabel": "Dragapult",
+          "country": "NL",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/26824"
+        },
+        {
+          "finish": 7,
+          "player": "Luke Burke",
+          "archetype": "unknown",
+          "archetypeLabel": "Dragapult / Dusknoir",
+          "country": "GB",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/26828"
+        },
+        {
+          "finish": 8,
+          "player": "Fabio Battistella",
+          "archetype": "unknown",
+          "archetypeLabel": "Ogerpon / Ogerpon-Wellspring",
+          "country": "IT",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/26826"
+        },
+        {
+          "finish": 9,
+          "player": "Ted Tobyn",
+          "archetype": "unknown",
+          "archetypeLabel": "Dragapult",
+          "country": "GB",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/26829"
+        },
+        {
+          "finish": 10,
+          "player": "Maciej Chojnacki",
+          "archetype": "unknown",
+          "archetypeLabel": "Dragapult",
+          "country": "PL",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/26830"
+        },
+        {
+          "finish": 11,
+          "player": "Hermanni Hietalahti",
+          "archetype": "unknown",
+          "archetypeLabel": "Zoroark",
+          "country": "FI",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/26831"
+        },
+        {
+          "finish": 12,
+          "player": "Joris van Dijk",
+          "archetype": "alakazam",
+          "archetypeLabel": "Alakazam / Dudunsparce",
+          "country": "NL",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/26832"
+        },
+        {
+          "finish": 13,
+          "player": "Constantin Geisbüsch",
+          "archetype": "cynthia-garchomp",
+          "archetypeLabel": "Garchomp",
+          "country": "DE",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/26833"
+        },
+        {
+          "finish": 14,
+          "player": "Niklas Leitz",
+          "archetype": "unknown",
+          "archetypeLabel": "Greninja",
+          "country": "DE",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/26834"
+        },
+        {
+          "finish": 15,
+          "player": "Oscar Madsen",
+          "archetype": "dragapult-dudunsparce",
+          "archetypeLabel": "Dragapult / Dudunsparce",
+          "country": "DK",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/26835"
+        },
+        {
+          "finish": 16,
+          "player": "Fabian Kern",
+          "archetype": "unknown",
+          "archetypeLabel": "Hydrapple",
+          "country": "DE",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/26836"
+        }
+      ]
+    },
+    {
+      "id": "campinas-regional-2026",
+      "name": "Campinas Regional Championships 2026",
+      "date": "2026-05-16",
+      "region": "LATAM",
+      "playerCount": 1725,
+      "online": false,
+      "sourceUrl": "https://limitlesstcg.com/tournaments/544",
+      "decklistVisibility": "open",
+      "topFinishes": [
+        {
+          "finish": 1,
+          "player": "Matias Matricardi",
+          "archetype": "unknown",
+          "archetypeLabel": "Hydrapple",
+          "country": "AR",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/27142"
+        },
+        {
+          "finish": 2,
+          "player": "Francisco Osorio",
+          "archetype": "unknown",
+          "archetypeLabel": "Dragapult",
+          "country": "CL",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/27143"
+        },
+        {
+          "finish": 3,
+          "player": "Bruno Barros",
+          "archetype": "rocket-mewtwo",
+          "archetypeLabel": "Mewtwo / Spidops",
+          "country": "BR",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/27144"
+        },
+        {
+          "finish": 4,
+          "player": "Cássio Moraes",
+          "archetype": "dragapult-dudunsparce",
+          "archetypeLabel": "Dragapult / Dudunsparce",
+          "country": "BR",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/27145"
+        },
+        {
+          "finish": 5,
+          "player": "Yerco Valencia",
+          "archetype": "unknown",
+          "archetypeLabel": "Ogerpon / Ogerpon-Wellspring",
+          "country": "CL",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/27146"
+        },
+        {
+          "finish": 6,
+          "player": "Guilherme Toledo",
+          "archetype": "dragapult-dudunsparce",
+          "archetypeLabel": "Dragapult / Dudunsparce",
+          "country": "BR",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/26547"
+        },
+        {
+          "finish": 7,
+          "player": "Johana Requena",
+          "archetype": "alakazam",
+          "archetypeLabel": "Alakazam / Dudunsparce",
+          "country": "BR",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/27147"
+        },
+        {
+          "finish": 8,
+          "player": "Adriano Souto Oliveira Junior",
+          "archetype": "unknown",
+          "archetypeLabel": "Raging Bolt / Ogerpon",
+          "country": "BR",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/26533"
+        },
+        {
+          "finish": 9,
+          "player": "Bruno Alves Arruda",
+          "archetype": "unknown",
+          "archetypeLabel": "Lopunny-Mega / Dudunsparce",
+          "country": "BR",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/27148"
+        },
+        {
+          "finish": 10,
+          "player": "Agustín Carabelli",
+          "archetype": "dragapult-dudunsparce",
+          "archetypeLabel": "Dragapult / Dudunsparce",
+          "country": "AR",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/27149"
+        },
+        {
+          "finish": 11,
+          "player": "Roberto Gomes Coregio Junior",
+          "archetype": "festival-leads",
+          "archetypeLabel": "Dipplin / Thwackey",
+          "country": "BR",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/27150"
+        },
+        {
+          "finish": 12,
+          "player": "Rodrigo Torres",
+          "archetype": "mega-starmie-froslass",
+          "archetypeLabel": "Starmie-Mega / Froslass",
+          "country": "BR",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/27151"
+        },
+        {
+          "finish": 13,
+          "player": "Lucas Alencar",
+          "archetype": "unknown",
+          "archetypeLabel": "Hydrapple",
+          "country": "BR",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/27152"
+        },
+        {
+          "finish": 14,
+          "player": "Marco Cifuentes Meta",
+          "archetype": "unknown",
+          "archetypeLabel": "Zoroark",
+          "country": "CL",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/27153"
+        },
+        {
+          "finish": 15,
+          "player": "Vinicius Souza",
+          "archetype": "rocket-mewtwo",
+          "archetypeLabel": "Mewtwo / Spidops",
+          "country": "BR",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/27154"
+        },
+        {
+          "finish": 16,
+          "player": "Augusto Lespier",
+          "archetype": "unknown",
+          "archetypeLabel": "Slowking",
+          "country": "BR",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/27155"
+        }
+      ]
+    },
+    {
+      "id": "la-regional-2026-05",
+      "name": "Los Angeles Regional Championships 2026",
+      "date": "2026-05-10",
+      "region": "NA",
+      "playerCount": 1849,
+      "online": false,
+      "sourceUrl": "https://limitlesstcg.com/tournaments/558",
+      "decklistVisibility": "open",
+      "topFinishes": [
+        {
+          "finish": 1,
+          "player": "Andrew Hedrick",
+          "archetype": "unknown",
+          "archetypeLabel": "Dragapult ex",
+          "country": "US",
+          "decklistUrl": "https://labs.limitlesstcg.com/0063/player/0546/decklist"
+        },
+        {
+          "finish": 2,
+          "player": "Jack Pitcher",
+          "archetype": "dragapult-dudunsparce",
+          "archetypeLabel": "Dragapult / Dudunsparce",
+          "country": "CA",
+          "decklistUrl": "https://labs.limitlesstcg.com/0063/player/0504/decklist"
+        },
+        {
+          "finish": 3,
+          "player": "Nicholas Moffitt",
+          "archetype": "unknown",
+          "archetypeLabel": "Dragapult / Dusknoir",
+          "country": "US",
+          "decklistUrl": "https://labs.limitlesstcg.com/0063/player/1074/decklist"
+        },
+        {
+          "finish": 4,
+          "player": "Preston Rutledge",
+          "archetype": "unknown",
+          "archetypeLabel": "Dragapult / Dusknoir",
+          "country": "US",
+          "decklistUrl": "https://labs.limitlesstcg.com/0063/player/0815/decklist"
+        },
+        {
+          "finish": 5,
+          "player": "Hale Obernolte",
+          "archetype": "unknown",
+          "archetypeLabel": "Lopunny-Mega / Dudunsparce",
+          "country": "US",
+          "decklistUrl": "https://labs.limitlesstcg.com/0063/player/1381/decklist"
+        },
+        {
+          "finish": 6,
+          "player": "Xavier Phelan",
+          "archetype": "unknown",
+          "archetypeLabel": "Lucario-Mega / Hariyama",
+          "country": "US",
+          "decklistUrl": "https://labs.limitlesstcg.com/0063/player/1398/decklist"
+        },
+        {
+          "finish": 7,
+          "player": "Victor De Velasco",
+          "archetype": "unknown",
+          "archetypeLabel": "Dragapult ex",
+          "country": "MX",
+          "decklistUrl": "https://labs.limitlesstcg.com/0063/player/0907/decklist"
+        },
+        {
+          "finish": 8,
+          "player": "Jose Marzan",
+          "archetype": "unknown",
+          "archetypeLabel": "Raging Bolt / Ogerpon",
+          "country": "PR",
+          "decklistUrl": "https://labs.limitlesstcg.com/0063/player/0168/decklist"
+        },
+        {
+          "finish": 9,
+          "player": "Patrik Räty",
+          "archetype": "rocket-mewtwo",
+          "archetypeLabel": "Rocket Mewtwo ex",
+          "country": "FI",
+          "decklistUrl": "https://labs.limitlesstcg.com/0063/player/1710/decklist"
+        },
+        {
+          "finish": 10,
+          "player": "Nigel Tan",
+          "archetype": "unknown",
+          "archetypeLabel": "Dragapult ex",
+          "country": "NZ",
+          "decklistUrl": "https://labs.limitlesstcg.com/0063/player/0582/decklist"
+        },
+        {
+          "finish": 11,
+          "player": "Delong Nguyenthanh",
+          "archetype": "unknown",
+          "archetypeLabel": "Ogerpon Box",
+          "country": "US",
+          "decklistUrl": "https://labs.limitlesstcg.com/0063/player/1032/decklist"
+        }
+      ]
+    },
+    {
+      "id": "cl-aichi-2026-05",
+      "name": "Champions League Aichi 2026",
+      "date": "2026-05-09",
+      "region": "JP",
+      "playerCount": 8000,
+      "online": false,
+      "sourceUrl": "https://limitlesstcg.com/tournaments/549",
+      "decklistVisibility": "open",
+      "topFinishes": [
+        {
+          "finish": 1,
+          "player": "Seinosuke Shiokawa",
+          "archetype": "unknown",
+          "archetypeLabel": "Dragapult / Dusknoir",
+          "country": "JP",
+          "decklistUrl": "https://limitlesstcg.com/decks/list/26792"
+        },
+        {
+          "finish": 2,
+          "player": "Hikaru Shimawaki",
+          "archetype": "unknown",
+          "archetypeLabel": "N's Zoroark",
+          "country": "JP",
+          "decklistUrl": "https://limitlesstcg.com/tournaments/549/decklists"
+        },
+        {
+          "finish": 3,
+          "player": "Kazutaka Yoshida",
+          "archetype": "unknown",
+          "archetypeLabel": "Ogerpon / Meganium",
+          "country": "JP",
+          "decklistUrl": "https://limitlesstcg.com/tournaments/549/decklists"
+        },
+        {
+          "finish": 4,
+          "player": "Shoichi Taniguchi",
+          "archetype": "dragapult-blaziken",
+          "archetypeLabel": "Dragapult / Blaziken",
+          "country": "JP",
+          "decklistUrl": "https://limitlesstcg.com/tournaments/549/decklists"
+        },
+        {
+          "finish": 5,
+          "player": "Torai Ishii",
+          "archetype": "dragapult-dudunsparce",
+          "archetypeLabel": "Dragapult / Dudunsparce",
+          "country": "JP",
+          "decklistUrl": "https://limitlesstcg.com/tournaments/549/decklists"
+        },
+        {
+          "finish": 6,
+          "player": "Kaito Omori",
+          "archetype": "unknown",
+          "archetypeLabel": "N's Zoroark",
+          "country": "JP",
+          "decklistUrl": "https://limitlesstcg.com/tournaments/549/decklists"
+        },
+        {
+          "finish": 7,
+          "player": "Shoichi Saito",
+          "archetype": "unknown",
+          "archetypeLabel": "Dragapult / Dusknoir",
+          "country": "JP",
+          "decklistUrl": "https://limitlesstcg.com/tournaments/549/decklists"
+        }
+      ]
+    },
     {
       "id": "69f553544f71d664893e99f0",
       "name": "🏆Moujii's Dojo🏆 (Late Registration Available!)",
@@ -167,46 +623,138 @@
       "name": "Prague Regional Championships 2026",
       "date": "2026-04-26",
       "region": "EU",
-      "playerCount": 1000,
+      "playerCount": 1370,
       "online": false,
-      "sourceUrl": "https://play.limitlesstcg.com/tournament/prague-regional-2026",
-      "decklistVisibility": "archetype-only",
+      "sourceUrl": "https://limitlesstcg.com/tournaments/539",
+      "decklistVisibility": "open",
       "topFinishes": [
         {
           "finish": 1,
           "player": "Mateusz Łaszkiewicz",
           "archetype": "dragapult-dudunsparce",
-          "country": "PL"
+          "archetypeLabel": "Dragapult / Dudunsparce",
+          "country": "PL",
+          "decklistUrl": "https://labs.limitlesstcg.com/0061/standings"
         },
         {
           "finish": 2,
           "player": "Elmar Tresp",
           "archetype": "crustle",
-          "country": "EE"
+          "archetypeLabel": "Crustle",
+          "country": "DE",
+          "decklistUrl": "https://labs.limitlesstcg.com/0061/standings"
         },
         {
           "finish": 3,
-          "player": "João Pires",
-          "archetype": "unknown",
-          "country": "PT"
+          "player": "Neddy Kosek",
+          "archetype": "cynthia-garchomp",
+          "archetypeLabel": "Garchomp",
+          "country": "CZ",
+          "decklistUrl": "https://labs.limitlesstcg.com/0061/standings"
         },
         {
           "finish": 4,
-          "player": "Neddy Kosek",
-          "archetype": "cynthia-garchomp",
-          "country": "CZ"
+          "player": "João Pires",
+          "archetype": "unknown",
+          "archetypeLabel": "Starmie / Dusknoir",
+          "country": "PT",
+          "decklistUrl": "https://labs.limitlesstcg.com/0061/standings"
+        },
+        {
+          "finish": 5,
+          "player": "Tord Reklev",
+          "archetype": "unknown",
+          "archetypeLabel": "Dragapult ex",
+          "country": "NO",
+          "decklistUrl": "https://labs.limitlesstcg.com/0061/standings"
+        },
+        {
+          "finish": 6,
+          "player": "Maé Brusasco",
+          "archetype": "unknown",
+          "archetypeLabel": "Raging Bolt / Ogerpon",
+          "country": "FR",
+          "decklistUrl": "https://labs.limitlesstcg.com/0061/standings"
+        },
+        {
+          "finish": 7,
+          "player": "Jack Moore",
+          "archetype": "crustle",
+          "archetypeLabel": "Crustle",
+          "country": "CA",
+          "decklistUrl": "https://labs.limitlesstcg.com/0061/standings"
         },
         {
           "finish": 8,
-          "player": "Tord Reklev",
+          "player": "Vincenzo Cipolla",
+          "archetype": "dragapult-blaziken",
+          "archetypeLabel": "Dragapult / Blaziken",
+          "country": "IT",
+          "decklistUrl": "https://labs.limitlesstcg.com/0061/standings"
+        },
+        {
+          "finish": 9,
+          "player": "Uladzimir Mazaleuski",
           "archetype": "unknown",
-          "country": "NO"
+          "archetypeLabel": "Dragapult ex",
+          "country": "PL",
+          "decklistUrl": "https://labs.limitlesstcg.com/0061/standings"
+        },
+        {
+          "finish": 10,
+          "player": "Sander Wojcik",
+          "archetype": "crustle",
+          "archetypeLabel": "Crustle",
+          "country": "NL",
+          "decklistUrl": "https://labs.limitlesstcg.com/0061/standings"
+        },
+        {
+          "finish": 11,
+          "player": "Margherita Caponeri",
+          "archetype": "unknown",
+          "archetypeLabel": "Ogerpon / Meganium",
+          "country": "IT",
+          "decklistUrl": "https://labs.limitlesstcg.com/0061/standings"
+        },
+        {
+          "finish": 12,
+          "player": "Nicklas Rosu",
+          "archetype": "grimmsnarl-froslass",
+          "archetypeLabel": "Grimmsnarl / Froslass",
+          "country": "SE",
+          "decklistUrl": "https://labs.limitlesstcg.com/0061/standings"
+        },
+        {
+          "finish": 13,
+          "player": "Matt Chuang",
+          "archetype": "unknown",
+          "archetypeLabel": "Dragapult / Dusknoir",
+          "country": "US",
+          "decklistUrl": "https://labs.limitlesstcg.com/0061/standings"
+        },
+        {
+          "finish": 14,
+          "player": "Brennan Kamerman",
+          "archetype": "alakazam",
+          "archetypeLabel": "Alakazam / Dudunsparce",
+          "country": "NL",
+          "decklistUrl": "https://labs.limitlesstcg.com/0061/standings"
+        },
+        {
+          "finish": 15,
+          "player": "Piper Lepine",
+          "archetype": "unknown",
+          "archetypeLabel": "N's Zoroark",
+          "country": "US",
+          "decklistUrl": "https://labs.limitlesstcg.com/0061/standings"
         },
         {
           "finish": 16,
-          "player": "Nicklas Rosu",
-          "archetype": "grimmsnarl-froslass",
-          "country": "DK"
+          "player": "Alessandro Frenda",
+          "archetype": "dragapult-blaziken",
+          "archetypeLabel": "Dragapult / Blaziken",
+          "country": "IT",
+          "decklistUrl": "https://labs.limitlesstcg.com/0061/standings"
         }
       ]
     },
@@ -229,6 +777,82 @@
       "online": true,
       "sourceUrl": "https://play.limitlesstcg.com/tournament/69cab6bb36f5b5c303dc2765",
       "decklistVisibility": "open"
+    },
+    {
+      "id": "korean-league-s4-2026",
+      "name": "Korean League Season 4 2026",
+      "date": "2026-04-25",
+      "region": "APAC",
+      "playerCount": 397,
+      "online": false,
+      "sourceUrl": "https://limitlesstcg.com/tournaments/565",
+      "decklistVisibility": "open",
+      "topFinishes": [
+        {
+          "finish": 1,
+          "player": "Pin Yuan Lin",
+          "archetype": "unknown",
+          "archetypeLabel": "Noctowl / Ogerpon-Wellspring",
+          "country": "TW",
+          "decklistUrl": "https://limitlesstcg.com/tournaments/565"
+        },
+        {
+          "finish": 2,
+          "player": "Donguk Jung",
+          "archetype": "unknown",
+          "archetypeLabel": "Raging Bolt / Ogerpon",
+          "country": "KR",
+          "decklistUrl": "https://limitlesstcg.com/tournaments/565"
+        },
+        {
+          "finish": 3,
+          "player": "Juhwan Song",
+          "archetype": "unknown",
+          "archetypeLabel": "Raging Bolt / Ogerpon",
+          "country": "KR",
+          "decklistUrl": "https://limitlesstcg.com/tournaments/565"
+        },
+        {
+          "finish": 4,
+          "player": "Shinnosuke Sato",
+          "archetype": "unknown",
+          "archetypeLabel": "Dragapult / Dusknoir",
+          "country": "JP",
+          "decklistUrl": "https://limitlesstcg.com/tournaments/565"
+        },
+        {
+          "finish": 5,
+          "player": "Yeonsu Jang",
+          "archetype": "rocket-mewtwo",
+          "archetypeLabel": "Mewtwo / Spidops",
+          "country": "KR",
+          "decklistUrl": "https://limitlesstcg.com/tournaments/565"
+        },
+        {
+          "finish": 6,
+          "player": "Seokmin Lee",
+          "archetype": "unknown",
+          "archetypeLabel": "Ogerpon / Ogerpon-Wellspring",
+          "country": "KR",
+          "decklistUrl": "https://limitlesstcg.com/tournaments/565"
+        },
+        {
+          "finish": 7,
+          "player": "Fabien Pujol",
+          "archetype": "unknown",
+          "archetypeLabel": "Clefairy / Ogerpon",
+          "country": "FR",
+          "decklistUrl": "https://limitlesstcg.com/tournaments/565"
+        },
+        {
+          "finish": 8,
+          "player": "Taewook Kim",
+          "archetype": "cynthia-garchomp",
+          "archetypeLabel": "Garchomp",
+          "country": "KR",
+          "decklistUrl": "https://limitlesstcg.com/tournaments/565"
+        }
+      ]
     },
     {
       "id": "69e69c2048d465883f719400",
@@ -8639,6 +9263,11 @@
       "category": "missingApiKey",
       "count": 1,
       "detail": "LIMITLESS_API_KEY not set — used unauthenticated /tournaments, /standings, /pairings (decklist-categorization endpoint /games/PTCG/decks rejected without key, but decklists were available per-tournament)."
+    },
+    {
+      "category": "offlineNotInAggregate",
+      "count": 15491,
+      "detail": "Offline regional + Champions League top-cut data added to tournaments[].topFinishes for Field tab surfacing, but archetypes[].metaShare, matchupMatrix[], stockLists[], and techCoverage[] aggregates still reflect ONLY the 20 online Limitless events. Regenerate via the snapshot agent to fold offline pairings into aggregates."
     }
   ]
 }

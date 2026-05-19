@@ -92,6 +92,13 @@ export interface TopFinish {
   finish: number;                   // 1 = winner, 2 = finalist, 3-4 = top4, etc.
   player: string;
   archetype: Archetype | "unknown";
+  // Natural-language archetype name as reported by the tournament source
+  // (e.g. "Dragapult / Dudunsparce", "N's Zoroark", "Lopunny-Mega /
+  // Dudunsparce"). Preferred for display when present — the engine
+  // `archetype` slug is intentionally coarser (and often "unknown" for
+  // variants not yet wired into the Archetype union) so this label
+  // carries the precise deck-archetype identity the source used.
+  archetypeLabel?: string;
   // Optional direct link to the player's decklist on Limitless. If absent,
   // callers fall back to `MetaTournament.sourceUrl` for the tournament page.
   decklistUrl?: string;

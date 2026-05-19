@@ -71,6 +71,24 @@ describe("metaSnapshot integrity (2026-05)", () => {
         expect(typeof f.finish, "topFinishes.finish must be a number").toBe("number");
         expect(f.finish, "topFinishes.finish must be ≥ 1").toBeGreaterThanOrEqual(1);
         expect(f.player, "topFinishes.player must be non-empty").toBeTruthy();
+        // archetypeLabel is optional, but when present must be a non-empty
+        // string. The Field tab's "Recent top finishes" card prefers it
+        // over the slug, so an empty string here would render as nothing.
+        if ("archetypeLabel" in f && f.archetypeLabel !== undefined) {
+          expect(
+            typeof f.archetypeLabel === "string" && f.archetypeLabel.length > 0,
+            `tournaments[${t.id}].topFinishes "${f.player}" archetypeLabel must be non-empty when present`,
+          ).toBe(true);
+        }
+        // country, when present, should look like an ISO 3166-1 alpha-2.
+        // Not enforcing the full enum, just shape — catches typos like
+        // "USA" (would be "US") or stray digits.
+        if ("country" in f && f.country !== undefined) {
+          expect(
+            /^[A-Z]{2}$/.test(f.country),
+            `tournaments[${t.id}].topFinishes "${f.player}" country "${f.country}" not ISO alpha-2`,
+          ).toBe(true);
+        }
       }
     }
   });

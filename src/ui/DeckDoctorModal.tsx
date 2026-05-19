@@ -938,7 +938,11 @@ function FieldOverviewTab({ snapshot }: { snapshot: MetaSnapshot | null }) {
                           {f.country ? <em className="dd-finish-country"> · {f.country}</em> : null}
                         </span>
                         <span className="dd-finish-archetype">
-                          {f.archetype === "unknown" ? "unmapped variant" : f.archetype}
+                          {f.archetypeLabel
+                            ? f.archetypeLabel
+                            : f.archetype === "unknown"
+                              ? "unmapped variant"
+                              : f.archetype}
                         </span>
                         {f.decklistUrl ? (
                           <a
