@@ -3765,3 +3765,157 @@ button.secondary:hover:not(:disabled) {
    so single-button rows don't leave asymmetric whitespace on the right. */
 .pregame-modal .modal-actions { justify-content: flex-end; }
 .pregame-modal .modal-actions .primary { min-width: 160px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PandaBananasTCG — Arcade theme tokens (Claude Design 2026-05-19)
+   ═══════════════════════════════════════════════════════════════════════════
+   Drop-in palette override. Re-skins the dark slate base to a vivid
+   deep-purple / hot-pink / cyan Arcade direction by overriding the same
+   :root tokens the rest of styles.css already consumes — no component
+   markup changes required for the recolor.
+
+   Source: PandaBananasTCG.zip / handoff/arcade-theme.css. Layout +
+   component-level moves from the prototype (mirrored opponent active,
+   framed bench, context-aware ActionBar, etc.) are tracked in
+   handoff/README.md and ported separately.
+   ──────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Surfaces */
+  --bg: #120631;
+  --panel: #1c0d44;
+  --panel-2: #2b1764;
+  --panel-3: #3a2280;
+  --text: #fff8ff;
+  --muted: #8a7bba;
+
+  /* Accents — vivid game palette */
+  --accent: #ff2d8e;          /* hot pink primary */
+  --accent-hi: #ff5ba8;
+  --danger: #ff5b6e;
+  --ok: #39e08a;
+  --purple: #7b3cff;
+  --info: #00e0ff;            /* electric cyan secondary */
+
+  /* Card-face placeholders */
+  --card-bg: #fbf6ea;
+  --card-text: #1c0d44;
+
+  /* Card sizing tokens — bumped slightly for better legibility */
+  --card-w: 96px;
+  --card-h: 130px;
+  --hand-card-w: 78px;
+  --hand-card-h: 108px;
+  --mini-card-w: 60px;
+  --mini-card-h: 82px;
+
+  /* Typography */
+  --text-xs: 10px;
+  --text-sm: 11px;
+  --text-base: 12px;
+  --text-lg: 14px;
+  --text-xl: 16px;
+
+  /* Shadows / glow */
+  --shadow-card:       0 8px 24px rgba(255, 45, 142, 0.25),
+                       0 0 0 1px rgba(255, 255, 255, 0.08);
+  --shadow-card-hover: 0 12px 30px rgba(255, 45, 142, 0.45),
+                       0 0 0 1px rgba(255, 255, 255, 0.14);
+  --shadow-modal:      0 24px 60px rgba(0, 0, 0, 0.65),
+                       0 0 0 1px rgba(255, 255, 255, 0.06);
+
+  /* Arcade-specific extras — available to new components */
+  --surface-raised: linear-gradient(180deg, #2b1764 0%, #1c0d44 100%);
+  --surface-sunken: #0e0530;
+  --border:         rgba(255, 255, 255, 0.10);
+  --border-strong:  rgba(255, 255, 255, 0.18);
+  --accent-glow:    0 0 0 2px rgba(255, 45, 142, 0.45),
+                    0 0 24px rgba(255, 45, 142, 0.50);
+  --info-glow:      0 0 0 2px rgba(0, 224, 255, 0.45),
+                    0 0 18px rgba(0, 224, 255, 0.40);
+
+  --radius:    14px;
+  --radius-lg: 22px;
+
+  /* Energy-type palette — unchanged; works fine on either bg */
+  --energy-fire:      #ef4444;
+  --energy-water:     #3b82f6;
+  --energy-grass:     #22c55e;
+  --energy-lightning: #eab308;
+  --energy-psychic:   #a855f7;
+  --energy-fighting:  #b45309;
+  --energy-darkness:  #1f2937;
+  --energy-metal:     #94a3b8;
+  --energy-dragon:    #c084fc;
+  --energy-fairy:     #ec4899;
+  --energy-colorless: #cbd5e1;
+}
+
+/* Body / app surface — deep purple radial gradient as the base canvas. */
+body {
+  background:
+    radial-gradient(120% 80% at 50% 0%, #2a0e5e 0%, #120631 55%, #07021a 100%);
+  color: var(--text);
+}
+
+/* Buttons + interactive — Arcade's subtle glow. */
+button:not(.link-button):not(.icon-btn) {
+  letter-spacing: 0.01em;
+}
+button.primary,
+.modal-actions .primary {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15),
+              0 6px 16px rgba(255, 45, 142, 0.45);
+}
+button.primary:hover {
+  background: var(--accent-hi);
+}
+
+/* Home tiles — make the Play tile pop, matching the prototype. */
+.home-tile-play {
+  background: linear-gradient(135deg, #ff2d8e 0%, #7b3cff 100%);
+  border: none;
+  color: #fff;
+  box-shadow: 0 12px 32px rgba(255, 45, 142, 0.35);
+}
+.home-tile-play:hover {
+  background: linear-gradient(135deg, #ff5ba8 0%, #8a4dff 100%);
+}
+.home-tile-play .home-tile-icon,
+.home-tile-play .home-tile-title { color: #fff; }
+.home-tile-play .home-tile-desc { color: rgba(255, 255, 255, 0.85); }
+
+/* Header — slight glass effect. */
+.header {
+  background: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%), #1c0d44;
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(10px);
+}
+
+/* Cards — keep card faces light but lift them with the new shadow. */
+.card {
+  box-shadow: var(--shadow-card);
+}
+.card:hover {
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* Side-distinction tinting (mobile board) — retuned for Arcade. */
+.side.opponent {
+  background: rgba(255, 91, 110, 0.06);
+  border-top: 2px solid var(--danger);
+}
+.side.player {
+  background: rgba(255, 45, 142, 0.04);
+}
+
+/* Active-pokemon pulse — used the existing keyframe name, tinted pink. */
+@keyframes tcg-pulse-glow {
+  0%, 100% { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5),
+                          0 0 0 0   rgba(255, 45, 142, 0.6); }
+  50%      { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5),
+                          0 0 0 8px rgba(255, 45, 142, 0); }
+}
