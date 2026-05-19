@@ -829,6 +829,13 @@ function FieldOverviewTab({ snapshot }: { snapshot: MetaSnapshot | null }) {
   const recentTournaments = [...snapshot.tournaments]
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 5);
+  // Tournaments where Limitless exposed top-cut standings. Surfaced as
+  // "Recent top finishes" — answers who's winning, with what, and gives
+  // a click-through to the decklist when available.
+  const tournamentsWithFinishes = snapshot.tournaments
+    .filter((t) => t.topFinishes && t.topFinishes.length > 0)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 5);
   const cardSignals = snapshot.stockLists
     .flatMap((list) =>
       list.cards
@@ -898,6 +905,59 @@ function FieldOverviewTab({ snapshot }: { snapshot: MetaSnapshot | null }) {
             ))}
           </div>
         </div>
+
+        {tournamentsWithFinishes.length > 0 && (
+          <div className="dd-overview-card dd-overview-wide">
+            <h4>Recent top finishes</h4>
+            <div className="dd-top-finishes-list">
+              {tournamentsWithFinishes.map((t) => (
+                <div key={t.id} className="dd-top-finish-tournament">
+                  <div className="dd-top-finish-header">
+                    <a href={t.sourceUrl} target="_blank" rel="noreferrer">
+                      {t.name}
+                    </a>
+                    <em>
+                      {new Date(t.date).toLocaleDateString()} · {t.online ? "online" : "offline"} ·{" "}
+                      {t.playerCount} players
+                    </em>
+                  </div>
+                  <ol className="dd-top-finish-rows">
+                    {t.topFinishes!.map((f) => (
+                      <li key={`${t.id}-${f.finish}-${f.player}`} className="dd-top-finish-row">
+                        <span className="dd-finish-place">
+                          {f.finish === 1
+                            ? "1st"
+                            : f.finish === 2
+                              ? "2nd"
+                              : f.finish === 3
+                                ? "3rd"
+                                : `Top ${f.finish}`}
+                        </span>
+                        <span className="dd-finish-player">
+                          {f.player}
+                          {f.country ? <em className="dd-finish-country"> · {f.country}</em> : null}
+                        </span>
+                        <span className="dd-finish-archetype">
+                          {f.archetype === "unknown" ? "unmapped variant" : f.archetype}
+                        </span>
+                        {f.decklistUrl ? (
+                          <a
+                            className="dd-finish-decklist"
+                            href={f.decklistUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            decklist ↗
+                          </a>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="dd-overview-card dd-overview-wide">
           <h4>Stock and tech signals</h4>
