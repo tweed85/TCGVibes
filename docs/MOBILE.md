@@ -19,3 +19,15 @@ PWA + Capacitor scaffolding for mobile and offline play. See [../CLAUDE.md](../C
 - Narrow-width tightening (≤360px): pip min-width 14px,
   HP-badge font 11px; modal padding drops to 10px.
 - Status-message dwell: ≥2.5s before allowing overwrite.
+
+## iPhone viewport QA
+
+Automated smoke coverage should include at least 320×568, 375×667, 390×844,
+430×932, plus phone landscape widths. Check `documentElement.scrollWidth`
+against `clientWidth`; `body.clientWidth` alone is not enough because
+`overflow-x: hidden` can mask layout expansion.
+
+Manual device passes should start with Safari on iPhone, then Chrome, Firefox,
+Edge/Brave, installed PWA mode, and the Capacitor WKWebView shell. In the US,
+iPhone browsers are still WebKit-based, but browser chrome, in-app shells, and
+keyboard/viewport behavior differ enough that each needs a tap-through pass.

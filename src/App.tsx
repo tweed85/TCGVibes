@@ -1981,7 +1981,13 @@ export default function App() {
           />
         )}
 
-      {!preGameOpen && state.phase === "setup" && !state.players[viewingPlayer].setupComplete && !state.players[viewingPlayer].isAI && !pendingHandoff && (
+      {!preGameOpen &&
+        (mulliganNoticeDismissed ||
+          (state.players.p1.mulligans === 0 && state.players.p2.mulligans === 0)) &&
+        state.phase === "setup" &&
+        !state.players[viewingPlayer].setupComplete &&
+        !state.players[viewingPlayer].isAI &&
+        !pendingHandoff && (
         <SetupModal
           hand={state.players[viewingPlayer].hand}
           mulligans={state.players[viewingPlayer].mulligans}
@@ -2172,11 +2178,12 @@ export default function App() {
         </Suspense>
       )}
 
+      {!preGameOpen && (
+        <>
       {/* --------------- Opponent hand strip (thin) --------------- */}
       <AiActionBanner
         state={state}
         active={
-          !preGameOpen &&
           state.winner === null &&
           state.players[state.activePlayer].isAI &&
           (state.phase === "main" || state.phase === "pick") &&
@@ -2539,8 +2546,10 @@ export default function App() {
             : null
         }
       />
+        </>
+      )}
 
-      {state.winner && (
+      {!preGameOpen && state.winner && (
         <div className="winner">
           <div className="box">
             <h2>{state.players[state.winner].name} wins!</h2>

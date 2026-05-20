@@ -4483,3 +4483,312 @@ button.primary:hover {
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Mobile viewport hardening                                                  */
+/* -------------------------------------------------------------------------- */
+
+/* These rules intentionally live at the end of the file. The Arcade theme
+   block above redefines card tokens and action-button dimensions after the
+   original responsive section, so the mobile constraints need to win the final
+   cascade. */
+
+.app,
+.header,
+.opp-strip,
+.game-layout,
+.board,
+.side,
+.divider-band,
+.my-hand,
+.my-hand-row,
+.action-bar,
+.action-bar .action-groups,
+.action-bar .group,
+.action-bar .group-buttons {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.header,
+.opp-strip,
+.game-layout,
+.board,
+.my-hand,
+.action-bar {
+  width: 100%;
+}
+
+.header .brand,
+.header .controls-row,
+.opp-meta-chips,
+.opp-strip-right,
+.divider-band-left,
+.divider-band-meta,
+.divider-band-right {
+  min-width: 0;
+}
+
+.my-hand-row {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* App.tsx now wraps hand cards in .my-hand-card for fan transforms. Keep card
+   sizing and touch behavior on the wrapper path as well as the old direct
+   child selector. */
+.my-hand-row > .my-hand-card {
+  flex: 0 0 var(--hand-card-w);
+  width: var(--hand-card-w);
+  max-width: var(--hand-card-w);
+  min-width: 0;
+}
+.my-hand-row > .my-hand-card > .card {
+  width: var(--hand-card-w);
+  min-height: var(--hand-card-h);
+  font-size: 10px;
+  padding: 4px;
+  gap: 1px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.my-hand-row > .my-hand-card > .card .card-img {
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+.my-hand-row > .my-hand-card > .card .name { font-size: 10px; }
+.my-hand-row > .my-hand-card > .card .hp { font-size: 10px; }
+.my-hand-row > .my-hand-card > .card .atk { font-size: 9px; }
+.my-hand-row > .my-hand-card > .card .type { font-size: 9px; }
+.my-hand-row > .my-hand-card > .card .trainer-text {
+  font-size: 8px;
+  -webkit-line-clamp: 4;
+}
+
+.modal {
+  max-height: 90svh;
+}
+.deck-builder-modal,
+.deck-doctor-modal {
+  max-height: 92svh;
+}
+.card-zoom,
+.card-zoom img {
+  max-height: 92svh;
+}
+.pick-pool {
+  max-height: 55svh;
+}
+
+@supports not (height: 100svh) {
+  .modal { max-height: 90vh; }
+  .deck-builder-modal,
+  .deck-doctor-modal { max-height: 92vh; }
+  .card-zoom,
+  .card-zoom img { max-height: 92vh; }
+  .pick-pool { max-height: 55vh; }
+}
+
+@media (max-width: 900px) {
+  :root {
+    --card-w: 82px;
+    --card-h: 110px;
+    --hand-card-w: 68px;
+    --hand-card-h: 92px;
+    --mini-card-w: 54px;
+    --mini-card-h: 74px;
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --card-w: 78px;
+    --card-h: 104px;
+    --hand-card-w: 66px;
+    --hand-card-h: 88px;
+    --mini-card-w: 50px;
+    --mini-card-h: 68px;
+  }
+
+  .app {
+    min-height: 100svh;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .header,
+  .opp-strip,
+  .game-layout,
+  .board,
+  .my-hand,
+  .action-bar {
+    max-width: calc(100vw - 8px);
+  }
+
+  .header .brand {
+    flex: 1 1 100%;
+  }
+  .header .controls-row {
+    flex: 1 1 100%;
+  }
+  .header select {
+    max-width: min(150px, 100%);
+  }
+
+  .opp-strip {
+    overflow: hidden;
+  }
+  .opp-meta-chips {
+    flex: 1 1 auto;
+  }
+  .opp-strip-right {
+    flex: 0 1 auto;
+  }
+  .opp-name-label,
+  .stadium-chip-name,
+  .stadium-chip-by {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .opp-name-chip,
+  .stadium-chip {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .divider-band {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .divider-band-left {
+    flex: 1 1 220px;
+  }
+  .divider-band-right {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+  .stadium-chip {
+    width: 100%;
+  }
+
+  .my-hand {
+    overflow: hidden;
+  }
+  .my-hand-header {
+    min-width: 0;
+  }
+  .hand-layout-toggle {
+    flex: 0 0 auto;
+  }
+  .hand-layout-toggle button {
+    min-height: 40px;
+    padding-inline: 8px;
+  }
+
+  .action-bar .group .group-buttons > button,
+  .action-bar .ability.primary,
+  .action-bar .attack-btn,
+  .no-ability-placeholder {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .action-bar .group .group-buttons > button {
+    overflow-wrap: anywhere;
+  }
+  .action-bar .attack-btn {
+    width: 100%;
+  }
+  .action-bar .attack-btn .atk-name,
+  .action-bar .ability .ability-name,
+  .action-bar .ability .ability-source {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .action-bar .attack-btn .atk-row {
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+  .action-bar .ability.primary,
+  .no-ability-placeholder {
+    width: 100%;
+  }
+
+  .modal-backdrop {
+    padding:
+      max(10px, env(safe-area-inset-top))
+      max(10px, env(safe-area-inset-right))
+      max(10px, env(safe-area-inset-bottom))
+      max(10px, env(safe-area-inset-left));
+  }
+  .pregame-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .pregame-vs {
+    padding-top: 0;
+  }
+  .pregame-mode {
+    grid-template-columns: 1fr;
+  }
+  .pregame-options > :first-child,
+  .pregame-options > button {
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .home-view {
+    position: relative;
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+  .home-tiles {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 360px) {
+  :root {
+    --card-w: 70px;
+    --card-h: 96px;
+    --hand-card-w: 60px;
+    --hand-card-h: 82px;
+    --mini-card-w: 44px;
+    --mini-card-h: 60px;
+  }
+}
+
+@media (min-width: 600px) and (max-width: 1024px) and (orientation: portrait) {
+  :root {
+    --card-w: 96px;
+    --card-h: 130px;
+    --hand-card-w: 80px;
+    --hand-card-h: 110px;
+    --mini-card-w: 60px;
+    --mini-card-h: 82px;
+  }
+}
+
+@media (max-height: 500px) and (max-width: 900px) and (orientation: landscape) {
+  :root {
+    --card-w: 70px;
+    --card-h: 92px;
+    --hand-card-w: 56px;
+    --hand-card-h: 76px;
+    --mini-card-w: 42px;
+    --mini-card-h: 56px;
+  }
+
+  .app {
+    min-height: 100svh;
+  }
+  .action-bar .attack-btn,
+  .action-bar .ability.primary,
+  .no-ability-placeholder {
+    min-height: 40px;
+  }
+}

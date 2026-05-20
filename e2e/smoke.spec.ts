@@ -39,28 +39,28 @@ test.describe("App boots and the action bar wires up correctly", () => {
       await goFirst.click();
     }
 
+    // Dismiss the mulligan notice modal if it appears before setup.
+    const continueBtn = page.getByRole("button", { name: "Continue" });
+    if (await continueBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await continueBtn.click().catch(() => {});
+    }
+
     // Setup phase — click the first basic Pokémon in hand and confirm.
     // The "Done" button is gated on a valid Active being chosen; we just
     // wait for it and click. If our deck mulliganed, the board may be in
     // a different state — we tolerate it by checking for either the Done
     // button or the in-game action bar.
     const setupDone = page.getByRole("button", { name: /Done|Confirm/i });
-    const handCards = page.locator(".hand-row .card-imaged, .hand .card-imaged").first();
+    const setupBasics = page.locator(".setup-modal .pick-card:not(.ineligible)").first();
 
     // Try to click a hand basic + confirm. Best-effort — some deck/seed
     // combos may need different setup flow; failure here doesn't prove a
     // regression unless the page errored.
-    if (await handCards.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await handCards.click({ trial: false }).catch(() => {});
+    if (await setupBasics.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await setupBasics.click({ trial: false }).catch(() => {});
       if (await setupDone.isVisible({ timeout: 1500 }).catch(() => false)) {
         await setupDone.click().catch(() => {});
       }
-    }
-
-    // Dismiss the mulligan notice modal if it appears.
-    const continueBtn = page.getByRole("button", { name: "Continue" });
-    if (await continueBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await continueBtn.click().catch(() => {});
     }
 
     // Wait for the action bar (signals main phase reached at least once).
@@ -98,20 +98,20 @@ test.describe("App boots and the action bar wires up correctly", () => {
       await goFirst.click();
     }
 
-    // Setup: click first hand basic (best-effort selector), confirm via Done.
-    const handCard = page.locator(".hand-row .card-imaged, .hand .card-imaged").first();
-    if (await handCard.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await handCard.click().catch(() => {});
-      const done = page.getByRole("button", { name: /Done|Confirm/i });
-      if (await done.isVisible({ timeout: 1500 }).catch(() => false)) {
-        await done.click().catch(() => {});
-      }
-    }
-
     // Skip mulligan modal if present.
     const cont = page.getByRole("button", { name: "Continue" });
     if (await cont.isVisible({ timeout: 2000 }).catch(() => false)) {
       await cont.click().catch(() => {});
+    }
+
+    // Setup: click first hand basic (best-effort selector), confirm via Done.
+    const setupBasic = page.locator(".setup-modal .pick-card:not(.ineligible)").first();
+    if (await setupBasic.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await setupBasic.click().catch(() => {});
+      const done = page.getByRole("button", { name: /Done|Confirm/i });
+      if (await done.isVisible({ timeout: 1500 }).catch(() => false)) {
+        await done.click().catch(() => {});
+      }
     }
 
     await expect(page.locator(".action-bar").first()).toBeVisible({ timeout: 10000 });
@@ -133,7 +133,7 @@ test.describe("App boots and the action bar wires up correctly", () => {
     // playing a Basic Pokémon from hand to bench: it requires no target
     // picker and no energy. Click the first eligible hand card; if it's
     // a basic, the engine plays it to bench and the snapshot fires.
-    const handCardsAfter = page.locator(".hand-row .card-imaged, .hand .card-imaged");
+    const handCardsAfter = page.locator(".my-hand-row .card-imaged");
     const handCount = await handCardsAfter.count();
     let played = false;
     for (let i = 0; i < handCount; i++) {
@@ -162,27 +162,53 @@ test.describe("App boots and the action bar wires up correctly", () => {
     expect(errors).toEqual([]);
   });
 
-  test("Mobile viewport: app boots cleanly at 375px (iPhone SE / iPhone 12 mini)", async ({ page }) => {
-    // Regression guard for the mobile UI cleanup pass — verifies the page
-    // loads at iPhone SE 3rd gen width without runtime errors and the body
-    // fits within the viewport. Doesn't drive setup-phase clicks since
-    // those flake on cold-start at narrow widths; the boot-path coverage
-    // is in the desktop-viewport tests above.
+  test("Mobile viewport: pre-game and setup stay within iPhone-width screens", async ({ page }) => {
+    // Regression guard for the mobile UI cleanup pass. It checks true scroll
+    // width, not just clientWidth, and drives through the setup modal because
+    // that is where hand/card wrappers previously expanded the whole page.
     const errors: string[] = [];
     page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
 
-    await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto(APP_URL);
-    // Cold-start lands on the home view; navigate to Play so the
-    // "Start a game" pre-game heading is reachable.
-    await page.getByRole("button", { name: /play a game/i }).click();
-    await expect(page.getByRole("heading", { name: /Start a game/i })).toBeVisible();
+    for (const viewport of [
+      { width: 320, height: 568 },
+      { width: 375, height: 667 },
+      { width: 390, height: 844 },
+      { width: 430, height: 932 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto(APP_URL);
+      await page.getByRole("button", { name: /play a game/i }).click();
+      await expect(page.getByRole("heading", { name: /Start a game/i })).toBeVisible();
 
-    // Body must not overflow the viewport — `body { overflow-x: hidden }`
-    // clips children but bodyWidth still reports clientWidth. If a layout
-    // change caused the body itself to exceed 375px, this catches it.
-    const bodyWidth = await page.evaluate(() => document.body.clientWidth);
-    expect(bodyWidth).toBeLessThanOrEqual(375);
+      await expect(page.locator(".modal-backdrop")).toHaveCount(1);
+      let metrics = await page.evaluate(() => ({
+        client: document.documentElement.clientWidth,
+        scroll: document.documentElement.scrollWidth,
+      }));
+      expect(metrics.scroll, `pre-game overflow at ${viewport.width}px`).toBeLessThanOrEqual(metrics.client);
+
+      await page.getByRole("button", { name: "Start Game" }).click();
+      await expect(page.getByRole("heading", { name: /Coin Flip/i })).toBeVisible();
+      await page.getByRole("button", { name: "Heads" }).click();
+
+      const goFirst = page.getByRole("button", { name: "Go first" });
+      if (await goFirst.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await goFirst.click();
+      }
+
+      const continueBtn = page.getByRole("button", { name: "Continue" });
+      if (await continueBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await continueBtn.click();
+      }
+
+      await expect(page.locator(".modal-backdrop")).toHaveCount(1);
+      await expect(page.locator(".setup-modal")).toBeVisible({ timeout: 10000 });
+      metrics = await page.evaluate(() => ({
+        client: document.documentElement.clientWidth,
+        scroll: document.documentElement.scrollWidth,
+      }));
+      expect(metrics.scroll, `setup overflow at ${viewport.width}px`).toBeLessThanOrEqual(metrics.client);
+    }
 
     expect(errors).toEqual([]);
   });
