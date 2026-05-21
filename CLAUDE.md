@@ -262,7 +262,30 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
   shows them pre-game. The log lives in the inspector, not the hand
   strip. The action bar has a status line, turn-resource chips
   (Energy / Supporter / Retreat), and an attack button with damage
-  preview; on mobile it sticks as a bottom sheet.
+  preview; on mobile it sticks as a bottom sheet. While `preGameOpen`
+  is true, the SetupModal, AiActionBanner, opponent strip, and winner
+  overlay are gated off so nothing leaks behind the lobby; the
+  SetupModal additionally waits on `mulliganNoticeDismissed` so the
+  mulligan toast clears before the setup hand reveals.
+- **Mobile viewport hardening.** Mobile cascade lives at the END of
+  [styles.css](src/styles.css) so it wins against the Arcade theme
+  block that redefines card tokens above. Pattern: `min-width: 0` +
+  `max-width: 100%` on every flex container in the app shell
+  (`.app`, `.header`, `.opp-strip`, `.game-layout`, `.board`,
+  `.side`, `.divider-band`, `.my-hand`, `.action-bar` and their
+  child groups) so a single long token can't blow out the viewport.
+  Modals use `svh` units with a `@supports not (height: 100svh)`
+  `vh` fallback so iOS Safari's collapsing chrome doesn't clip
+  content. Breakpoint ladder: ≤900px, ≤640px, ≤480px (home-tiles
+  collapse + bottom-nav clearance), ≤360px (narrow iPhones), plus
+  600–1024px portrait (tablet) and short-landscape phones
+  (≤500px tall × ≤900px wide) get dedicated card-token sizes. Hand
+  cards set `touch-action: none` + `-webkit-user-drag: none` +
+  `pointer-events: none` on the inner `<img>` so the browser's
+  native HTML5 drag can't swallow pointer events. The modal
+  backdrop pads with `max(10px, env(safe-area-inset-*))` for
+  notched devices. When adding new responsive rules, append to
+  this block — don't interleave with Arcade theme overrides above.
 - **KO cause attribution.** `knockOut` takes a `KoContext` so
   opponent-attack-only effects (Legacy Energy, Heavy Baton + Amulet of
   Hope discards, Lillie's Pearl prize reduction, Final Chain, Infinite
@@ -430,7 +453,7 @@ For task-specific deep dives, read the relevant docs/ companion:
 - **Test suite** (~938 vitest + 5 Playwright e2e — full enumeration with what each file covers): see [docs/TESTS.md](docs/TESTS.md)
 - **Replay determinism contract + cloud aggregation** (schema versions, v1→v2 migration, what's recorded vs not, opt-in upload): see [docs/REPLAY.md](docs/REPLAY.md) and [docs/REPLAY_BACKEND.md](docs/REPLAY_BACKEND.md) for the Supabase setup recipe
 - **Twinleaf-inspired phases + v2 follow-ups** (preflight, prompt adapter, prefabs, replay, cloud aggregation — status table): see [docs/TWINLEAFGG_IMPLEMENTATION_PLAN.md](docs/TWINLEAFGG_IMPLEMENTATION_PLAN.md)
-- **Mobile / iOS / offline** (Capacitor, PWA, responsive CSS, safe-area hardening): see [docs/MOBILE.md](docs/MOBILE.md)
+- **Mobile / iOS / offline** (Capacitor, PWA, responsive CSS, safe-area hardening; iPhone viewport QA matrix — 320×568 / 375×667 / 390×844 / 430×932 + landscape, plus the `documentElement.scrollWidth` vs `clientWidth` diagnostic, plus the Safari → Chrome → Firefox → Edge/Brave → PWA-installed → Capacitor WKWebView manual pass): see [docs/MOBILE.md](docs/MOBILE.md)
 - **Open findings + deferred AI work** (MVP scope cuts, pressure-test findings, Phase 6 + 7-12 of the AI overhaul plan): see [docs/FINDINGS.md](docs/FINDINGS.md)
 - **CPU AI build plan** (Phases 0–5 ✅ complete; Phase 6 deferred pending cloud-replay corpus): see [docs/AI_CPU_BUILD_PLAN.md](docs/AI_CPU_BUILD_PLAN.md)
 - **Multi-agent coordinator workflow** (Claude + Codex handoff protocol, file schemas, hook config, live dashboard): see [ai/agent_recommendations.md](ai/agent_recommendations.md)
