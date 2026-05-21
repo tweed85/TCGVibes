@@ -113,7 +113,14 @@ vite.config.ts        manualChunks split, vite-plugin-pwa
   clicks until `remaining` hits 0. `formatPickerLabel` appends "— N left".
   Actions spawned mid-attack (Phantom Dive, Aura Jab) carry a
   `finishTurn` flag; `finishHit` defers `endTurn` while a human picker
-  is open and `resolveInPlayTarget` runs it on the final click.
+  is open and `resolveInPlayTarget` runs it on the final click. When
+  the base hit ALSO KOs the defender's Active, both `pendingPromote`
+  and the `distributeDamage` picker are armed simultaneously —
+  `finishHit` checks the picker BEFORE `pendingPromote` so the spread
+  resolves first; the picker's resolver then chains into
+  `onPromoteResolved = "endTurn"` on its final click. Reversing that
+  order orphans the picker across the turn boundary (Dragapult ex
+  Phantom Dive into a 200-HP target).
 - **Stable picker identity** — `PendingPickEffectKind`
   (`preciousTrolley` / `energySearchPro` / `academyAtNight` /
   `prismTower` / `mysteryGarden` / `levincia` / `grandTreeStage1` /
