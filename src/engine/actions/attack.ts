@@ -467,16 +467,23 @@ function finishHit(
     }
   }
   // End of sequence.
-  if (state.pendingPromote) {
-    state.onPromoteResolved = "endTurn";
-    return;
-  }
+  // Spread / distribute-damage pickers (Phantom Dive, Aura Jab, Oil Salvo)
+  // open BEFORE we check pendingPromote so that if the base hit KO'd the
+  // defender's Active, the human still gets to place the remaining counters
+  // before the turn flips. The picker's resolver at
+  // [trainerEffects.ts distributeDamage case] chains into pendingPromote on
+  // the final click — `state.pendingPromote` survives untouched here so that
+  // chaining still works.
   if (
     state.pendingInPlayTarget &&
     (state.pendingInPlayTarget.action.kind === "distributeDamage" ||
       state.pendingInPlayTarget.action.kind === "attachEnergyFromDiscardPicker") &&
     state.pendingInPlayTarget.action.finishTurn
   ) {
+    return;
+  }
+  if (state.pendingPromote) {
+    state.onPromoteResolved = "endTurn";
     return;
   }
   // Handheld Fan: human defender hasn't picked the bench target yet. Open
