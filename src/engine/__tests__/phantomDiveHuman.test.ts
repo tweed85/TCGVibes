@@ -194,4 +194,81 @@ describe("Phantom Dive — human path (user-reported bug repro)", () => {
     expect(state.phase).toBe("main");
     expect(state.players[opp].bench[0].damage).toBe(60);
   });
+
+  // Regression: when Phantom Dive's 200 base damage KOs the opp's Active,
+  // `pendingPromote` is set on the opp side AND the spread picker is open on
+  // the attacker's side. finishHit used to check pendingPromote FIRST and
+  // queue onPromoteResolved="endTurn", which made the opp's auto-promote
+  // flip the turn before the human placed the remaining 60 counters — the
+  // picker became orphaned on the next player's turn. Now the picker check
+  // wins; the picker's resolver chains into pendingPromote on its last click.
+  it("KOs the Active + opens the spread picker; turn does NOT flip until both resolve", () => {
+    const state = bootGameToMain(35);
+    const ap = state.activePlayer;
+    const opp = ap === "p1" ? "p2" : "p1";
+    state.players[ap].isAI = false;
+
+    state.players[ap].active!.card = {
+      id: "dragapult-test",
+      name: "Dragapult ex",
+      supertype: "Pokémon",
+      subtypes: ["Stage 2", "ex"],
+      hp: 320,
+      types: ["Dragon"],
+      attacks: [
+        {
+          name: "Phantom Dive",
+          cost: [],
+          damage: 200,
+          effects: [
+            { kind: "distributeDamage", times: 6, perHit: 10, ignoreWR: true, benchOnly: true },
+          ],
+        },
+      ],
+      retreatCost: ["Colorless", "Colorless"],
+    } as PokemonCard;
+    // Active is a 1-prize Basic with 150 HP; 200 base damage KOs it outright
+    // and arms pendingPromote on the opp side.
+    state.players[opp].active!.card = {
+      id: "opp-active-fragile",
+      name: "Opp Active Fragile",
+      supertype: "Pokémon",
+      subtypes: ["Basic"],
+      hp: 150,
+      types: ["Colorless"],
+      attacks: [],
+      retreatCost: [],
+    } as PokemonCard;
+    state.players[opp].active!.damage = 0;
+    const benchCard: PokemonCard = {
+      id: "opp-bench-test",
+      name: "Opp Bench",
+      supertype: "Pokémon",
+      subtypes: ["Basic"],
+      hp: 80,
+      types: ["Colorless"],
+      attacks: [],
+      retreatCost: [],
+    } as PokemonCard;
+    state.players[opp].bench = [
+      { instanceId: "ob1", card: benchCard, damage: 0, attachedEnergy: [], evolvedFrom: [], tools: [], playedThisTurn: false, evolvedThisTurn: false, statuses: [], abilityUsedThisTurn: false },
+      { instanceId: "ob2", card: benchCard, damage: 0, attachedEnergy: [], evolvedFrom: [], tools: [], playedThisTurn: false, evolvedThisTurn: false, statuses: [], abilityUsedThisTurn: false },
+    ];
+
+    attack(state, ap, 0);
+
+    // Active KO'd → pendingPromote set on opp.
+    expect(state.pendingPromote).toBe(opp);
+    // Spread picker open on attacker, NOT orphaned by the KO.
+    expect(state.pendingInPlayTarget).not.toBeNull();
+    expect(state.pendingInPlayTarget!.player).toBe(ap);
+    const action = state.pendingInPlayTarget!.action as { kind: string; remaining: number };
+    expect(action.kind).toBe("distributeDamage");
+    expect(action.remaining).toBe(6);
+    // Turn must still belong to the attacker — promote can't resolve into
+    // endTurn while counters are still queued.
+    expect(state.activePlayer).toBe(ap);
+    // Bench should be untouched at this point (human hasn't clicked yet).
+    expect(state.players[opp].bench.map((p) => p.damage)).toEqual([0, 0]);
+  });
 });

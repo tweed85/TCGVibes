@@ -4792,3 +4792,150 @@ button.primary:hover {
     min-height: 40px;
   }
 }
+
+/* ===========================================================================
+   In-game mobile layout — PTCGL-Live silhouette.
+   Targets only `.app.in-game` (set on the play-view render) so the home view
+   keeps its full header. Four wins:
+     1. Header collapses to a floating game-menu cog top-right.
+     2. The right-rail GameInspector hides entirely (selected-card preview is
+        redundant with the existing tap-to-zoom overlay; the log panel was
+        already hidden at this breakpoint).
+     3. The hand floats above the action bar instead of taking its own grid
+        row; the my-hand-header chrome (title + Fan/Grid toggle) hides.
+     4. The action bar's slot/Energy/Supporter/Retreat groups collapse to a
+        single horizontal icon-chip row instead of stacking vertically.
+   Anything not on `.app.in-game` (home view, modal contents, etc.) is
+   untouched.
+   ========================================================================== */
+@media (max-width: 640px) {
+  /* 1) Header → floating game-menu cog. Keep the JSX tree intact; just
+        hide every header child except `.game-menu` and lift the header out
+        of the grid into a fixed position. */
+  .app.in-game .header {
+    position: fixed;
+    top: max(4px, env(safe-area-inset-top));
+    right: max(4px, env(safe-area-inset-right));
+    z-index: 30;
+    grid-area: unset;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+    margin: 0;
+    width: auto;
+    max-width: none;
+    gap: 0;
+    flex-wrap: nowrap;
+  }
+  .app.in-game .header > :not(.game-menu) {
+    display: none;
+  }
+  .app.in-game .header .game-menu summary {
+    /* The cog needs to read as a button, not a header element. */
+    background: rgba(15, 23, 42, 0.92);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 999px;
+    padding: 6px 10px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.32);
+    min-height: 36px;
+  }
+  /* Reclaim the row the header used to occupy — drop both the template
+     row and the gap that would otherwise sit before the opp-strip. */
+  .app.in-game {
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "opp"
+      "board"
+      "hand"
+      "action";
+  }
+
+  /* 2) GameInspector hidden on phones — tap-to-zoom on a card already gives
+        the user the full preview, and the log panel was already display:none
+        at this breakpoint (line ~2173). Hiding the whole inspector lets the
+        board claim the vertical space the inspector was eating below it. */
+  .app.in-game .game-inspector {
+    display: none;
+  }
+  .app.in-game .game-layout {
+    grid-template-columns: 1fr;
+  }
+
+  /* 3) Hand overlaps the bottom of the board. Keeping the hand in the grid
+        flow (rather than fixed-positioning it) avoids hard-coding the
+        action-bar height; a negative margin pulls the strip up into the
+        board's bottom edge so bench cards peek above it, matching PTCGL's
+        silhouette. The hand keeps its horizontal scroll-snap so wide hands
+        still pan. */
+  .app.in-game .my-hand {
+    margin-top: calc(var(--hand-card-h, 88px) * -0.55);
+    padding: 4px 4px 0;
+    background: linear-gradient(
+      to top,
+      rgba(15, 23, 42, 0.82) 0%,
+      rgba(15, 23, 42, 0.50) 55%,
+      transparent 100%
+    );
+    border: 0;
+    box-shadow: none;
+    /* Sit above the board content visually while still letting touches on
+       the transparent gradient pass through to the cards underneath. */
+    position: relative;
+    z-index: 8;
+    pointer-events: none;
+  }
+  .app.in-game .my-hand > * {
+    pointer-events: auto;
+  }
+  /* Header (Hand · Fan/Grid toggle) drops; the count is visible elsewhere
+     and the toggle isn't critical on a phone-sized hand. */
+  .app.in-game .my-hand-header,
+  .app.in-game .my-hand-grip {
+    display: none;
+  }
+  /* Tighter hand strip — cards already shrink via the card-token cascade. */
+  .app.in-game .my-hand-row {
+    padding: 0 2px;
+    gap: 2px;
+  }
+
+  /* 4) Action bar → compact horizontal layout. Override the ≤640px rule
+        above that stacks .action-groups vertically. Slot groups become
+        chip-style buttons in one row; the attack button stays prominent
+        on its own line below. */
+  .app.in-game .action-bar .action-groups {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 4px;
+  }
+  .app.in-game .action-bar .group {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+  }
+  .app.in-game .action-bar .group .group-buttons > button {
+    flex: 0 1 auto;
+    min-width: 36px;
+    padding: 4px 6px;
+    font-size: 11px;
+  }
+  .app.in-game .action-bar .group.end {
+    width: auto;
+  }
+  .app.in-game .action-bar .group.end button {
+    width: auto;
+    flex: 0 1 auto;
+  }
+  /* Status line + attack button stay full-width so the primary action is
+     never hidden behind the slot chips. */
+  .app.in-game .action-bar .status-line {
+    flex: 1 1 100%;
+  }
+  .app.in-game .action-bar .attack-btn,
+  .app.in-game .action-bar .ability.primary,
+  .app.in-game .no-ability-placeholder {
+    width: 100%;
+  }
+}

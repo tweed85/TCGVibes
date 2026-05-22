@@ -178,6 +178,51 @@ describe("Drakloak — Recon Directive (peek2Top → reconDirective)", () => {
     expect(state.players[ap].deck.length).toBe(deckLenBefore - 1);
     expect(state.players[ap].deck[state.players[ap].deck.length - 1].name).toBe("TrainerTop");
   });
+
+  // Regression: user reported "drakloak's ability still works after evolving
+  // into Dragapult ex". Dragapult ex's card data has `abilities: []` across
+  // every printing, so once it's the top card of the in-play stack, the
+  // underlying Drakloak's Recon Directive must not be accessible — and
+  // any stale button click must be rejected by precheckAbility.
+  it("Recon Directive cannot fire after Drakloak evolves into Dragapult ex", () => {
+    const ap = state.activePlayer;
+    // Mirror real card data: Dragapult ex evolves from Drakloak and has
+    // no abilities.
+    const dragapultEx: PokemonCard = {
+      id: "p-Dragapult-ex",
+      name: "Dragapult ex",
+      supertype: "Pokémon",
+      subtypes: ["Stage 2", "ex"],
+      hp: 320,
+      types: ["Dragon"],
+      attacks: [
+        { name: "Jet Headbutt", cost: ["Colorless", "Colorless"], damage: 70 },
+        { name: "Phantom Dive", cost: ["Fire", "Psychic"], damage: 200 },
+      ],
+      weaknesses: [],
+      resistances: [],
+      retreatCost: ["Colorless"],
+      evolvesFrom: "Drakloak",
+      abilities: [],
+    } as PokemonCard;
+
+    // Swap Drakloak → Dragapult ex on the same in-play instance, mirroring
+    // engine evolve at actions.ts:209-212.
+    drakloak.evolvedFrom.push(drakloak.card);
+    drakloak.card = dragapultEx;
+    drakloak.evolvedThisTurn = true;
+    drakloak.abilityUsedThisTurn = false; // reset by applyEvolveSideEffects
+
+    // Engine must reject any attempt to fire Drakloak's old ability (index 0)
+    // on the now-evolved instance — Dragapult ex has no abilities to index.
+    const result = activateAbility(state, ap, drakloak.instanceId, 0);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toMatch(/no such ability/i);
+    }
+    // No picker should have opened.
+    expect(state.pendingPick).toBeNull();
+  });
 });
 
 describe("Gumshoos — Evidence Gathering (swapHandCardWithDeckTop → PendingHandReveal swapWithDeckTop)", () => {

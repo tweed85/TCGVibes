@@ -1726,7 +1726,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app${dragging ? " drag-active" : ""}`}>
+    <div className={`app in-game${dragging ? " drag-active" : ""}`}>
       {/* ------------------------- Header ------------------------- */}
       <div className="header">
         <div className="brand">
